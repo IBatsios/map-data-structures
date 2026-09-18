@@ -139,6 +139,26 @@ export function describeSyntaxFault(engineMessage: string, fileText: string): st
     : atPosition(lineColumnOf(fileText, position), detail);
 }
 
+/**
+ * What to say about the problems the panel is not showing.
+ *
+ * The wording lives here rather than in the renderer because it is wording, and
+ * wording is what this module is tested on. It promises the *rest*, not the
+ * whole: a later pass can still find something this one could not reach (D20).
+ *
+ * @param hiddenProblemCount - `hiddenProblemCount` from the report
+ * @returns one sentence, or an empty string when nothing was left out
+ */
+export function describeHiddenProblems(hiddenProblemCount: number): string {
+  if (hiddenProblemCount <= 0) {
+    return '';
+  }
+
+  const are = hiddenProblemCount === 1 ? 'problem is' : 'problems are';
+
+  return `${hiddenProblemCount} more ${are} not listed. Fix these and load the file again to see the rest.`;
+}
+
 /** What to say about a file the app declined to read at all. */
 export function describeUnsupportedFile(fileName: string): LoadErrorReport {
   return oneProblem(

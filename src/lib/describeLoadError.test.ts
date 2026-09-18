@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { LoadErrorReport } from './describeLoadError';
 import {
   MAX_PROBLEMS_SHOWN,
+  describeHiddenProblems,
   describeLoadError,
   describeSyntaxFault,
   describeUnsupportedFile,
@@ -477,5 +478,26 @@ describe('describeUnsupportedFile', () => {
     // Assert
     expect(report.summary.length).toBeLessThan(200);
     expect(holdsControlCharacters(report.summary)).toBe(false);
+  });
+});
+
+describe('describeHiddenProblems', () => {
+  it('says how many more this pass found than the panel is showing', () => {
+    // Act, Assert
+    expect(describeHiddenProblems(5)).toBe(
+      '5 more problems are not listed. Fix these and load the file again to see the rest.',
+    );
+  });
+
+  it('counts one left out in the singular', () => {
+    // Act, Assert
+    expect(describeHiddenProblems(1)).toBe(
+      '1 more problem is not listed. Fix these and load the file again to see the rest.',
+    );
+  });
+
+  it('says nothing at all when the list is the whole of this pass', () => {
+    // Act, Assert
+    expect(describeHiddenProblems(0)).toBe('');
   });
 });
