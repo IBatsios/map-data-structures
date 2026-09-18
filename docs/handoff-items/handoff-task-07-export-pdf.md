@@ -1674,3 +1674,69 @@ one of them is worth keeping, it is the id case — a tab, a lone `\r` and a `\r
 **in node ids**, with edges naming them — because it is the only one where a
 regression would make an edge point at a node that appears not to exist. It is
 one fixture and one assertion if someone wants it in a later cycle.
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/07-export-pdf.md` | All six boxes checked, `**Status:** done` | Confirmed against code and against Jahmyr's round-3 report; no change |
+| `README.md` | Export PDF paragraph, font licence note, `■` mark and its two named costs, layout list, "Still to come: Word" all present and match the built behaviour | No change needed |
+| `CLAUDE.md` | Status section still read "Tasks 01 to 06" and did not mention PDF at all | Updated: "01 to 07", an Export PDF paragraph (route, embedded font, the `■` mark), and a short "known limit" line on the on-page label size, pointing at this handoff doc for the full table |
+| `docs/DECISIONS.md` | D62–D72 present and cover every choice named in Amon's and Jahmyr's reports across all three rounds | No gap found; no addition needed |
+| `.env.example` | Still no variables; confirmed independently by Jahmyr (round 3) via grep of `process.env`/`import.meta.env`/`Deno.env` across `src/`, `e2e/` and the root | No change needed |
+| Handoff doc (this file) | Jared's assignment, three rounds of Amon's work, three rounds of Jahmyr's reports, all present and legible | No change needed beyond this section |
+| `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md` | Not opened for edits (generated; out of my remit) | Nothing found in this cycle that makes any of them wrong |
+
+One doc outside the generated set needed a fix before merge: **the pull
+request description on PR #15 was still round 1's** — two criteria shown
+unchecked, an "opened so CI can run, not ready to merge" status line, and a
+283/67 test count. Updated it to the round-3 state (all six criteria
+checked, 319/76, the label-size finding carried forward) before marking the
+PR ready.
+
+**Left alone, on purpose:** `src/lib/exportStyles.ts:15-18` still states
+D57's superseded claim that `?raw` comes back empty under this project's
+Vitest — D61 corrected the fact three tasks ago, source code is not my
+remit, and neither this task's diff nor mine touches that file. Carried
+forward again below and in `handoff-next-phase.md`.
+
+### Gates
+
+`bun run test`: **pass, 319 tests in 20 files**, re-run independently on the
+merge commit's parent and again after the CLAUDE.md fix, both green.
+CI: **green** on both `4b7e6a8` (round 3, pre-existing) and `82e439a` (my
+doc-fix commit) — typecheck, 319 Vitest, 76 Playwright, both required checks
+passing on the commit that was actually merged.
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**,
+run twice (before and after the doc-fix commit), 30 and 31 commits scanned.
+
+### Merge
+
+Squashed as `4bfcd7a` into `main`. Branch `feature/export-pdf` deleted, both
+locally and on the remote (confirmed via `gh api .../branches/feature/export-pdf`
+returning 404 after `git fetch --prune`). PR
+[#15](https://github.com/IBatsios/map-data-structures/pull/15).
+
+One commit was added to the branch before merge, `82e439a`, a docs-only fix
+to `CLAUDE.md`'s Status section (see the audit table above); it went through
+a full CI run of its own before the PR was marked ready, per the runbook's
+"never merge with a pending check."
+
+### Left for a person
+
+Nothing blocking. Two items worth a person's attention, both already
+flagged for scheduling rather than requiring action right now:
+
+- **The PDF's on-page label size degrades from 15 nodes** (4.0pt at
+  `platform-overview.json`, the fixture built to represent the owner's own
+  scale). Not a criterion failure — the tables carry every label at full
+  size and the drawing is vector, so it is sharp at any zoom on screen — but
+  a printed 15-node design needs a magnifier. This has no task number yet.
+  It is carried in `handoff-next-phase.md` as an item for whoever schedules
+  the next few tasks to turn into one, rather than left to be rediscovered.
+- `src/lib/exportStyles.ts`'s stale `?raw` comment, as above — trivial, but
+  now carried past four tasks (05 wrote it wrong in spirit via D57, 06
+  recorded it, 07 round 1 through 3 all passed the file by). Whoever next
+  opens that file should just fix the comment.
