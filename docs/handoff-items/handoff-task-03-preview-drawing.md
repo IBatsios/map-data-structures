@@ -363,3 +363,208 @@ Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
 
 ---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+The app now does the thing it exists to do. Choose a JSON file and a laid-out
+drawing appears: a silhouette per node kind, arrows with labels on their own
+plates, and an SVG that scales to fit the page rather than overflowing it.
+
+- **A shape vocabulary.** Six kinds — `service`, `database`, `queue`,
+  `external`, `user`, `decision` — each with its own silhouette and colour
+  band, each answering to a handful of aliases (`db`, `actor`, `topic`, …).
+  `type` stays free text: anything else draws as a plain grey dashed rectangle,
+  keeps its label, and prints its own type under it.
+- **A pure layout function.** `layoutDesign(design)` in `src/lib/layout.ts`
+  wraps `@dagrejs/dagre`. No DOM, no measuring, no clock. Out come top-left
+  boxes and routes, normalised so the drawing always starts exactly one margin
+  from the corner, in new objects sharing nothing with the design that went in.
+  This is the one module Tasks 05 to 08 consume.
+- **An SVG renderer** that decides nothing: geometry comes from the layout,
+  colour from the CSS Module, and it takes the `Document` as an argument so the
+  one impurity stays visible and `astro check` can see the whole thing.
+- **D17 closed.** `typescript`, `@astrojs/check`, a `check` script, a CI step
+  and the pre-commit line.
+- **The first Playwright walk**: nine tests, its own `test:e2e` script, its own
+  CI step, and `testDir` set explicitly.
+- Both carve-ins, and no more than both.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/text.ts` + test | New. Estimates text width without a browser, and wraps without ever truncating. |
+| `src/lib/shapes.ts` + test | New. The type-to-shape vocabulary. Never returns nothing, never throws. |
+| `src/lib/layout.ts` + test | New. The pure layout function. The one input Tasks 05 to 08 share. |
+| `src/lib/renderDrawing.ts` | New. The laid-out design as SVG. The only DOM in the drawing. |
+| `src/lib/describeDrawing.ts` + test | New. The `<desc>` text, so `role="img"` does not hide the content. |
+| `src/styles/drawing.module.css` | New. The drawing's look, reached through `data-` attributes per D23. |
+| `src/styles/drawing.module.test.ts` | New. Measures every colour band against WCAG AA. |
+| `src/pages/index.astro` | The script lost its layout maths; 220 lines of script down to about 135, all wiring. Plus carve-in 2. |
+| `src/lib/design.types.ts` | The "free text until Task 03" comment, answered. |
+| `src/lib/loadDesign.ts`, `loadDesign.test.ts` | Carve-in 1, comment and assertion only. No behaviour change. |
+| `playwright.config.ts` | New. `testDir` explicit; `webServer` builds then serves `dist/`. |
+| `e2e/drawing.spec.ts` | New. The walk. |
+| `e2e/pages/uploadPage.ts` | New. The page object. |
+| `e2e/staticServer.ts` | New. Serves `dist/` in the foreground — see "Known gaps". |
+| `e2e/fixtures/*.json` | New. Three fixtures, under a test path, not a public URL. |
+| `.github/workflows/ci.yml` | Typecheck step, browser install, e2e step, report artifact. |
+| `.husky/pre-commit` | `bun run check`, between lint-staged and the tests. |
+| `package.json`, `bun.lock` | `@dagrejs/dagre`; `typescript@^6`, `@astrojs/check`, `@playwright/test`, `@types/node`. Scripts `test:e2e` and `check`. |
+| `docs/DECISIONS.md` | D24 to D33. |
+| `README.md`, `CLAUDE.md` | Commands and status. |
+| `.env.example` | **No change, as expected.** See below. |
+
+### Tests written
+
+118 Vitest tests (up from 46) and 9 Playwright tests.
+
+**`text.test.ts`** — pins that width scales with length and font size, that
+whitespace counts, that wrapping never loses a character, that every line fits,
+that an over-long word is broken rather than allowed to overflow, and that
+whitespace-only text comes back verbatim rather than trimmed away.
+
+**`shapes.test.ts`** — pins a silhouette per kind, aliases resolving to a
+canonical kind, case- and padding-insensitive lookup, that every known kind has
+a distinct silhouette, and that an unknown, empty or blank type still gets a
+shape instead of a throw.
+
+**`layout.test.ts`** — pins node order, labels and types carried through
+untouched, the shape each type resolves to, sizing (minimum width, wider for a
+longer label, *taller* not wider past the text limit), top-to-bottom flow,
+unconnected nodes sharing a row, no two boxes overlapping, every edge routed
+from source box to target box, both of two edges between the same pair
+surviving with their own labels, a self-edge routed, the label box sized to its
+label, the drawing starting exactly at the margin, the canvas containing
+everything, a lone node's exact geometry, an empty design still getting a
+canvas, the input design not mutated, and determinism.
+
+Three of those exist specifically to stop the renderer laundering data: a
+whitespace-only label comes through untouched, an unrecognised type is still
+placed, and duplicate edges are not collapsed.
+
+**`describeDrawing.test.ts`** — pins that the description opens with the title,
+names every node with its kind, reads every edge in arrow direction, uses
+labels rather than ids, says so plainly for an empty design, and leaves out no
+node whatever its label says.
+
+**`drawing.module.test.ts`** — reads the stylesheet and measures each band's
+label and type line against its own fill with WCAG's formula, plus a self-check
+that the ratio function gives 21 for black-on-white and 1 for a colour against
+itself. It also asserts every kind the drawing can produce has a band, so
+adding a shape without a colour fails here rather than in someone's eyes.
+
+**`drawing.spec.ts`** (Playwright) — every node and edge label present in the
+SVG; the drawing inside one second; the title and `role="img"`; the description
+carrying every label; the kind each type resolved to including
+`widget-factory` becoming `unknown`; the status region's text and its
+`role="status"`; a redraw on a different file; a redraw on the *same* file
+twice (carve-in 2); and a cleared drawing plus a spoken failure when the file
+is not a design.
+
+### Local results
+
+- `bun run test`: **pass**, 118 tests in 8 files.
+- `bun run test:e2e`: **pass**, 9 tests, about 5s including the build.
+- `bun run check`: **pass**, 0 errors, 0 warnings, 0 hints over 25 files.
+- `bun run build`: **pass**.
+- `bunx prettier --check`: clean.
+
+### Decisions recorded
+
+D24 to D33 in `docs/DECISIONS.md`: the layout engine and why it beat the other
+two; the shape vocabulary and the unrecognised-type default; estimate-don't-
+measure and grow-taller-not-wider; the CSS Module and its contrast test; the
+SVG description; the `check` script and the TypeScript 6 pin; the Playwright
+`webServer`; `testDir` and the Vitest/Playwright split; **D32**, the D22
+correction as its own row; and the cleared file input.
+
+### Known gaps
+
+**I overturned the `astro preview` recommendation, and the reason matters.**
+On the installed Astro (7.3.3) `astro preview` detaches with no flags at all:
+it prints its URL, returns exit 0 in about three seconds, and leaves a
+background process holding a lock file, which `astro preview status` then
+reports as "(background)". Playwright watches the process it spawned, so it
+reads that as "Process from config.webServer exited early" — I hit exactly
+that, and then hit the orphaned server colliding with the next run. `astro dev`
+behaves the same. The recommendation's *intent* was right and is kept: the walk
+runs against `dist/`, which is what Netlify serves. Only the server changed —
+`e2e/staticServer.ts`, foreground, no lock, dies with the run. Recorded as D30.
+Worth a look on your side, because it also means the README's old claim that
+only `dev` backgrounds was wrong; that is corrected now.
+
+**The pre-commit hook is slower.** `astro check` takes about 5.8s and does not
+cache — the same warm or cold. With lint-staged and `bun run test` a commit
+goes from roughly 3s to roughly 9s. I kept the line, because the block it
+covers is the page script, which is the exact blind spot D17 left open and the
+exact place this task moved code through. The tradeoff is D29. If nine seconds
+is resented, moving it to a pre-push hook is the obvious next step.
+
+**`typescript` is pinned to `^6`, not 7.** TypeScript 7's native compiler does
+not expose the programmatic API `astro check` drives; on 7.0.2 the command
+refuses to start, and `@astrojs/check`'s peer range is `^5 || ^6` anyway.
+`bun add -d typescript` resolves to 7 by default, so the caret range matters.
+
+**Edge ends meet the bounding box, not the silhouette.** Dagre computes the
+intersection with a node's *rectangle*, so on a diamond or a cylinder an
+arrowhead lands a few pixels outside the drawn outline. Visible if you look for
+it on a cylinder's top cap; not otherwise. Fixing it means clipping the route
+against each silhouette, which is real work for a small gain, so I left it.
+
+**A very long label still makes a very wide drawing.** Labels wrap at a maximum
+text width so the box grows taller, but a design that is simply wide produces a
+large canvas that the SVG then scales down to fit. Nothing is cropped or
+hidden — it just gets small. Acceptable for the sizes intake 11.1 describes.
+
+**Layout positions are pinned as relations, not pixels.** The tests assert
+exact numbers for everything we compute — sizes, the margin, the canvas, a lone
+node's geometry — but assert dagre's placement as relation (target below
+source, unconnected nodes sharing a row, no overlaps). Pinning dagre's internal
+coordinates would break on a dagre upgrade without telling us anything true. If
+you would rather have a pixel snapshot too, say so and I will add one.
+
+**`.env.example` needed no edit, as the assignment predicted.** Nothing in the
+tree reads `import.meta.env` or `process.env` except `playwright.config.ts`,
+which reads `CI` — set by GitHub Actions, not a variable this project owns. I
+had briefly added a `PORT` override to the static server and took it back out,
+so the claim that this project reads nothing from the environment is still
+literally true.
+
+**Accessibility audit is clean.** I walked `index.astro` against every rule in
+`front-a11y`: label and input pairing, `lang`, `main`, heading order, valid
+roles, no positive `tabindex`, no click-only `div`, no inline colour. The drop
+zone's dragging cue changes border *style* as well as colour (D23) and the
+unknown node kind is dashed as well as grey, so neither depends on telling
+colours apart. The one thing I did *not* do is add a landmark around
+`#drawing`; the SVG carries its own accessible name and description, and a
+region wrapper for a single image felt like ceremony.
+
+### Out-of-scope notes for Jared
+
+**The page outside the drawing has no styling at all.** There is no global
+stylesheet, so the heading and body copy render in the browser's default serif
+while the drawing is sans-serif. Side by side it reads as two different
+documents. That is pre-existing — Task 01 and Task 02 both left it — but Task
+03 is the first task where the page has something worth looking at next to it,
+so it is now visible. It wants a decision about global styling, which D1
+constrains to CSS Modules and which I did not think was mine to make. Task 09
+adds a second page and will hit the same thing.
+
+**`role="status"` announces the count, but nothing announces that the drawing
+changed.** The status region says "Loaded x.json: 7 nodes, 6 edges" and that is
+the only announcement. A screen-reader user has to go and find the SVG to hear
+its description. Task 04 owns the messaging; it may want to decide whether the
+success message should also point at the drawing.
+
+**Two edges between the same pair draw on top of each other.** The schema
+allows it, the layout keeps both (there is a test), and dagre routes them — but
+with identical endpoints the two routes overlap and only the upper label is
+readable. Nothing is dropped, so intake 5.2 holds, and it is a rare file. If it
+matters, it is an edge-bundling decision for whoever owns the drawing next.
+
+**`astro check` has no incremental mode.** It re-checks everything every run,
+which is the 5.8s above. If the tree grows, the pre-commit line is the first
+thing that will hurt.
