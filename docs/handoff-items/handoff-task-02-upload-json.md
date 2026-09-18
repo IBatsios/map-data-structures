@@ -341,3 +341,138 @@ Six rows appended to the "Added after the build" table in `docs/DECISIONS.md`:
 - **The status region is doing two jobs** — success facts and failure text —
   through one `textContent`. Task 04 is where that splits; flagging it because
   Task 03 must not drop the live region when it rebuilds the drawing.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** Every acceptance criterion was exercised and holds. Nothing found rises
+to a failed criterion; the four defects below are recorded for the tasks that own
+them, and the first corrects a premise Task 04 would otherwise have built on.
+
+The drag gesture was driven in a real Chromium through CDP
+`Input.dispatchDragEvent` with real OS file paths, so the browser built genuine
+`File` objects and delivered a genuine `DragEvent` — the same path an OS drop
+takes, not a synthetic `DataTransfer` assembled in page script. Playwright was
+installed outside the repository, in the session scratchpad; the branch is
+untouched by it and Task 03 still owns adding it for real.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can upload a JSON file describing a system: demonstrated end to end. | pass | Chromium against `bun run dev`. **Picker:** the status region read `Loaded good.json: 2 nodes, 1 edge.` and the drawing held 1 `<svg>`, 2 `<rect>`, 1 `<line>`, 2 `<text>`. **Drop:** identical result; the URL was unchanged before and after, so the `preventDefault` pair holds and the browser did not navigate away to the file; `data-dragging` read `"true"` during the drag and `"false"` after. Both refusals confirmed on both paths: duplicate id and dangling edge each refused, `#drawing.innerHTML` emptied to `""`, and a previously good drawing cleared rather than left stale. |
+| Tests cover the behavior, as a user would observe it, and pass. | pass | `bun run test` gives 3 files, 46 tests, 0 failures. All four `parseDesign.test.ts` cases carried over by name into `loadDesign.test.ts`, "keeps every node and every edge, in the order the file lists them" among them — checked by diffing the deleted file's `it(` list against the new one, not by taking the claim. Limitation, already routed and not counted against this criterion: nothing imports the page's `<script>`, so the drop handlers and the status wiring are covered by my browser walk rather than by the suite. Task 03 owns Playwright. |
+| Every earlier test still passes; CI is green. | pass | CI run 35320855940 on PR #3: `bun install --frozen-lockfile` resolved, so the committed `bun.lock` is valid; `vitest run` gave `Test Files 3 passed (3)`, `Tests 46 passed (46)`. Both the push-triggered and the PR-triggered runs are green. |
+| Best-effort accessibility: the file input is reachable by keyboard and labeled, and drag-and-drop is an addition to it, not a replacement. | pass | One `Tab` from page load puts focus on `#design-file`; `<label for="design-file">` resolves to it with the text "Design JSON file"; `aria-describedby="drop-hint"` resolves to the hint. `#upload-status` carries `role="status"` and is present and empty at load, which is what lets a later injection announce — and a *success* now announces where before only a failure did. The drop zone carries no click handler and the file input is untouched, so drag is strictly additive. The drag cue changes `border-style` as well as colour, so it does not depend on telling two colours apart. axe-core, WCAG 2.1 A + AA + best-practice, across three states (at rest, after a design draws, after a refusal): **0 violations**. The generated `<svg>` carries `role="img"`, `aria-label="Drawing of Order intake"` and a `<title>`. |
+| Any new environment variable is in `.env.example` with a placeholder. | pass, vacuously | `grep -rn 'import\.meta\.env\|process\.env' src/ astro.config.mjs vitest.config.ts` returns no matches. Nothing reads the environment, so there is nothing to add. Amon's "checked, not assumed" is confirmed. |
+
+### Adversarial pass, beyond the checklist
+
+Every one behaved. The most important path is hard to break.
+
+| Input | Result |
+|---|---|
+| Empty file | Refused. `Unexpected end of JSON input`. |
+| Malformed JSON | Refused. `Expected double-quoted property name in JSON at position 46 (line 2 column 1)` — the position survives all the way to the screen. |
+| Parses but has no `nodes`/`edges` keys | Refused, `invalid-design`, issue paths naming the missing keys. |
+| A JSON array where a design belongs | Refused. `expected object, received array`. |
+| `null` | Refused. `expected object, received null`. |
+| Valid design with **zero** nodes | **Loads**, per D19 — `Loaded no-nodes.json: 0 nodes, 0 edges.`, empty `<svg>`. Correct, and the plural reads right at nought. |
+| Two identical edges | **Loads** — edges carry no id, so there is nothing to collide. `2 nodes, 2 edges`. |
+| A PNG chosen instead of JSON | Refused, as bad JSON. See defect 3. |
+| 2000 nodes / 1999 edges, 190 KB | Loads in 92 ms; 2000 `<rect>`, 1999 `<line>`, counts correct. No hang. |
+| `__proto__` at the top level and inside a node | Stripped by Zod; `({}).polluted` stayed `undefined`. No prototype pollution. |
+| A non-string id (`1`) | Refused, path `nodes.0.id`. |
+| `nodes` not an array | Refused, path `nodes`. |
+
+Console errors and uncaught exceptions across the entire walk: **none**.
+
+### Command results
+
+`bun run test`: **pass** — 3 files, 46 tests, 0 failures, 289 ms.
+`bun run build`: **pass** — 1 page built in 496 ms, no warnings.
+`bun run dev`: **pass** — serves on `http://localhost:4321` detached, `astro dev status` healthy, and the served markup carries the label, the `aria-describedby`, `#drop-zone[data-dragging="false"]` and `#upload-status[role="status"]`. Stopped cleanly with `astro dev stop`.
+Secret scan: **clean** — `gitleaks detect --source . --no-banner`, 11 commits, ~270 KB scanned, no leaks found.
+CI: **green** — PR #3, run 35320855940.
+
+### On the judgement call Amon flagged (D20)
+
+**Confirmed correct, and correctly staged.** I reproduced it rather than reading
+it: a file with a node missing `type` *and* an edge naming `"ghost"` reports
+exactly `[{ path: ['nodes', 0, 'type'] }]` and nothing about the edge. Zod does
+not run a `superRefine` once the base object has failed, so this is the library's
+staging and not a choice made in `design.schema.ts`, and the reasoning holds — a
+rule that reads the whole list of nodes genuinely cannot run over a `nodes` that
+is not a list of nodes yet.
+
+Changing the test rather than the code was the right call. The alternative —
+running the cross-field rules over only the entries that happened to validate —
+buys a one-pass fix at the cost of rules that operate on a partial file, which is
+how you end up telling someone their edge is dangling because its target was
+dropped for being malformed. Pinning the staging with `toEqual(['nodes.0.type'])`
+at `src/lib/loadDesign.test.ts:237` makes it a decision Task 04 can design around
+instead of a surprise it discovers. D20 records it accurately.
+
+### Defects for Amon
+
+None of these fails an acceptance criterion. The first is the one worth acting on
+before Task 04 starts.
+
+1. **`src/lib/loadDesign.ts:41-43`** — the doc comment claims `JSON.parse`'s
+   message "names the position — and, in every browser this app targets, the line
+   and column too." That is true of V8 and false elsewhere. Same malformed input,
+   two engines: V8 gives `Expected double-quoted property name in JSON at
+   position 46 (line 2 column 1)`; JavaScriptCore — which is Safari, and which is
+   also what bun runs on — gives `JSON Parse error: Property name must be a
+   string literal`, with no position, no line and no column. An empty file is the
+   same story: `Unexpected end of JSON input` against `JSON Parse error:
+   Unexpected EOF`. The class itself is fine: it keeps whatever the engine gave,
+   which is all it can do. The problem is that the comment, and D22's "keeps
+   `JSON.parse`'s message, position and all", hand Task 04 a guarantee that does
+   not hold on one of the three target browsers, and
+   `src/lib/loadDesign.test.ts:135` asserts `toMatch(/position \d+/)` where it can
+   never fail, because Vitest runs on Node and Node is V8. Task 04 is the task
+   whose whole point is "name the line". It needs to know that on Safari there is
+   no line to name and it has to degrade to something like "that file is not valid
+   JSON". The test would say more if it kept line 134's verbatim-message assertion
+   as the contract and treated the position as a bonus rather than a promise.
+
+2. **`src/pages/index.astro:96`** — the `change` listener never fires a second time
+   for the same file, so the drawing and the status line both go stale while still
+   reading `Loaded good.json: 2 nodes, 1 edge.` Measured: 0 `change` events after
+   re-picking an identical path. Amon flagged this and routed it, and the routing
+   is right, but it is worth more than "polish": the loop Task 04 exists to serve
+   is *see the error, fix the file, load it again*, and re-picking the file you
+   just edited is exactly the gesture that does nothing. Worse than doing nothing,
+   the live region keeps asserting a successful load that is now one edit out of
+   date. The fix is one line — clear `fileInput.value` after reading — but it
+   changes behavior, so it belongs to whichever task takes it, not to me.
+
+3. **`src/pages/index.astro:27`** — `accept="application/json,.json"` filters the
+   picker only, confirmed on both paths: a PNG comes back as `Unexpected token
+   '\x89', "\x89PNG..." is not valid JSON`. Already flagged and routed to Task 04;
+   recorded here because I reproduced it, and because that message leaks a raw
+   byte into the status region, which is a presentation problem Task 04 should
+   catch before it reaches `textContent`.
+
+4. **`src/lib/design.schema.ts:35`** — `requiredText = z.string().min(1)` admits a
+   whitespace-only string. `{ "id": "   ", "label": "   ", "type": "s" }` loads and
+   draws a blank box. D19 justifies the rule by saying "a node without a label is a
+   blank box… not worth drawing", and `"   "` produces precisely that blank box, so
+   the rule does not deliver what the decision claims for it. The no-trim reasoning
+   is sound for *labels* — trimming would edit the user's text on the way through —
+   but "not empty" and "not blank" are different rules and only the first is
+   implemented. Low severity, and a decision rather than an obvious bug: either
+   tighten to a non-blank check or narrow D19's wording.
+
+### Fixed in place
+
+None. Nothing in the branch was trivia — every finding either changes behavior or
+changes a recorded decision, so all four went back rather than being patched here.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/3 — draft, `feature/upload-json` into `main`, CI green. Not merged; Sam marks it ready.
