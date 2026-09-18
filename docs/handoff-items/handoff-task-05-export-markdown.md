@@ -620,3 +620,67 @@ reattach a doc comment`. Neither changes behaviour.
 
 https://github.com/IBatsios/map-data-structures/pull/11 — open as a **draft**,
 mergeable, CI green. Sam marks it ready and merges.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/05-export-markdown.md` | All five boxes checked, `**Status:** done` | None — verified against the code, not taken on trust |
+| `README.md` | Commands match `CLAUDE.md`; `bun run test` used correctly throughout; "What works today" already describes Export Markdown, updated by Amon | None |
+| `CLAUDE.md` | `## Status` still said "Tasks 01 to 04" and "No exports yet" after Task 05 shipped a whole new capability plus the shared download helper Tasks 06-08 depend on — materially stale | Updated the status paragraph to Tasks 01-05 and added two sentences on Export Markdown and `src/lib/download.ts`, kept short per its own "snapshot, not changelog" rule |
+| `docs/DECISIONS.md` | D47-D53 present, dated 2026-09-18, each with a reason, matching Amon's and Jahmyr's reports | Added D54: the status-vs-merge convention Jahmyr raised as a judgement call (see below) |
+| `.env.example` | Unchanged; the code still reads no environment variables | None — confirmed by re-grepping `src/` and `e2e/` for `import.meta.env`, `process.env`, `Astro.env`; only hit is `process.env.CI` in `playwright.config.ts`, unchanged from `main` |
+| This handoff doc | Jared's assignment, Amon's work, Jahmyr's report all present and legible | Appended this section |
+
+**The status-vs-merge question, decided:** `**Status:** done` on a task file
+marks that its acceptance criteria are verified — every box checked, `bun run
+test` passing, CI green — in the build cycle, not that the branch has reached
+`main`. The merge is a later, separate gate that Sam runs. This matches how
+Tasks 01-04 were already handled (status set to `done` on the feature branch,
+ahead of the squash-merge that lands it), so it makes an existing convention
+explicit rather than changing anything. Recorded as D54. This is the
+convention for Tasks 06-11: the test/debug agent checks the boxes and sets
+`done` when verification is complete; Sam does not send a task back to
+"in progress" merely because it has not merged yet.
+
+**Documents flagged for a person, not edited:** none this round. Nothing in
+`docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, or `docs/intake.md`
+was found to be wrong.
+
+### Gates
+
+`bun run test`: pass — 240 tests, 15 files, run independently before merge.
+
+CI: green — both PR runs passed (`test` check, 42s and 48s) after the
+`CLAUDE.md` doc fix was pushed and CI re-ran; verified with `gh pr checks 11
+--watch` rather than taken from Jahmyr's report.
+
+Secret scan: `gitleaks detect --source . --no-banner` — 22 commits scanned,
+no leaks found.
+
+### Merge
+
+Squashed as `e3416b3` into `main`. Branch `feature/export-markdown` deleted
+(confirmed via `git fetch --prune`). PR
+https://github.com/IBatsios/map-data-structures/pull/11.
+
+One doc fix was committed to the branch first (`2b00542`, the `CLAUDE.md`
+status update) and CI was re-run and confirmed green before the merge, per
+the runbook's gate.
+
+### Left for a person
+
+Nothing blocking. Two items worth a person's attention when convenient, both
+already flagged by Amon and Jahmyr and neither urgent:
+
+- `e2e/fixtures/empty.json` (a zero-byte file) sits beside the new
+  `empty-design.json` (a valid empty design) and reads confusingly similar.
+  A rename touches `validation.spec.ts`, so it wants its own chore rather
+  than a task cycle.
+- The Firefox/SpiderMonkey wording fault, `loadDesign.ts`'s lagging doc
+  comment, and `loadDesign.test.ts:146`'s conditional assertion are still
+  queued for their own small cycle, now overdue by one task.
