@@ -12,3 +12,8 @@ docs/
 
 # Agent and command definitions are owned by the pipeline, not the formatter.
 .claude/
+
+# The end-to-end fixtures are files exactly as a user would have written them,
+# including the broken ones. Formatting them would repair the trailing comma
+# the validation walk exists to test, and Prettier cannot parse them anyway.
+e2e/fixtures/

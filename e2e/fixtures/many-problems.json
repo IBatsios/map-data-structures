@@ -1,0 +1,66 @@
+{
+  "title": "Big system",
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "Step 0"
+    },
+    {
+      "id": "n1",
+      "label": "Step 1"
+    },
+    {
+      "id": "n2",
+      "label": "Step 2"
+    },
+    {
+      "id": "n3",
+      "label": "Step 3"
+    },
+    {
+      "id": "n4",
+      "label": "Step 4"
+    },
+    {
+      "id": "n5",
+      "label": "Step 5"
+    },
+    {
+      "id": "n6",
+      "label": "Step 6"
+    },
+    {
+      "id": "n7",
+      "label": "Step 7"
+    },
+    {
+      "id": "n8",
+      "label": "Step 8"
+    },
+    {
+      "id": "n9",
+      "label": "Step 9"
+    },
+    {
+      "id": "n10",
+      "label": "Step 10"
+    },
+    {
+      "id": "n11",
+      "label": "Step 11"
+    },
+    {
+      "id": "n12",
+      "label": "Step 12"
+    },
+    {
+      "id": "n13",
+      "label": "Step 13"
+    },
+    {
+      "id": "n14",
+      "label": "Step 14"
+    }
+  ],
+  "edges": []
+}

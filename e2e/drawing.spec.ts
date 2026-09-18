@@ -224,7 +224,9 @@ test.describe('Previewing the generated drawing', () => {
     await upload.choose('order-intake.json');
 
     await expect(upload.status).toHaveAttribute('role', 'status');
-    await expect(upload.status).toHaveText('Loaded order-intake.json: 7 nodes, 6 edges.');
+    await expect(upload.status).toHaveText(
+      'order-intake.json is drawn below: 7 nodes, 6 edges.',
+    );
   });
 
   test('redraws when a second, different file is chosen', async ({ page }) => {
@@ -259,7 +261,9 @@ test.describe('Previewing the generated drawing', () => {
     await upload.choose('order-intake.json');
 
     await expect.poll(() => upload.drawingTitle()).toBe('Order intake');
-    await expect(upload.status).toHaveText('Loaded order-intake.json: 7 nodes, 6 edges.');
+    await expect(upload.status).toHaveText(
+      'order-intake.json is drawn below: 7 nodes, 6 edges.',
+    );
   });
 
   test('clears the drawing and says so when the file is not a design', async ({
@@ -273,11 +277,13 @@ test.describe('Previewing the generated drawing', () => {
 
     await upload.choose('not-a-design.json');
 
-    // Task 04 owns the wording. What this pins is that the failure is never
-    // silent and never leaves a drawing on screen that the status line has
-    // stopped describing.
+    // What this pins is that the failure is never silent and never leaves a
+    // drawing on screen that nothing is describing any more. The messages
+    // themselves belong to `validation.spec.ts`, which is where the wording is
+    // pinned; there is one voice for this outcome and it is the panel's.
     await expect(upload.svg).toHaveCount(0);
-    await expect(upload.status).toContainText('could not be drawn');
+    await expect(upload.problems).toContainText('was not drawn');
+    await expect(upload.status).toHaveText('');
   });
 });
 

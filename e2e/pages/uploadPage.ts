@@ -26,12 +26,14 @@ export interface DrawnBox extends DrawnPoint {
 export class UploadPage {
   readonly fileInput: Locator;
   readonly status: Locator;
+  readonly problems: Locator;
   readonly drawing: Locator;
   readonly svg: Locator;
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
     this.status = page.locator('#upload-status');
+    this.problems = page.locator('#upload-problems');
     this.drawing = page.locator('#drawing');
     this.svg = page.locator('#drawing svg');
   }
@@ -44,6 +46,30 @@ export class UploadPage {
   /** Chooses a file from `e2e/fixtures`, the way a user picks one off a disk. */
   async choose(fixture: string): Promise<void> {
     await this.fileInput.setInputFiles(fixturePath(fixture));
+  }
+
+  /** Every message the validation panel lists, in the order it lists them. */
+  problemItems(): Locator {
+    return this.problems.locator('[data-part="problem"]');
+  }
+
+  /** The panel's heading: which file, and what this pass found in it. */
+  async problemSummary(): Promise<string> {
+    const summary = this.problems.locator('[data-part="summary"]');
+
+    return (await summary.count()) === 0 ? '' : ((await summary.textContent()) ?? '');
+  }
+
+  /** The messages themselves, as text. */
+  async problemMessages(): Promise<readonly string[]> {
+    return this.problemItems().allTextContents();
+  }
+
+  /** The line about problems the panel left out, when there is one. */
+  async problemNote(): Promise<string> {
+    const note = this.problems.locator('[data-part="more"]');
+
+    return (await note.count()) === 0 ? '' : ((await note.textContent()) ?? '');
   }
 
   /** The drawing's own `<title>`: the design's title, for a screen reader. */
