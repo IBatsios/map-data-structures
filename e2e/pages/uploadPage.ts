@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-import type { JSHandle, Locator, Page } from '@playwright/test';
+import type { Download, JSHandle, Locator, Page } from '@playwright/test';
 
 /** One position in the drawing, as the browser reports it. */
 export interface DrawnPoint {
@@ -19,6 +19,8 @@ export interface DrawnBox extends DrawnPoint {
 export interface DownloadedFile {
   readonly name: string;
   readonly text: string;
+  /** Where it now sits on disk, which is nowhere near the design it came from. */
+  readonly path: string;
 }
 
 /**
@@ -37,7 +39,9 @@ export class UploadPage {
   readonly problems: Locator;
   readonly drawing: Locator;
   readonly svg: Locator;
+  readonly exports: Locator;
   readonly exportMarkdown: Locator;
+  readonly exportHtml: Locator;
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
@@ -46,7 +50,11 @@ export class UploadPage {
     this.problems = page.locator('#upload-problems');
     this.drawing = page.locator('#drawing');
     this.svg = page.locator('#drawing svg');
+    // By its accessible name, because the group's name is the thing under test:
+    // two buttons that do the same job in different formats read as a set.
+    this.exports = page.getByRole('group', { name: 'Export the design' });
     this.exportMarkdown = page.locator('#export-markdown');
+    this.exportHtml = page.locator('#export-html');
   }
 
   async goto(): Promise<void> {
@@ -141,25 +149,37 @@ export class UploadPage {
     );
   }
 
+  /** Clicks Export Markdown and waits for the file the browser saves. */
+  async downloadMarkdown(): Promise<DownloadedFile> {
+    return this.exportUsing(this.exportMarkdown);
+  }
+
   /**
-   * Clicks Export Markdown and waits for the file the browser saves.
+   * Clicks Export HTML and waits for the file the browser saves.
+   *
+   * @param saveAs - where to put it, for a test that then opens it from there;
+   *   left out, it stays where Playwright put it
+   */
+  async downloadHtml(saveAs?: string): Promise<DownloadedFile> {
+    return this.exportUsing(this.exportHtml, saveAs);
+  }
+
+  /**
+   * One export button, clicked, and the file that came back.
    *
    * The wait is armed before the click, because the download begins inside it:
    * clicking first and listening afterwards is the race that makes a download
    * test flaky. Nothing is written to the repo — Playwright keeps the file in
-   * its own temporary place and hands back the path.
+   * its own temporary place unless a test asks for it somewhere else, which is
+   * how "open it from another folder" is tested.
    */
-  async downloadMarkdown(): Promise<DownloadedFile> {
+  private async exportUsing(button: Locator, saveAs?: string): Promise<DownloadedFile> {
     const [download] = await Promise.all([
       this.page.waitForEvent('download'),
-      this.exportMarkdown.click(),
+      button.click(),
     ]);
-    const path = await download.path();
 
-    return {
-      name: download.suggestedFilename(),
-      text: await readFile(path, 'utf8'),
-    };
+    return { name: download.suggestedFilename(), ...(await fileOf(download, saveAs)) };
   }
 
   /** Every message the validation panel lists, in the order it lists them. */
@@ -199,6 +219,18 @@ export class UploadPage {
   /** Every piece of text in the drawing, node labels and edge labels alike. */
   async drawnText(): Promise<readonly string[]> {
     return this.svg.locator('text').allTextContents();
+  }
+
+  /**
+   * The colour one node's silhouette was filled with, as the browser resolved
+   * it — the stylesheet's answer rather than the stylesheet's text, which is
+   * what lets an export be compared against the preview colour for colour.
+   */
+  async nodeFill(index: number): Promise<string> {
+    return this.nodes()
+      .nth(index)
+      .locator('[data-part="shape"]')
+      .evaluate((shape) => getComputedStyle(shape).fill);
   }
 
   /** The kind each node was drawn as, in the order the file listed them. */
@@ -277,6 +309,20 @@ function pointsOf(path: string): readonly DrawnPoint[] {
   }
 
   return points;
+}
+
+/** Where a download ended up, and what is in it. */
+async function fileOf(
+  download: Download,
+  saveAs?: string,
+): Promise<{ readonly text: string; readonly path: string }> {
+  if (saveAs !== undefined) {
+    await download.saveAs(saveAs);
+  }
+
+  const path = saveAs ?? (await download.path());
+
+  return { text: await readFile(path, 'utf8'), path };
 }
 
 function fixturePath(fixture: string): string {

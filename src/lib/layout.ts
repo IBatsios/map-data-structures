@@ -269,8 +269,9 @@ function readPlacedNodes(
  * Dagre's routes, in the order the file listed the edges.
  *
  * Dagre gives an edge whose ends it could not route no points at all, which
- * would draw nothing; falling back to a straight line between the two centres
- * keeps the edge visible. An edge that is not drawn is a dropped edge.
+ * would draw nothing; falling back to a straight line keeps the edge visible.
+ * An edge that is not drawn is a dropped edge. See `straightLine` below for
+ * why that fallback has never once been taken.
  */
 function readRoutedEdges(
   design: Design,
@@ -327,7 +328,29 @@ function labelCentre(
   return middle ? toPoint(middle) : { x: 0, y: 0 };
 }
 
-/** The fallback route: centre to centre, so the edge is at least drawn. */
+/**
+ * The fallback route: centre to centre, so the edge is at least drawn.
+ *
+ * **Unreachable, and measured rather than assumed (D58).** Dagre ends its own
+ * layout with `assignNodeIntersects`, which unconditionally puts the source
+ * border's intersection at the front of every edge's points and the target
+ * border's at the back — so no edge in the graph comes back with fewer than
+ * two, and both ends are already on a border. `buildGraph` puts every edge in
+ * the graph keyed by its index in the file, so the lookup above never misses,
+ * and `selfLoopSlots` gives every self-edge a slot, so a loop is drawn by
+ * `selfLoops.ts` and never read from here. Probing agreed: ten shaped graphs —
+ * parallel edges, two-cycles, self-loops, a complete graph, a fifty-node chain
+ * — and four hundred fuzzed ones came back with three points at the fewest.
+ *
+ * It is kept rather than deleted because it guards against a change in a
+ * library this module does not own. If dagre ever did hand back nothing, the
+ * alternative is a path with an empty `d`, which is an edge the reader cannot
+ * see at all; a line between two centres is visibly wrong instead, and visibly
+ * wrong is the failure worth having. Being unreachable is also why it is still
+ * centre to centre while every other route in this file runs border to border:
+ * a correction here could not be tested, and an untested correction to code
+ * nothing can reach is worth less than the note explaining it.
+ */
 function straightLine(
   edge: { readonly from: string; readonly to: string },
   graph: LayoutGraph,
