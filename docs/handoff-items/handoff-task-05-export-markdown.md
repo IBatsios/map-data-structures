@@ -426,3 +426,197 @@ holds, including why the button is present-and-disabled.
   `describeDrawing.ts`, `index.astro`, `layout.test.ts`,
   `describeDrawing.test.ts` and `toMarkdown.ts` — plus `toMarkdown.test.ts`,
   which imports it to build the layouts it asserts on.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** Every acceptance criterion was exercised and holds. Two pieces of
+trivia fixed in place; no defects for Amon.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as Markdown: demonstrated end to end | pass | Drove the running app with a real browser: chose `order-intake.json`, waited for the SVG, clicked **Export Markdown**, took the download. `Order-intake.md`, 985 bytes, no page errors and no console errors. Same walk in `drawing.spec.ts:289` and eight tests in `export.spec.ts` |
+| The file lists every node and edge the preview shows, with the same labels (5.2) | pass | The exported file carries all 7 nodes and 6 edges in file order. Compared against the SVG's own accessible description, which names the same 7 nodes and 6 edges. Labels survive character for character through the escaping — checked against `"`, `#`, a literal `-->`, a line break, `{}()[]\|`, a trailing backslash, interior spaces (D39) and a self-edge |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright test from Task 03 now also clicks this button and checks the download | pass | `bun run test` 240 in 15 files; `bun run test:e2e` 40. `drawing.spec.ts` — the Task 03 spec — gained `exports the drawing it just showed, the way a user would`, which clicks the button and reads the saved file. The tests were not taken on trust: eight deliberate mutations each turn the suite red (below) |
+| Every earlier test still passes; CI is green | pass | 206 Vitest and 31 Playwright from `main` all still pass inside the 240/40. CI green on PR #11 — typecheck 0 errors, 15 test files, 40 Playwright passed on Linux |
+| Any new environment variable is in `.env.example` with a placeholder | pass | No variable added. `.env.example` is not in `git diff main..HEAD`. Grepped `src/` and `e2e/` for `import.meta.env`, `process.env`, `Astro.env`: the only hit anywhere is `process.env.CI` in `playwright.config.ts`, which is CI-provided, not app configuration, and is unchanged from `main`. `gitleaks detect`: no leaks found |
+
+### The three choices against the sketch
+
+1. **`toMarkdown(layout)` rather than `toMarkdown(design, layout)` (D48) — right
+   call.** I checked the claim rather than the reasoning: `DesignLayout` does
+   carry the title, both lists in file order, labels untouched and the resolved
+   `shape.kind`. Taking the design too would be a second source for the same
+   four fields, and the criterion is that the file shows what the *preview*
+   shows — the preview is drawn from the layout. Taking the design would have
+   been the way to make them disagree.
+2. **`external` as Mermaid's subroutine `[[…]]` (D50) — right call.** The
+   preview does give `external` a cut corner of its own, so a rectangle would
+   have collapsed "outside the system" into "a type nobody has heard of". I
+   rendered all six kinds plus an unknown type in real Mermaid: six distinct
+   silhouettes, unknown falls through to the rectangle. The drift guard is real
+   — deleting the `external` entry from `BRACKETS_BY_KIND` turns two tests red.
+3. **A sentence rather than an empty fenced block (D51) — right call**, and the
+   cheap one. An empty block is the one output whose rendering could not be
+   checked across both GitHub and GitLab without shipping a dependency; a
+   sentence cannot fail to render. Verified end to end: `empty-design.json`
+   exports `Nothing-yet.md`, 188 bytes, two header-only tables, the sentence,
+   no fence.
+
+### Does the download helper survive three more exporters?
+
+Yes. `downloadBlob(blob, fileName, doc)` takes a `Blob`, so Task 07's PDF bytes
+and Task 08's `Packer.toBlob()` both fit with no change; `fileNameFor(title,
+extension)` already produces `.html`, `.pdf` and `.docx` stems from the same
+rule. Taking the `Document` matches `renderDrawing(layout, doc)` and keeps the
+unit test on the pure half, which is right for a repo whose Vitest run has no
+DOM. The deferred revoke is the correct trade — revoking in the click's own tick
+has been observed to cancel downloads. I found nothing the next three tasks
+would have to rewrite.
+
+### Jared's named trap, verified independently
+
+Not by reading the test but by breaking the page. Removing
+`holdDrawing(elements, null)` from `showProblems` in `src/pages/index.astro`
+turns `export.spec.ts:135` red with `unexpected value "enabled"` — the button
+stays live beside the error panel, exactly the wrongness the trap names, and the
+suite catches it. Restored afterwards; the suite is green.
+
+### The Mermaid render, which Amon asked to have checked by hand
+
+Done twice over, and stronger than a paste.
+
+- **Real Mermaid 10 and 11** from a CDN parsed and rendered every generated
+  block: all six kinds plus an unknown type, and the ugly cases. Every label
+  read back out of the SVG character for character — `says "hello"`, `A --> B`,
+  `pipe | here and #9829; entity`, `trailing backslash \`, `a {b} (c) [d] |e|`,
+  a self-edge, and an edge label of `-->`.
+- **GitHub's own Markdown pipeline.** The exported file was put through the
+  GitHub Markdown API, which classified the fence as
+  `<div class="highlight highlight-source-mermaid">` — the hook GitHub's front
+  end keys on to hand the block to Mermaid — and its grammar parsed every
+  silhouette and every arrow. Both tables rendered: 15 `<tr>`, which is 7 node
+  rows, 6 edge rows and 2 header rows. The four headings came through.
+
+I went looking for a specific break and did not find it. An edge label containing
+a `|` emits `n2 -->|"a|b"| n4`, where the interior pipe sits inside the
+pipe-delimited label — the one case Amon's browser run did not cover, since his
+`|` case was a *node* label, where the bracket delimiters make it harmless.
+Mermaid's lexer consumes the quoted string to its closing quote, so both 10 and
+11 render it and read back `a|b`. Likewise a label ending in `\` emits
+`[["trailing backslash \"]]`, which would break if Mermaid treated backslash as
+an escape; it does not. Both hold, in both versions.
+
+### Adversarial pass
+
+Everything below went through the real `loadDesign → layoutDesign → toMarkdown`
+chain, and the interesting ones through the running app as well.
+
+| Input | Result |
+|---|---|
+| Zero-byte file | Refused, `DesignSyntaxError` |
+| Malformed JSON (trailing comma) | Refused |
+| Valid JSON of the wrong shape | Refused, `DesignSchemaError` |
+| Valid design, no nodes | `Nothing-yet.md`, the sentence, no fence |
+| Duplicate node ids | Refused by the schema |
+| Two identical edges | Both drawn; Mermaid renders two arrows |
+| 500 nodes, 499 edges | 56 KB in 134 ms; 1003 table lines and 1000 statements, both exactly right |
+| Ids holding spaces, brackets, a backtick, a backslash | Minted `n0…`, user ids intact in the table |
+| User ids that collide with the minted names (`n0`, `n1`) | Safe — the mint is a bijection by index and user ids never reach the diagram |
+| Titles `***`, `../../etc/passwd`, `.hidden`, 200 chars, `‮`, reserved chars | `design.md`, `etc-passwd.md`, `hidden.md`, cut to 80, override stripped, reserved chars dashed |
+
+Edges carry no ids in this schema, so "duplicate edge ids" does not apply.
+
+### Mutation testing
+
+Eight deliberate mutations, each reverted. All eight are caught.
+
+| Mutation | Caught by |
+|---|---|
+| `external` removed from `BRACKETS_BY_KIND` | 2 tests, incl. the drift guard |
+| `#` escaping removed from `label()` | 1 |
+| `cell()` stripped of all escaping | 2 |
+| `flowchart TD` to `LR` | 3 |
+| Empty-design sentence removed | 1 |
+| The `***` file-name fallback removed | 1 |
+| Node table order reversed | 1 |
+| `holdDrawing(elements, null)` removed from `showProblems` | `export.spec.ts:135` (Playwright) |
+
+### Accessibility, best effort
+
+No critical or major issue on the surface this task changed.
+
+- The control is a native `<button type="button">` with the visible text *Export
+  Markdown*: a real accessible name, no `aria-label` needed.
+- Tab order confirmed live: before a design, only the file input is reachable;
+  after one, input then Export Markdown, in document order.
+- Focus ring is `3px solid` with a 2px offset and resolves against the page's own
+  `currentColor`. Hit area 162 x 39 px, well past the 24 x 24 minimum.
+- Both live regions survive untouched, and the drawing keeps its `role="img"`,
+  `<title>` and `<desc>`.
+- `<html lang="en">`, one `<h1>`, `<main>` present, no positive `tabindex`, no
+  click handler on a non-interactive element, both `role="status"` values valid.
+
+Two disclosed gaps confirmed as accurate and not criterion failures: a `disabled`
+button is out of the tab order by definition, and the export row has no group
+name while it holds one button. Both are right to revisit in Task 06 when the row
+grows to four.
+
+One observation for Task 06 rather than a defect: a node label that is literally
+HTML — `<script>alert(1)</script>` — is sanitized away by Mermaid's `strict`
+security level, so that box renders with no visible text. The label is still
+listed in the file's node table, so criterion 5.2 holds. Worth knowing before the
+HTML export, which will face the same question without Mermaid's sanitizer in
+front of it.
+
+### Command results
+
+- `bun run test`: **240 passed, 15 files.**
+- `bun run test:e2e`: **40 passed.**
+- `bun run check`: **0 errors, 0 warnings, 0 hints.**
+- `bun run build`: **pass**, 1 page.
+- `bun run dev`: **pass** — serves on `http://localhost:4321`, HTTP 200, the
+  export button present and disabled in the first paint, no errors in the log.
+- Secret scan: `gitleaks detect --source . --no-banner` — **20 commits scanned,
+  no leaks found.**
+- CI: **green** on PR #11, both the push run and the pull-request run.
+
+### Defects for Amon
+
+None.
+
+### Fixed in place
+
+Two, both trivia, committed as `test: make the download test readable as text and
+reattach a doc comment`. Neither changes behaviour.
+
+1. **`src/lib/download.test.ts:45`** — the control-character case held a
+   *literal* NUL byte rather than the escape, so git classified the whole file as
+   binary and showed `Bin 0 -> 2779 bytes` instead of a diff. The 12 tests in it
+   could not have been read on the pull request. Replaced with ` `, which is
+   the same string to the test; the committed blob now has no NUL and is
+   greppable.
+2. **`e2e/pages/uploadPage.ts:17`** — the new `DownloadedFile` interface had been
+   inserted between the `UploadPage` doc comment and the class it describes, so
+   the comment documented the interface. Moved the interface above the comment.
+
+### Answering the two disclosed gaps that were not mine to close
+
+- **`e2e/fixtures/empty.json` vs `empty-design.json`.** Amon is right on both
+  counts: `empty.json` is a zero-byte file, not an empty design, and renaming it
+  would touch `validation.spec.ts`. Adding the second fixture rather than
+  renaming was the correct call for this task. The rename is worth a chore, and
+  it is already in his notes for Jared.
+- **Nothing on the page confirms a download.** Correct to leave. The status
+  region's protocol is D41's, which is Task 04's, and changing it quietly inside
+  an exporter task would have been the wrong place to make that decision.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/11 — open as a **draft**,
+mergeable, CI green. Sam marks it ready and merges.
