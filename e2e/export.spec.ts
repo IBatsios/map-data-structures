@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { expect, test } from '@playwright/test';
@@ -13,10 +14,15 @@ import { UploadPage } from './pages/uploadPage';
  * the same walk with a different button. The PDF went into `exportPdf.spec.ts`
  * instead, because a third format took this file past the 800-line ceiling
  * `CLAUDE.md` sets and because reading a PDF back needs a page object's worth
- * of its own machinery; Word should follow that pattern rather than this one. `drawing.spec.ts`
- * keeps one export step of its own, which is the end-to-end walk the acceptance
- * criterion asks for; what is pinned here is the behaviour around it: the name
- * of the file, what is in it, and when the button is offered at all.
+ * of its own machinery; Word followed that pattern into `exportWord.spec.ts`.
+ * `drawing.spec.ts` keeps one export step of its own, which is the end-to-end
+ * walk the acceptance criterion asks for; what is pinned here is the behaviour
+ * around it: the name of the file, what is in it, and when the button is
+ * offered at all.
+ *
+ * The one thing that belongs to the *row* rather than to any one format — that
+ * all four buttons work, one after another, on one loaded design — is the last
+ * block below.
  */
 
 /** Every node label in `e2e/fixtures/order-intake.json`, in file order. */
@@ -205,6 +211,50 @@ test.describe('Exporting the design as Markdown', () => {
     ]);
 
     expect(download.suggestedFilename()).toBe('Order-intake.md');
+  });
+});
+
+test.describe('The export row, all four formats at once', () => {
+  test('saves four files for one design, each named after it', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    // Criterion 4 of Task 08, taken at its word: the walk clicks all four
+    // buttons and checks all four downloads. One after another rather than in
+    // parallel, because that is how a person uses the row, and because two
+    // downloads racing would say nothing about either.
+    const markdown = await upload.downloadMarkdown();
+    const html = await upload.downloadHtml();
+    const pdf = await upload.downloadPdf();
+    const word = await upload.downloadWord();
+
+    expect([markdown.name, html.name, pdf.name, word.name]).toEqual([
+      'Order-intake.md',
+      'Order-intake.html',
+      'Order-intake.pdf',
+      'Order-intake.docx',
+    ]);
+
+    // Every file is a file of its own format, checked by the bytes a reader
+    // looks at first rather than by the name the page chose for it.
+    expect(markdown.text).toContain('# Order intake');
+    expect(html.text).toContain('<!doctype html>');
+    expect((await readFile(pdf.path)).subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect((await readFile(word.path)).subarray(0, 2).toString('latin1')).toBe('PK');
+
+    // And the row is still offering all four afterwards, so exporting once
+    // does not quietly cost the design its other three formats.
+    for (const button of [
+      upload.exportMarkdown,
+      upload.exportHtml,
+      upload.exportPdf,
+      upload.exportWord,
+    ]) {
+      await expect(button).toBeEnabled();
+    }
   });
 });
 
@@ -495,7 +545,7 @@ test.describe('Exporting the design as HTML', () => {
     // without joining this group would leave a control outside the name a
     // screen reader reads on the way in, and this is what notices.
     await expect(upload.exports).toBeVisible();
-    await expect(upload.exports.getByRole('button')).toHaveCount(3);
+    await expect(upload.exports.getByRole('button')).toHaveCount(4);
 
     await upload.exportMarkdown.focus();
     await page.keyboard.press('Tab');

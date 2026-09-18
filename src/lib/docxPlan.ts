@@ -315,9 +315,14 @@ export function describeMarkedControls(marked: number): string | null {
     return null;
   }
 
-  const characters = marked === 1 ? '1 character' : `${marked} characters`;
+  // Phrased so the count reads as a count rather than agreeing with a verb:
+  // "1 character ... are" is the sentence a plural-only wording produces, and
+  // one control character in a design is the ordinary case rather than a rare
+  // one.
+  const characters =
+    marked === 1 ? '1 control character' : `${marked} control characters`;
 
-  return `Exported, but ${characters} in this design are control characters a Word file cannot carry — a .docx is XML, and Word refuses to open one holding them — so this file writes ${UNDRAWABLE_MARK} instead. The Markdown and HTML exports keep every character.`;
+  return `Exported, but this design holds ${characters} a Word file cannot carry — a .docx is XML, and Word refuses to open one holding them — so this file writes ${UNDRAWABLE_MARK} in their place. The Markdown and HTML exports keep every character.`;
 }
 
 /** The same rule, shaped for `markLayout`: lines rejoined, marks counted. */

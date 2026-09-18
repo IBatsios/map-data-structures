@@ -69,25 +69,38 @@ const pageTitle = 'MapDataStructures';
        * drawing, so the page does not rearrange itself under a reader who is
        * part-way down it.
        *
-       * The row is a named group now that it holds more than one button:
-       * controls that do the same thing in different formats read as a set,
-       * and a screen reader says the name as focus enters it, so "Export
-       * Markdown" is heard as one of the export controls rather than as a
-       * loose button somewhere on the page. `role="group"` with an
-       * `aria-label` rather than a `<fieldset>`/`<legend>`: these are actions,
-       * not fields of a form, and a fieldset brings default borders and
-       * padding that Task 09 would have to undo.
+       * The row is a named group because controls that do the same thing in
+       * different formats read as a set, and a screen reader says the name as
+       * focus enters it, so "Export Markdown" is heard as one of the export
+       * controls rather than as a loose button somewhere on the page.
+       * `role="group"` with a label rather than a `<fieldset>`/`<legend>`:
+       * these are actions, not fields of a form, and a fieldset brings default
+       * borders and padding that Task 09 would have to undo.
+       *
+       * The name is visible now rather than only in an attribute, which is
+       * what a fourth button bought: three buttons read as three buttons, four
+       * of different widths read as a pile. `aria-labelledby` points at the
+       * words on the page so there is one name rather than two copies of it
+       * that can disagree.
        */}
-      <div class={exportStyles.actions} role="group" aria-label="Export the design">
-        <button id="export-markdown" class={exportStyles.action} type="button" disabled>
-          Export Markdown
-        </button>
-        <button id="export-html" class={exportStyles.action} type="button" disabled>
-          Export HTML
-        </button>
-        <button id="export-pdf" class={exportStyles.action} type="button" disabled>
-          Export PDF
-        </button>
+      <div class={exportStyles.exports} role="group" aria-labelledby="export-heading">
+        <p id="export-heading" class={exportStyles.label}>
+          Export the design
+        </p>
+        <div class={exportStyles.actions}>
+          <button id="export-markdown" class={exportStyles.action} type="button" disabled>
+            Export Markdown
+          </button>
+          <button id="export-html" class={exportStyles.action} type="button" disabled>
+            Export HTML
+          </button>
+          <button id="export-pdf" class={exportStyles.action} type="button" disabled>
+            Export PDF
+          </button>
+          <button id="export-word" class={exportStyles.action} type="button" disabled>
+            Export Word
+          </button>
+        </div>
       </div>
 
       <div id="drawing" class={drawingStyles.drawing}></div>
@@ -101,6 +114,7 @@ const pageTitle = 'MapDataStructures';
       } from '../lib/describeLoadError';
       import { describeUpload } from '../lib/describeUpload';
       import { downloadBlob, fileNameFor } from '../lib/download';
+      import { describeMarkedControls } from '../lib/docxPlan';
       import { describeUndrawable } from '../lib/drawableText';
       import { looksLikeJsonFile } from '../lib/jsonFile';
       import type { DesignLayout } from '../lib/layout';
@@ -110,6 +124,7 @@ const pageTitle = 'MapDataStructures';
       import { renderProblems } from '../lib/renderProblems';
       import { toHtml } from '../lib/toHtml';
       import { toMarkdown } from '../lib/toMarkdown';
+      import { toDocx } from '../lib/toDocx';
       import { toPdf } from '../lib/toPdf';
 
       /** What a `.md` file is, for the browser that is about to save one. */
@@ -125,12 +140,16 @@ const pageTitle = 'MapDataStructures';
       /**
        * One built export, and anything the page should say about it.
        *
-       * Only the PDF has ever had something to say: its font cannot draw every
-       * script, and a character it has no glyph for is marked in the file, so
-       * the person who exported it is told how many and which formats still
-       * carry them. The two text formats hand back `null` and the page stays
-       * quiet, because announcing a finished download is a separate live-region
-       * question parked for all four exports at once (D41).
+       * Two of the four have something to say, for different reasons. The
+       * PDF's font cannot draw every script, so a character it has no glyph
+       * for is marked in the file. The Word file names a font rather than
+       * carrying one, so glyphs are not its problem — but a `.docx` is XML,
+       * and a control character in a label is one Word refuses to open the
+       * file over, so those are marked instead. Either way the person who
+       * exported it is told how many and which formats still carry them. The
+       * two text formats hand back `null` and the page stays quiet, because
+       * announcing a finished download is a separate live-region question
+       * parked for all four exports at once (D41).
        */
       interface ExportedFile {
         readonly blob: Blob;
@@ -146,6 +165,7 @@ const pageTitle = 'MapDataStructures';
         readonly exportMarkdown: HTMLButtonElement;
         readonly exportHtml: HTMLButtonElement;
         readonly exportPdf: HTMLButtonElement;
+        readonly exportWord: HTMLButtonElement;
       }
 
       /**
@@ -171,7 +191,8 @@ const pageTitle = 'MapDataStructures';
        * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
        * `renderDrawing`'s, counting is `describeUpload`'s, writing the `.md` is
        * `toMarkdown`'s, writing the `.html` is `toHtml`'s, writing the `.pdf`
-       * is `toPdf`'s, naming and saving any of them is `download`'s, and every
+       * is `toPdf`'s, writing the `.docx` is `toDocx`'s, naming and saving any
+       * of them is `download`'s, and every
        * sentence about a file that failed is `describeLoadError`'s — all in
        * `src/lib`, all tested. What is
        * left here is wiring: find the elements, listen, and put the result in
@@ -206,6 +227,14 @@ const pageTitle = 'MapDataStructures';
           });
         });
 
+        elements.exportWord.addEventListener('click', () => {
+          void exportDesign(elements, 'docx', async (layout) => {
+            const exported = await toDocx(layout, document);
+
+            return { blob: exported.blob, note: describeMarkedControls(exported.marked) };
+          });
+        });
+
         watchForDroppedFiles(elements);
       }
 
@@ -218,6 +247,7 @@ const pageTitle = 'MapDataStructures';
         const exportMarkdown = document.querySelector('#export-markdown');
         const exportHtml = document.querySelector('#export-html');
         const exportPdf = document.querySelector('#export-pdf');
+        const exportWord = document.querySelector('#export-word');
 
         if (
           !(fileInput instanceof HTMLInputElement) ||
@@ -227,7 +257,8 @@ const pageTitle = 'MapDataStructures';
           !(drawing instanceof HTMLElement) ||
           !(exportMarkdown instanceof HTMLButtonElement) ||
           !(exportHtml instanceof HTMLButtonElement) ||
-          !(exportPdf instanceof HTMLButtonElement)
+          !(exportPdf instanceof HTMLButtonElement) ||
+          !(exportWord instanceof HTMLButtonElement)
         ) {
           throw new Error('The upload page is missing one of its elements.');
         }
@@ -241,6 +272,7 @@ const pageTitle = 'MapDataStructures';
           exportMarkdown,
           exportHtml,
           exportPdf,
+          exportWord,
         };
       }
 
@@ -381,6 +413,7 @@ const pageTitle = 'MapDataStructures';
           elements.exportMarkdown,
           elements.exportHtml,
           elements.exportPdf,
+          elements.exportWord,
         ]) {
           button.disabled = layout === null;
         }

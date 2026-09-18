@@ -350,14 +350,14 @@ describe('docxPlan', () => {
     it('names how many were marked, what stands in for them, and where they survive', () => {
       const one = describeMarkedControls(1);
 
-      expect(one).toContain('1 character');
+      expect(one).toContain('1 control character');
       expect(one).toContain(UNDRAWABLE_MARK);
       expect(one).toContain('Markdown');
       expect(one).toContain('HTML');
     });
 
     it('says characters rather than character when there is more than one', () => {
-      expect(describeMarkedControls(6)).toContain('6 characters');
+      expect(describeMarkedControls(6)).toContain('6 control characters');
     });
   });
 });
