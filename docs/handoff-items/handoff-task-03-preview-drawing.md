@@ -1365,3 +1365,44 @@ the working tree was clean before I pushed.
 https://github.com/IBatsios/map-data-structures/pull/5 — pushed
 `225d492..f22193d`, CI green on both runs. Still a draft. I did not mark it
 ready and I did not merge.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/03-preview-drawing.md` | All seven acceptance-criteria boxes checked, `**Status:** done`, already set by Jahmyr in round 3. | None needed. |
+| `README.md` | Already true: lists `dev`, `test`, `test:e2e`, `check`, `build`, says `bun run test` not `bun test`, and "What works today" already describes the shapes and layout Task 03 shipped. Matches `CLAUDE.md`. | None needed. |
+| `CLAUDE.md` | Commands were already updated (86ea003, mid-task), but the `## Status` paragraph still said "Tasks 01 and 02 are done… No layout beyond a single row, no styling beyond defaults, no export yet" — stale against both the README and the merged code. | Rewrote the paragraph to name Tasks 01-03 done, the dagre layout, the six shape kinds, self-edge looping, and the `<title>`/`<desc>` pair. Committed to the branch before merge (`9e4562f`), so CI re-ran on the fix. |
+| `docs/DECISIONS.md` | D24-D37 present and cover everything in Amon's and Jahmyr's reports across all three rounds: the layout engine choice, the shape vocabulary, text estimation, the CSS Module and its contrast test, `<desc>`, the `check` script and TS pin, the Playwright static server, `testDir`, the D22 correction, the cleared file input, self-edge routing, edge-label wrapping, the article heuristic, and the per-self-edge lane fix. | None needed. |
+| `.env.example` | Still a placeholder header only — correct, since the code still reads nothing from the environment (confirmed by both Amon and Jahmyr's greps across three rounds). | None needed. |
+| Handoff doc (this file) | Jared's assignment, Amon's three rounds, Jahmyr's three rounds all present and legible before I started. | Appended this section. |
+| `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md` | Not edited, per instructions. Both still read as accurate — `ARCHITECTURE.md` says the layout engine "is not specified in the intake," which stays true of the intake even though Task 03 picked dagre for the implementation; `RUNBOOK.md`'s task table needs no correction, since it does not track per-task status inline. Nothing to flag to a person. | None needed; not edited. |
+
+### Gates
+
+`bun run test`: **125 passed, 8 files**, locally before and after the CLAUDE.md fix.
+CI: **green** on both the `push` and `pull_request` runs, before the fix (`35354728785`, `35354723767`) and after it (`35355200752`, `35355195639`) — all four steps (typecheck, test, browser install, e2e).
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**, run before the fix (25 commits) and after it (26 commits).
+
+### Merge
+
+Squashed as `3e6d6c0` into `main` (fast-forward from `ae9708f`). Branch `feature/preview-drawing` deleted. PR https://github.com/IBatsios/map-data-structures/pull/5.
+
+### Left for a person
+
+Nothing blocking. Two things worth a person's attention, neither urgent:
+
+- `src/lib/layout.ts` at 625 lines, with the self-edge routing (~130 lines
+  behind one call) as the obvious extraction, flagged independently by both
+  Amon and Jahmyr. Worth doing before Tasks 05-08 start reading this module,
+  since all four exporters consume `layoutDesign`.
+- The page outside the drawing has no styling at all (default serif body
+  copy next to a sans-serif drawing), which wants a global-styling decision
+  D1 constrains to CSS Modules but nobody has made. Both Amon (round 1) and
+  Jared's assignment note it; Task 09 will hit it again.
+
+Both are carried into `docs/handoff-items/handoff-next-phase.md`.

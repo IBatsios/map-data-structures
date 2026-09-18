@@ -1,85 +1,88 @@
-# Handoff — after Task 02
+# Handoff — after Task 03
 
 **Date:** 2026-09-18
-**Phase finished:** Task 02: Upload a JSON file
-**Next phase:** Task 03: Preview the generated drawing
+**Phase finished:** Task 03: Preview the generated drawing
+**Next phase:** Task 04: Validation errors
 
 ## Where things stand
 
-`main` has Tasks 01 and 02, merged from `feature/upload-json` (squashed as
-`b98971b`). `bun install`, `bun run dev`, `bun run test`, and `bun run build`
-all work. One page at `/` has a labelled file input plus drag-and-drop over
-the whole page; either path reads the file with the File API, validates it
-against the Zod schema in `src/lib/design.schema.ts` via `loadDesign`, and —
-only once it is valid — shows the file name and node/edge counts and draws a
-box per node and a line per edge. A duplicate node id or an edge naming a node
-the file does not define is refused rather than silently drawn wrong. Nothing
-is sent anywhere. CI (`.github/workflows/ci.yml`) runs `bun run test` on every
-push and pull request and is green. A pre-commit hook (Husky + lint-staged)
-formats staged files and runs the Vitest suite. `gitleaks detect` finds
-nothing. 46 tests pass.
+`main` has Tasks 01 to 03, merged from `feature/preview-drawing` (squashed as
+`3e6d6c0`, PR #5, three rounds of Jahmyr's testing — two self-edge routing
+defects found and fixed along the way). `bun install`, `bun run dev`,
+`bun run test`, `bun run test:e2e`, `bun run check`, and `bun run build` all
+work. CI (`.github/workflows/ci.yml`) runs all four in order — typecheck,
+Vitest, browser install, Playwright — on every push and pull request, and is
+green.
+
+Choose a JSON file, with the picker or by dropping it on the page, and once
+`loadDesign` accepts it against the Zod schema in `src/lib/design.schema.ts`,
+`layoutDesign` (`src/lib/layout.ts`, wrapping `@dagrejs/dagre`) lays it out
+and an SVG draws below the status line: six node kinds — `service`,
+`database`, `queue`, `external`, `user`, `decision` — each in their own
+silhouette and colour band, anything else a plain grey dashed rectangle
+printing its own type under the label, labelled edges with arrowheads, and
+self-edges looped against their own node, each in its own lane so two or more
+on one node draw as distinct nested loops with stacked, readable labels. The
+SVG carries a `<title>` and a `<desc>` naming every node and edge for
+accessibility. 125 Vitest tests and 11 Playwright tests pass; `gitleaks
+detect` finds nothing.
 
 Not live anywhere yet — Task 10 is what deploys to Netlify.
 
 ## What to do next, in order
 
-1. Start Task 03 (`docs/tasks/03-preview-drawing.md`) from `main`, on a branch
-   named `feature/<short-description>`. It is unblocked — Tasks 01 and 02 are
-   done. Confirm a layout engine (ELK or dagre — the task file names both as
-   common open-source choices) with the user before adding either as a
-   dependency; the intake names no engine.
-2. Task 03 is also where D17 closes: add `typescript` and `@astrojs/check`, an
-   `astro check` script, and a CI step, per the routing note in
-   `docs/handoff-items/handoff-task-02-upload-json.md`. It is also where the
-   first Playwright test and its CI step land — remember Astro 7's `astro dev`
-   is a detached background server (`astro dev status|logs|stop`); reflect
-   that in Playwright's `webServer` config, and give the e2e walk its own
-   script so `bun run test` stays Vitest-only and the pre-commit hook does not
-   start a browser on every commit.
-3. Task 04 (`docs/tasks/04-validation-errors.md`) is also unblocked (01, 02
-   done) but is not next in the RUNBOOK's order; when it is picked up, carry
-   forward four defects Jahmyr recorded while testing Task 02, none of which
-   failed a Task 02 criterion but all of which bear on Task 04's design:
-   - **Worth resolving before Task 04's work starts.** `src/lib/loadDesign.ts:41-43`'s
-     doc comment, and D22, claim `JSON.parse`'s message "names the position…
-     in every browser this app targets." True of V8; false of Safari's
-     JavaScriptCore, which gives a message with no position, line, or column.
-     Task 04's second acceptance criterion is literally "malformed JSON shows
-     the line" — it needs a fallback for engines that give no line to show.
-     `src/lib/loadDesign.test.ts:135`'s `toMatch(/position \d+/)` cannot catch
-     this because Vitest runs on Node (V8); the assertion should treat the
-     position as a bonus, not a guaranteed part of the contract.
-   - `src/pages/index.astro:96` — re-picking the identical file fires no
-     `change` event, so the drawing and the status/error text go stale while
-     still asserting the old load. Task 04's loop is "see the error, fix the
-     file, load it again," so this is worth fixing as part of that task
-     (clear `fileInput.value` after each read).
+1. Start Task 04 (`docs/tasks/04-validation-errors.md`) from `main`, on a
+   branch named `feature/<short-description>`. Unblocked — Tasks 01 and 02
+   are done.
+2. Task 04's second acceptance criterion — "malformed JSON shows the
+   line" — needs a plan for engines that give `JSON.parse` no position at
+   all. D32 corrects D22's premise: true of V8, **false of JavaScriptCore**
+   (Safari), which gives a message with no line or column. The loader
+   already throws structured errors carrying the original message and
+   `cause` (D22); Task 04 owns what to say when there is no position to say
+   it from.
+3. Carried forward from Task 02, still open:
    - `src/pages/index.astro:27` — `accept="application/json,.json"` filters
-     the file *picker* only; a dropped non-JSON file's raw bytes reach
-     `loadDesign` and leak into the status region as a `JSON.parse` message.
-     Task 04 should check the type or extension before parsing so it can say
-     "that is not JSON" instead of echoing a byte.
+     the picker only; a dropped non-JSON file's raw bytes reach `loadDesign`
+     and a byte leaks into the status line inside a `JSON.parse` message.
+     Check the type or extension before parsing so the app can say "that is
+     not JSON."
    - `src/lib/design.schema.ts:35` — `z.string().min(1)` admits a
      whitespace-only string, so a blank label or id still loads and draws a
-     blank box. D19 justifies the "no empty strings" rule as exactly what
-     stops a blank box, so the rule under-delivers on what the decision
-     claims. A decision to make (tighten to a non-blank check, or narrow D19's
-     wording), not an obvious bug — low severity.
-   Also carry forward: D20 (confirmed correct by Jahmyr) — Zod does not run
-   its cross-field refinement once a field itself has failed, so a file with
-   both a bad field and a dangling edge reports only the field on the first
-   pass. Task 04 should design its message list around that staged,
-   two-pass-to-fix reality rather than assume every problem surfaces at once.
-4. Update `README.md` or `CLAUDE.md` if a command changes.
-5. When Task 03 ends, write the next handoff doc here, in this shape, and
-   append its own detail to a new `docs/handoff-items/handoff-task-03-*.md`.
+     blank box. D19 justifies "no empty strings" as exactly what stops a
+     blank box, so the rule under-delivers on what the decision claims. A
+     decision to make (tighten to a non-blank check, or narrow D19's
+     wording), not an obvious bug.
+   - D20 (confirmed correct, not a bug) — Zod's cross-field refinement only
+     runs once every field has passed, so a file with both a malformed field
+     and a dangling edge reports only the field on the first pass. Design
+     the message list around that staged, two-pass reality.
+4. Also open, from Task 03: `src/lib/layout.ts` is 625 lines — inside the
+   800-line ceiling, past the 200-400 that is meant to be typical. The
+   self-edge routing (`selfLoop`, its slots, its four constants — about 130
+   lines answering to one idea, consumed through one call) is the obvious
+   seam to extract. Both Amon and Jahmyr flagged it independently; worth
+   doing before Tasks 05-08 start reading this module in earnest, since all
+   four exporters consume `layoutDesign`.
+5. Small backlog, not blocking Task 04: five self-edge loops on one node
+   reads as three at 4x zoom (the band clamps from the fourth loop on — all
+   five routes and labels stay distinct, so criterion 2 held, but the
+   nesting cue stops working); loop ends meet each node's bounding box
+   rather than its silhouette, the same as every other edge end, so one fix
+   covers all of them; and which stacked self-loop label belongs to which
+   loop is positional, not drawn — fine at two loops, weak at five.
+6. The page outside the drawing has no styling at all — default serif body
+   copy beside a sans-serif drawing, reading as two documents side by side.
+   This wants a global-styling decision, which D1 constrains to CSS Modules
+   but nobody has made yet. Task 09 adds a second page and will hit the same
+   thing.
+7. Update `README.md` or `CLAUDE.md` if a command changes.
+8. When Task 04 ends, write the next handoff doc here, in this shape, and
+   append its own detail to a new `docs/handoff-items/handoff-task-04-*.md`.
 
 ## Suggested skills for the next session
 
-- `frontend-design-direction`: decide how the drawing should look before
-  styling it — this is the product's face.
-- `make-interfaces-feel-better`: spacing, label sizes, and arrowheads once the
-  layout works.
-- `front-a11y`: check the SVG title and contrast.
-- `tdd-workflow`: the layout test before the layout function.
-- `e2e-testing`: the first Playwright test and its CI step.
+- `error-handling`: typed failures from the loader, user-facing messages in
+  the panel.
+- `tdd-workflow`: one broken file per test, written first.
+- `front-a11y`: the live region and the message contrast.
