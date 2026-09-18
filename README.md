@@ -1,8 +1,8 @@
 # MapDataStructures
 
 Turn a JSON description of a system into an architectural design document. You
-choose a JSON file, the app draws its nodes and edges, and — once the exporters
-land — hands the same design back as Word, PDF, HTML, or Markdown.
+choose a JSON file, the app draws its nodes and edges, and hands the same design
+back as a file — Markdown today, with Word, PDF and HTML still to come.
 
 Everything runs in your browser. There is no backend and no database, the site
 ships as static files, and no file you choose is ever uploaded anywhere.
@@ -60,8 +60,16 @@ error gets one message per problem, each naming the field at fault, such as
 `nodes[0].label is missing. It has to be text.` The panel clears when a good
 file loads, and no drawing is left behind that nothing is describing.
 
-Still to come: there are no exports yet. The task list in `docs/RUNBOOK.md` says
-what comes next.
+Once a design is drawn, **Export Markdown** downloads it as `<design>.md`: the
+title as a heading, a table of every node, a table of every edge, and the drawing
+itself as a fenced ` ```mermaid ` flowchart, which GitHub and GitLab render where
+the file is pasted. The button is disabled until there is something to export,
+and goes back to disabled the moment a file fails, so it never saves the design
+before last. Node ids in the diagram are the app's own — `n0`, `n1` — because a
+design's ids may hold characters Mermaid will not take; yours stay in the table.
+
+Still to come: HTML, PDF and Word. The task list in `docs/RUNBOOK.md` says what
+comes next.
 
 The JSON it reads looks like this:
 
@@ -88,8 +96,9 @@ page with a sample file.
 
 ```
 src/lib/      the design core: types, the schema, the loader, the layout,
-              the shape vocabulary, the SVG renderer, and the modules that
-              turn a failed load into messages
+              the shape vocabulary, the SVG renderer, the exporters and the
+              download helper they share, and the modules that turn a failed
+              load into messages
 src/pages/    the Astro pages
 src/styles/   CSS Modules, and the tests that measure their contrast
 e2e/          the Playwright walk, its fixtures, and the server it runs against
