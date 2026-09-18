@@ -326,3 +326,237 @@ Not this cycle's work, listed so nobody rediscovers them:
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+## Work completed by Amon — round 1
+
+### What was built
+
+An **Export PDF** button joins Export Markdown and Export HTML in the same
+`role="group"` (D59, no restructuring), disabled and enabled with them by the
+same `holdDrawing` call (D53). Clicking it downloads `<design>.pdf`: the design's
+title, the drawing exactly as the preview drew it, and the same tables of nodes
+and edges the other two exports write, running onto as many pages as the design
+needs.
+
+The drawing goes in as **vector**, so its labels stay selectable, searchable and
+sharp at any zoom. Its colours are not a second copy of anything: the drawing is
+rendered fresh, put into the page off-screen inside a holder carrying the
+preview's own class, asked what the browser resolved for it, and those answers
+are frozen onto the elements before svg2pdf reads them. That was forced rather
+than chosen — svg2pdf does not use `getComputedStyle`, it matches selectors
+itself against `<style>` elements found inside the SVG, so the app's CSS Module
+never reaches it and `fill: var(--shape-fill)` would reach it unresolved.
+
+The file **carries its own font**, Roboto Regular under the SIL Open Font
+License 1.1. That is the item flagged as this task's 5.2 trap and it was real:
+with jsPDF's built-in Latin-1 faces the project's own Greek fixture label comes
+out of the file as `±Á±³³µ»¯µÂ`. The font, jsPDF and svg2pdf are all imported
+dynamically, so a visitor who never exports a PDF downloads none of them.
+
+`src/lib/download.ts` needed no change, as expected: `downloadBlob` takes a
+`Blob` and `fileNameFor(title, 'pdf')` already yields the name. Nothing in it
+was touched.
+
+**A defect found and fixed mid-build, because it is the kind that hides.** The
+first working build produced a PDF whose *tables* held `Παραγγελίες — naïve
+café` correctly while the *drawing* above them held `± Á ± ³ ³ µ » ¯ µ Â`.
+svg2pdf turns any font weight that is not 400 or 700 into a style name of its
+own, so the drawing's `font-weight: 550` labels were asked for as `550normal`;
+jsPDF answers a style it has never been given by silently falling back to
+Times-Roman, which is Latin-1 again. Reading the text back out did not catch it
+on its own, because the tables were right. What catches it now is a second
+oracle: `pdfFonts` reads the `Tf` operators out of the file and the walk asserts
+that the only face any text is drawn with is the one the app embeds. The fix is
+to normalise weight and style along with the family when the drawing's styles
+are frozen, which removes the class of failure rather than that one spelling of
+it.
+
+### Files added or changed
+
+- `src/lib/pdfPlan.ts` — new. The pure half: every page and every piece of ink
+  on it, from the layout and a measuring function. No DOM, no library.
+- `src/lib/pdfPlan.test.ts` — new, written first. 18 Vitest tests.
+- `src/lib/toPdf.ts` — new. `toPdf(layout, doc): Promise<Blob>`: opens jsPDF,
+  registers the font, renders and resolves the drawing, and puts ink where the
+  plan says.
+- `src/lib/fonts/robotoRegular.ts` — new, **generated**. Roboto Regular as
+  base64, with its provenance and sha256 in the header.
+- `src/lib/fonts/Roboto-LICENSE.txt` — new. The OFL 1.1 text, copied verbatim
+  from the source package.
+- `src/pages/index.astro` — the third button, its listener, its element, and one
+  line in `holdDrawing`. `exportDesign` is now `async` and takes a builder that
+  returns a `Blob`, because the PDF cannot be built in one tick; it takes the
+  held design into a local first, so a file chosen mid-export cannot leave the
+  last design's picture under this design's name.
+- `e2e/exportPdf.spec.ts` — new. The PDF walk, 14 tests.
+- `e2e/pdfText.ts` — new. Reads the text, and the faces used, back out of a PDF.
+- `e2e/pages/uploadPage.ts` — `exportPdf` locator and `downloadPdf(saveAs?)`.
+  `exportUsing` now returns a name and a path; the two text formats add the text
+  through a small `withText` wrapper, so nothing about them changed.
+- `e2e/export.spec.ts` — two edits only: the group's button count is now 3, and
+  the doc comment says where the PDF walk went.
+- `e2e/fixtures/platform-overview.json` — new. 15 nodes, 16 edges: a design at
+  the owner's scale, since none existed.
+- `e2e/fixtures/estate-sweep.json` — new. 40 nodes, 46 edges: deliberately
+  larger, for headroom.
+- `package.json` / `bun.lock` — `jspdf` 4.2.1 and `svg2pdf.js` 2.8.1.
+- `.prettierignore` — `src/lib/fonts/`, which is generated base64 on one line.
+- `README.md` — the Export PDF paragraph, the "still to come" line, the layout
+  list, and a licence note naming the embedded font. Commands are unchanged and
+  still match `CLAUDE.md`.
+- `docs/DECISIONS.md` — D62 to D68 appended.
+
+### Tests written
+
+**Vitest, `src/lib/pdfPlan.test.ts` (18):** the title heads the first page; the
+drawing keeps the preview's proportions; a small drawing is never blown up; a
+drawing wider than the page is shrunk inside the margins; every node is listed in
+file order with id, label and type; every edge likewise with both ends and its
+label; each table is headed; a design with no nodes gets the sentence and no
+drawing, with both tables still printing their headings; **the sentence is
+byte-for-byte the one `toMarkdown` writes**, so a third copy cannot drift; a
+small design is one page; a long one turns the page and repeats the column
+headings on every page after the first; every one of 80 nodes is on some page; a
+label too wide for its column wraps and every word survives; an unbroken
+300-character word is broken across lines and joins back to itself exactly; a
+label's own line break is drawn as one; a label's leading and trailing spaces
+survive (D39); nothing is placed outside the margins; no page is left empty.
+
+**Playwright, `e2e/exportPdf.spec.ts` (14):** the button is present and disabled
+before there is anything to export and enabled after; the file is
+`Order-intake.pdf` and begins `%PDF-`; every piece of text the preview draws is
+in the file, read back out of the bytes; both tables carry a row per node and per
+edge, checked by the ids, which only the tables hold; a Greek label, a
+guillemetted Greek edge label and a quoted ampersand all survive, and the Greek
+node label appears **twice** — once in the drawing and once in the table, which
+is the assertion the `550normal` defect would fail; every face used anywhere in
+the file is the embedded one; the drawing is text and lines rather than an image;
+an empty design is one page with the sentence; a 40-node design runs to more than
+one page with nothing falling off the end; the export is of the design now on
+screen and not the one before it; the button goes back to disabled when the next
+file fails; the group holds three buttons and Tab moves from Export HTML to
+Export PDF, which downloads on Enter; and the two timed tests below.
+
+### Local results
+
+`bun run test`: **pass, 283 tests in 18 files** (265 before this task).
+`bun run test:e2e`: **pass, 67 tests** (53 before this task).
+`bun run check`: pass, 0 errors.
+`bun run build`: pass.
+
+**Criterion 11.1, measured.** Machine: Windows 11 Pro, bun 1.4.2, Node 24.15,
+Chromium via Playwright 1.63, `dist/` served from localhost by
+`e2e/staticServer.ts`. The clock runs from the click to the browser having the
+file. Five clicks per fixture; the first pays for fetching the library and the
+font, the rest are warm.
+
+| Fixture | Nodes / edges | First click | Warm | File |
+|---|---|---|---|---|
+| `empty-design.json` | 0 / 0 | 68 ms | 42-48 ms | 24 KB |
+| `markup-labels.json` | 4 / 3 | 97 ms | 44-54 ms | 38 KB |
+| `order-intake.json` | 7 / 6 | 105 ms | 41-61 ms | 41 KB |
+| `platform-overview.json` | 15 / 16 | **134 ms** | 61-81 ms | 65 KB |
+| `estate-sweep.json` | 40 / 46 | **181 ms** | 103-119 ms | 133 KB |
+
+Only the very first click of the session pays the full chunk download; after
+that the browser has them cached, so the "first click" column for the later
+fixtures is a warm-cache first click. Over a real network the dominant cost of
+the first export is the ~850 KB of lazily-loaded JavaScript, not the work.
+
+**What the walk asserts is not that number.** Both timed tests guard at 15
+seconds, which is roughly a hundred times the measured figure. That is the
+deliberate choice of the two Jared offered: the criterion is held by the
+measurement recorded here, and the test carries a loose guard that still catches
+an export that has stopped finishing at all, rather than a tight one that would
+go red on a busy CI runner. Re-running the table is one command against the
+fixtures above if anyone wants to check it.
+
+**`.env.example` confirmed rather than assumed**, two ways: the file itself
+still holds no variables, and a grep of the whole repository for `process.env`
+and `import.meta.env` returns hits only in `playwright.config.ts`, all of them
+`process.env.CI`, which is a flag the CI runner sets rather than a variable this
+app reads. Nothing in this task reads the environment, so nothing was added.
+
+### Decisions recorded
+
+Seven rows appended to `docs/DECISIONS.md`:
+
+- **D62** — the route: vector, `svg2pdf.js` on `jspdf`, with its trade-off
+  written out, the registry facts verified at the moment of adding as D24 did,
+  and why `pdf-lib` and printing the Task 06 page were both declined.
+- **D63** — the signature, `toPdf(layout, doc): Promise<Blob>` with the pure
+  `pdfPlan(layout, measure)` beside it, and where each half is tested.
+- **D64** — the drawing's styles are resolved by the browser and frozen onto the
+  element, so the PDF needs no second copy of the palette.
+- **D65** — the embedded font: which one, its licence, its bundle cost, what it
+  does not cover, and why the weight is normalised.
+- **D66** — the page: Letter, margins, the drawing scaled to one page, repeated
+  column headings, the empty-design sentence, uncompressed output.
+- **D67** — criterion 11.1 held by a recorded measurement and a loose guard, and
+  why that rather than a tight assertion.
+- **D68** — the hand-written PDF reader, why it is not a package, that it was
+  checked against `pdftotext`, and why the PDF walk has its own spec file.
+
+### Known gaps
+
+1. **A label in a script Roboto does not cover is left out of the PDF.** CJK,
+   Arabic, Hebrew and Indic scripts have no glyph in any face of this size; the
+   character is simply not drawn. The other three exports still show it. This is
+   the honest residue of criterion 2 and it is recorded in D65 and in the font
+   module's header rather than papered over. There is no fixture for it, because
+   adding one would mean adding a test that asserts a label is missing.
+2. **A large drawing prints small.** The drawing is scaled to fit one page, so
+   `estate-sweep.json` at 40 nodes comes out with labels around 1.5 pt. It is
+   vector, so it is sharp at any zoom on screen, and both tables carry every
+   label at full size — but on paper, that drawing is not readable without a
+   magnifier. Tiling a drawing across pages, or turning the page landscape when
+   that helps, is the fix and neither is in this task. Worth a judgement from
+   Jahmyr on whether criterion 2 is satisfied by "readable in the tables and at
+   zoom".
+3. **The first PDF export downloads about 850 KB of JavaScript** — jsPDF 400 KB,
+   the font 212 KB, svg2pdf 86 KB, and 151 KB of jsPDF's own dependencies. It is
+   all behind a dynamic `import()`, so the page's own script is unchanged at
+   155 KB and only a visitor who exports a PDF pays for it. jsPDF's optional
+   `html2canvas` and `dompurify` are split into chunks of their own that nothing
+   ever fetches.
+4. **Nothing stops a second click while a PDF is still being written.** Two
+   clicks produce two identical downloads. A busy state on the buttons is new
+   behaviour rather than a fix, and it belongs with the D41 question about
+   announcing a finished download, which is parked for all four exporters.
+5. **`src/lib/exportStyles.ts` still carries D57's stale comment about `?raw`.**
+   The bounded instruction was to fix it only if the route made me read or change
+   that file. It did not — D64 is the reason: the PDF takes its colours from the
+   browser rather than from a written-out stylesheet, so `exportStyles.ts` was
+   never opened. It carries forward to whoever touches it next.
+6. **The TDD checkpoint commits could not be made the way `tdd-workflow`
+   describes.** The pre-commit hook runs `astro check` across the whole
+   repository, so a commit holding a test for a module that does not exist yet is
+   rejected. RED was validated by running `bun run test` and watching
+   `pdfPlan.test.ts` fail on the missing module before a line of it was written;
+   the first commit holds the test and the implementation together.
+
+### Out-of-scope notes for Jared
+
+- **Task 08's route does not follow from this one.** jsPDF and svg2pdf are no
+  help for a `.docx`, so the library gate has to be opened again. What does carry
+  over is the shape: a pure module that decides the document and a thin one that
+  writes it, `downloadBlob` taking the bytes unchanged for a fourth time, and
+  `e2e/exportPdf.spec.ts` as the pattern for a fourth spec file rather than
+  growing `export.spec.ts` past its ceiling again. D59 also flagged the fuller
+  revisit of the export row for when it holds four buttons, which is Task 08.
+- **`e2e/export.spec.ts` is at 511 lines and `docs/DECISIONS.md` is now 68 rows
+  and about 55 KB.** Neither is a problem yet; the decisions file is the one to
+  watch, because every agent in the pipeline reads it and it has doubled since
+  Task 04.
+- **The font module is 212 KB of base64 in the repository.** It is generated and
+  `.prettierignore`d, and its header records the source package, version, file
+  and sha256 so it can be regenerated. If the project ever wants it smaller, the
+  answer is subsetting the font at build time, which needs a tool this stack does
+  not have and would be its own chore.
+- **`pdfPlan.ts` is 518 lines**, 295 of them code. That is inside `CLAUDE.md`'s
+  800 ceiling and the largest module in `src/lib/`. It has an obvious seam if it
+  ever needs one — the page-filling `Sheet` and the text wrapping are independent
+  of the document's structure — but splitting it now would be a refactor without
+  a reason.
+- Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts` or
+  `empty.json`, and the `intersectRect` crash was not touched. All still carried.
