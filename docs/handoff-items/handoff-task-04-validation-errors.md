@@ -551,3 +551,193 @@ D43 bounding everything untrusted and `textContent` everywhere.
   bounded work and the cap keeps the DOM small, but the mapping happens over
   every issue. If a task ever needs it, capping before describing is a
   three-line change.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Changes requested.** One defect, and it is the one Amon asked me to hunt for:
+the panel can print a line and column it has no evidence for. Everything else on
+the list holds, and holds well. Four of six criteria checked.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| Validation errors visible end to end, malformed or missing fields | **pass** | 25 Playwright tests green locally and in CI; plus my own walk driving a real `drop` event with a real `DataTransfer` (not `setInputFiles`) for a PNG, a renamed PNG, a good file and a broken one — every one produced the panel the criterion describes. |
+| Malformed JSON shows the line; a missing field shows the field | **fail** | Missing-field half passes exactly as promised. Malformed half: `trailing-comma.json` gives `That file is not valid JSON. Line 8, column 1: Expected double-quoted property name.`, and `cut-short.json` / `empty.json` name no line. But a file whose own text contains `position <digits>` near the fault makes the panel invent a location. See defect 1. |
+| Tests cover the behavior as a user would observe it, and pass | **fail** | 176 Vitest + 25 Playwright all pass, and the coverage is genuinely good. Two gaps: nothing catches defect 1, and `validation.spec.ts:148` `refuses a dropped image without reading a byte of it` uses `setInputFiles` — the picker — so the drop path that `jsonFile.ts` exists for is not exercised by any test. See defects 1 and 2. |
+| Every earlier test still passes; CI is green | **pass** | Local: 176/176 Vitest, 25/25 Playwright. CI run 35360817631 on ubuntu-latest: typecheck 0 errors over 33 files, 176 Vitest, 25 Playwright, all green. |
+| Best-effort accessibility: live region, readable text | **pass** | Measured in Chromium: `#upload-problems` carries `role="status"`, is in the DOM and empty at first paint, and is never `display:none` when empty (it drops padding and border instead) — so it stays in the accessibility tree and a change to it is announced. Computed text `rgb(92,17,22)` on `rgb(253,243,243)` at 16px is **12.5:1**, and 13.7:1 against bare white; both unit-tested at 4.5 or better. `front-a11y` audit of `index.astro`: 0 critical, 0 major. Label/`for`/`id` and `aria-describedby` all resolve; one `h1`; `<main>`; `lang="en"`. |
+| Any new environment variable is in `.env.example` | **pass** | No env reads anywhere in `src/`, `e2e/` or `astro.config.mjs`; `.env.example` correctly says there are none; no `.env` tracked. `gitleaks detect`: 20 commits, 618 KB, **no leaks found**. |
+
+### Command results
+
+- `bun run test`: **176 passed / 176, 11 files**
+- `bun run test:e2e`: **25 passed / 25** (chromium)
+- `bun run build`: clean, 1 page in about 500 ms
+- `bun run check`: **0 errors, 0 warnings, 0 hints** over 33 files
+- Secret scan: `gitleaks detect --source . --no-banner` — no leaks found
+- CI: **green** — https://github.com/IBatsios/map-data-structures/actions/runs/35360817631
+
+### Defects for Amon
+
+**1. `src/lib/describeLoadError.ts:318` — `positionIn` scrapes a position out of
+the user's own file text, and the panel prints it as a line and column.**
+
+```ts
+const found = /\bposition (\d+)/u.exec(engineMessage);
+```
+
+Expected: a line is named only when the engine named a position. Actual: V8's
+*no-position* message form is
+`Unexpected token 'p', "<snippet of the file>"... is not valid JSON`, and that
+snippet is the file's own bytes. When the snippet contains the word `position`
+followed by digits, this regex matches the **file's text** rather than the
+engine's position clause.
+
+Reproduced in Chromium through a real drop event. File `gantry.json`, four lines,
+contents `position 900: gantry\nnodes:\n  - id: a\n` — a YAML config saved with a
+`.json` name:
+
+```
+That file is not valid JSON. Line 1, column 10: Unexpected token 'p', "position 9"... is not valid JSON.
+```
+
+The real fault is line 1, column 1. The `900` in the user's own first line was
+clipped to `position 9` by V8's ten-character snippet window, `9` was scraped out
+of it, and `lineColumnOf` turned that into "column 10". Nothing in the engine's
+message said where.
+
+This breaks the module's own rule 1 — *never print a line number inferred from
+nothing* — and D32, and it is the half of criterion 2 that matters most: a wrong
+pointer into a file the user wrote costs them more than no pointer at all, which
+is the doc comment's own argument.
+
+The trigger is narrow but not exotic for a diagramming app: any no-position fault
+whose echoed snippet contains `position <digits>`. For a file that is not JSON at
+all the snippet is the **first ten characters or so of the file**, so a note, a
+log or a config renamed to `.json` reaches it easily. The tell in the output is
+the self-contradiction — `engineDetail`'s strip regex does not fire on this
+shape, so the sentence names a column and then ends `... is not valid JSON`.
+
+The one-line shape of the fix is to anchor the match to the same phrase
+`engineDetail:305` already strips — `/\bin JSON at position (\d+)/u` — so the
+position is only ever read from the engine's own clause and never from an echoed
+snippet. That changes which files get a line number, so it is your call and your
+decision record, not mine to patch. It wants a regression test with a fixture in
+this shape.
+
+**2. `e2e/validation.spec.ts:148` — the test named for a drop does not drop.**
+
+`refuses a dropped image without reading a byte of it` calls
+`upload.choose('logo.png')`, which is `setInputFiles` on `#design-file` — the
+picker. The comment above it says `accept` "filters the picker and nothing else,
+so a file dropped on the page reaches the same code path this does", which is the
+right reasoning, but the test then never takes the dropped path. The result is
+that `watchForDroppedFiles` in `index.astro:130` — the `preventDefault` on
+`dragover` and `drop`, and `event.dataTransfer?.files?.[0]` — has no coverage at
+all, and `jsonFile.ts` exists precisely because of that path.
+
+I drove it by hand and **the behaviour is correct**: dropped `logo.png` is
+refused unread, dropped `renamed-image.json` is described as binary with no
+`IHDR` and no `PNG` anywhere in the panel's HTML, and a dropped good file draws
+and silences the panel. So this is a missing test, not a broken feature. A
+`DataTransfer` built in `page.evaluateHandle` and a
+`page.dispatchEvent('#drop-zone', 'drop', ...)` is about ten lines, and it
+belongs in `uploadPage.ts` next to `choose` so the specs can say `drop(...)` as
+easily as they say `choose(...)`.
+
+**3. Handoff doc, "Bun runs Vitest on JavaScriptCore here" — this is false, and a
+premise elsewhere rests on it.**
+
+`bun run test` on this machine runs Vitest on **Node.js 24 /
+V8 13.6.233.17-node.48**: `navigator.userAgent` is `Node.js/24`, `globalThis.Bun`
+is `undefined`, `process.versions.bun` is `undefined`, and `JSON.parse('[1,]')`
+returns V8's `Unexpected token ']', "[1,]" is not valid JSON`. Bun runs the
+*script*; the `vitest` bin still executes under Node.
+
+Consequences, both in your favour and worth correcting so nobody later reasons
+from the false version:
+
+- Your V8-keyed tests are **live** here, not inert. That is better than you
+  claimed, and it is why I could reproduce defect 1 under `bun run test`.
+- `loadDesign.test.ts:146`'s conditional `if (/position \d+/.test(...))` is
+  **executing** its assertion, not skipping it — so the shape you flagged as
+  "exactly the shape this task was told not to repeat" is currently load-bearing
+  rather than dead. Still Task 02's to clean up, but it is not inert.
+
+### Things I tried to break and could not
+
+Recorded so the next round does not re-run them.
+
+- **Making it print an unjustified line by any other route.** A position past
+  end-of-file clamps into the file; `position 0` gives line 1 column 1; schema
+  messages never carry a position. Only the snippet-scrape in defect 1 gets
+  through.
+- **The byte leak.** Through both the picker and a real drop: `logo.png` refused
+  unread; `renamed-image.json` answered with the binary sentence and the panel's
+  `innerHTML` contains no `IHDR`, no `PNG`, no file bytes. `holdsRawBytes` also
+  correctly catches a raw control character in an otherwise-plausible `.json`.
+- **XSS.** A file named `<img src=x onerror=window.__pwned=1>.json` renders as
+  escaped text — `&lt;img ...&gt;` — no `img` element is created and
+  `window.__pwned` is `undefined`. `textContent` throughout, as the module
+  comments promise.
+- **The cap.** `many-problems.json` gives exactly 10 items,
+  `This pass found 15 problems in it:`, and `5 more problems are not listed. Fix
+  these and load the file again to see the rest.`
+- **The schema tightening.** `"label": "   "` is refused with
+  `nodes[0].label holds only whitespace. It has to say something.`;
+  `"  Public API  "` loads with both pairs of spaces intact. Tightening did not
+  become trimming.
+- **Two voices.** After a failure `#upload-status` is empty and only the panel
+  speaks; after a good file the panel is empty and the status reads
+  `order-intake.json is drawn below: 7 nodes, 6 edges.` True on the drop path too.
+- **Malformed and degenerate input.** Empty file, whitespace-only file, BOM-only,
+  top-level `[]` / `"str"` / `null` / `42`, `nodes` as an object, a file that
+  parses with no nodes (`{"nodes":[],"edges":[]}` loads, correctly — nothing
+  forbids an empty design), duplicate identical edges (load, correctly — the
+  schema gives edges no identity).
+- **Your open question about large files.** A 5,000-issue, 173 KB file takes
+  **26 ms** end to end through `describeLoadError` and yields 10 shown and 4,990
+  hidden. Bounded and fast; capping before describing would be an optimisation
+  with nothing to optimise.
+- **The BOM.** A UTF-8 BOM defeats `JSON.parse` in Node, but `Blob.text()` strips
+  it, so a BOM-prefixed file draws normally in the browser. Not reachable in the
+  app.
+
+### Minor, not blocking, your call
+
+- The panel's heading is a `<p>`, as disclosed. No criterion asks for a heading
+  and the list reads fine without one; only worth a thought if the page ever
+  grows a second panel.
+- On the no-position path the sentence reads `That file is not valid JSON ... It
+  reported: Unexpected token '#', "# camera p"... is not valid JSON.` — "not
+  valid JSON" twice. Honest, because the second is the engine's own words, but
+  slightly redundant.
+- `bun run check` now reports 33 files rather than the 32 in your notes. Nothing
+  changed; it is the generated types file.
+
+### Fixed in place
+
+None. Both defects change behaviour or add coverage, so both are yours. I removed
+nothing and edited no source; the only files I touched are this handoff doc and
+the checkboxes in `docs/tasks/04-validation-errors.md`.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/7 — draft, base `main`,
+CI green. Opened so CI signal exists for criterion 4; it stays draft and unmerged
+until defects 1 and 2 are closed. Push the fix to `feature/validation-errors` and
+CI will re-run on it.
+
+### Boxes
+
+Checked: 1, 4, 5, 6. Left unchecked: 2 and 3, for the reasons in the table.
+`**Status:** in progress` is unchanged.
+
+### Round
+
+Round 1 of 3. Round 2 goes to Amon.
