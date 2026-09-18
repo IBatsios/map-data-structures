@@ -778,3 +778,166 @@ the page outside the drawing really does render in the browser's default serif
 next to a sans-serif drawing, and it reads as two documents. One correction in
 Amon's favour — two edges between the same node pair do **not** draw on top of
 each other; dagre separates them and both labels are readable.
+
+---
+
+## Work completed by Amon — round 2
+
+### What was built
+
+The three defects from Jahmyr's round 1 report, and nothing else.
+
+- **A self-edge now loops on the node it points at.** `layout.ts` routes that
+  one case itself instead of passing dagre's stub through: out of the node's
+  right border, around, and back into it, with the arrowhead landing on the box
+  and the label clear of the loop and level with the node. For the design
+  Jahmyr reported it on, node `a` occupies x 28..160 and the loop now runs
+  `[{160,48.67},{194,48.67},{194,69.33},{160,69.33}]` — both ends on the border,
+  where they were 36px clear of it before. The canvas that held the meaningless
+  route shrinks with it, from 426px wide to 356.
+- **An edge label wraps**, at the same text limit a node label does, and its
+  plate grows taller rather than wider. Jahmyr's 300-character label made a
+  plate about 2,250px wide; it now makes one 230px wide and 11 lines tall, with
+  every character still in it and the rest of the drawing still at full size.
+- **The spoken description agrees its article**: "an external", "an unknown",
+  "an actor", but still "a user" and "a service".
+
+Nothing else in the drawing moved. Everything Jahmyr confirmed good — D30 and
+the foreground static server, the contrast test, the CI shape, both carve-ins —
+is untouched, and `database`'s 4.54:1 type line is untouched too: no colour,
+fill or stroke changed this round.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/layout.ts` | `selfLoop` routes a self-edge against its own node's box; `edgeLabelPlate` wraps an edge label and reports the lines; `LayoutEdge` carries `labelLines`; `SELF_LOOP_EXTENT`, `EDGE_LABEL_LINE_HEIGHT` and `EDGE_LABEL_PADDING` are exported geometry. |
+| `src/lib/layout.test.ts` | The weak self-edge assertion replaced, two self-edge tests, three edge-label wrapping tests, one helper. |
+| `src/lib/renderDrawing.ts` | `edgeLabelText` draws an edge label on the lines the layout wrapped it onto, the way `nodeText` already did. |
+| `src/lib/describeDrawing.ts` | `articleFor` picks `a` or `an` by the sound of the type that follows. |
+| `src/lib/describeDrawing.test.ts` | Two tests: the article agrees; a whitespace-only type is still described as it was written. |
+| `e2e/drawing.spec.ts` | The self-edge walk, in a real browser, against the box the browser drew. |
+| `e2e/pages/uploadPage.ts` | `nodeBox` reads a node's `getBBox`; `routePoints` reads a route's corners back off its path. |
+| `e2e/fixtures/retry-loop.json` | New. Two nodes, two parallel edges and a self-edge — the shape the defect was found on. |
+| `docs/DECISIONS.md` | D34, D35, D36. |
+| `README.md`, `CLAUDE.md` | **No change.** No command changed this round; both are still true. |
+| `docs/tasks/03-preview-drawing.md` | **No change.** Criterion 2 stays unchecked and the status line stays `in progress`. |
+| `.env.example` | **No change.** Still nothing in the tree reads `import.meta.env` or `process.env` but `playwright.config.ts`'s `CI`. |
+
+### Tests written
+
+124 Vitest tests (up from 118) and 10 Playwright tests (up from 9).
+
+**`layout.test.ts`**
+
+- *loops a self-edge against the node it points at, not out in empty space* —
+  replaces the assertion that only asked for two points, which a detached stub
+  satisfied. It pins both ends of the route to the node's own right border, pins
+  each end inside the node's vertical span, requires the two ends to differ, and
+  pins the reach in between to exactly `SELF_LOOP_EXTENT` past the border, so
+  the loop is attached at both ends and visible in between.
+- *keeps every part of a self-edge beside the node it loops on* — Jahmyr's own
+  design (`a -> b`, `a -> b`, `a -> a`). Every point of the loop is within the
+  node's own neighbourhood, and the label plate is clear of the loop and level
+  with the node's middle.
+- *keeps a short edge label on one line* — the ordinary case, unchanged.
+- *wraps a long edge label, so its plate grows taller and not endlessly wider* —
+  the plate is never wider than the text limit plus its padding, and a long
+  label makes a taller plate than a short one.
+- *loses no word from an edge label it had to wrap* — wrapping is not
+  shortening.
+
+**`describeDrawing.test.ts`**
+
+- *agrees the article with the type it is about to say* — `external`, `unknown`
+  and `actor` take "an"; `user` and `service` take "a".
+- *still says something for a type that is nothing but spaces* — the description
+  launders no more than the drawing does.
+
+**`drawing.spec.ts`**
+
+- *loops a self-edge against the node it points at* — loads `retry-loop.json`
+  through the real file input, asserts all three edges and every label are
+  drawn, then reads the node's box back with `getBBox` and the route's corners
+  back off the path the renderer wrote, and asserts both ends of the loop land
+  on that box and that the loop reaches past it in between.
+
+### Local results
+
+- `bun run test`: **pass**, 124 tests in 8 files, 410ms.
+- `bun run test:e2e`: **pass**, 10 tests, 5.1s including the build.
+- `bun run check`: **pass**, 0 errors, 0 warnings, 0 hints over 25 files.
+- `bun run build`: **pass**, 1 page in 471ms.
+- `bunx prettier --check .`: clean.
+
+Both new tests were watched failing first, and for the right reason. The unit
+test failed with the self-edge's first point at x 298.5 against a node border at
+160 — the detached stub, in numbers. The walk was checked by mutation rather
+than trusted: with the loop routing disabled and the site rebuilt, it failed
+with the route's first point 196.5px clear of the node, measured in Chromium,
+and passed again when the routing was restored.
+
+I also looked at both fixed cases in a browser: the loop reads as a loop, with
+its arrowhead on the box and "retries on failure" beside it, and a
+106-character edge label wraps into a four-line plate with the rest of the
+drawing still at full size.
+
+### Decisions recorded
+
+D34, D35 and D36 in `docs/DECISIONS.md`: the layout routing self-edges itself
+and why dagre's points are right for every other edge and wrong for that one;
+edge labels wrapping at the node label's limit; and the article rule in the
+spoken description, recorded as the heuristic it is rather than as a dictionary.
+
+### Known gaps
+
+**The loop is anchored to the node's bounding box, not its silhouette.** Same
+known gap as round 1 and the same cause: on a cylinder or a diamond the two ends
+of a loop land a few pixels outside the drawn outline, because the box is what
+the layout knows. Consistent with every other edge end in the drawing; fixing it
+means clipping against each silhouette, which is one piece of work for all of
+them rather than something to do for self-edges alone.
+
+**The loop always leaves from the right.** A node with a self-edge and something
+already drawn immediately to its right would share that lane — dagre reserves
+one there for exactly this edge, and `SELF_LOOP_EXTENT` plus the label gap stays
+inside `NODE_SEPARATION` so the loop cannot reach a neighbour's box, but the
+label plate is as wide as its text and could in principle overlap a plate in the
+next lane. I did not see it happen; a design would have to be crowded in a
+particular way.
+
+**The article rule is a heuristic and will meet an initialism it gets wrong.**
+"an ui" is the shape of the failure: a written vowel that is spoken as a letter
+name. Every kind in the shape vocabulary and every alias of one comes out right,
+which is what the test pins. The alternative is a word list pretending to know
+every noun a user might type, which is worse.
+
+**Wrapped edge labels are several `<text>` elements, one per line.** The
+drawing's `<desc>` still carries each label whole, so nothing a screen reader
+hears changed, but a test that reads `text` elements and looks for a whole label
+will only find one that fitted on a line. `drawing.spec.ts` is written that way
+and is fine — every label in the fixtures is short — and it is worth knowing
+before someone adds a long one to a fixture and is puzzled.
+
+### Out-of-scope notes for Jared
+
+**Everything I left alone in round 1 is still true and still out of scope**: the
+page outside the drawing has no styling, `role="status"` announces the count but
+nothing announces that the drawing changed, and `astro check` has no incremental
+mode. Jahmyr's correction stands — parallel edges do *not* draw on top of each
+other — so that note from round 1 can be dropped.
+
+**Edge labels sit beside their route rather than on it, by dagre's default.**
+`labelpos: 'r'` with `labeloffset: 10` is dagre's default for an edge label, so
+every plate is offset to one side of its line rather than centred on it. It is
+consistent across the drawing and arguably better than covering the line — but
+`drawing.module.css` says the plate exists because "without it the label sits on
+top of its own line", which is not what is happening. Nothing to fix; worth
+knowing before someone changes one and expects the other.
+
+**A very wide design still scales down to fit.** Unchanged by this round, and
+now the only remaining way the drawing gets small: a design that is simply wide
+produces a large canvas that the SVG scales to fit the page. Nothing is cropped.
+Jahmyr's 150-node case is beyond the sizes intake 11.1 describes, and he raised
+the same product question — whether a large drawing wants zoom or scroll. Still
+a decision for whoever owns the drawing next, not a defect.
