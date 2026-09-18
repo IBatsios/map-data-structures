@@ -17,7 +17,7 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 to 05 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 06 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
 edge naming an unknown node is refused, not silently drawn wrong, and no
@@ -38,9 +38,13 @@ field at fault, one message per problem.
 With a design on screen, **Export Markdown** downloads `<design>.md`: the
 title, a table of every node and edge, and the drawing itself as a fenced
 ` ```mermaid ` `flowchart TD` block, keyed off `shapes.ts` so it never
-disagrees with the preview. `src/lib/download.ts` (`downloadBlob`,
-`fileNameFor`) is the shared piece Tasks 06 to 08 reuse for HTML, PDF and
-Word, which are still to come. See `docs/RUNBOOK.md` for the frontier.
+disagrees with the preview. **Export HTML** downloads `<design>.html`: one
+standalone page with the preview's own SVG, the same two tables, and every
+style inline, so nothing is fetched from anywhere once it is saved. Both
+buttons live in one `role="group"` export row and disable together the
+moment a file fails. `src/lib/download.ts` (`downloadBlob`, `fileNameFor`) is
+the shared piece Tasks 07 and 08 reuse for PDF and Word, which are still to
+come. See `docs/RUNBOOK.md` for the frontier.
 
 ## Run and test
 
