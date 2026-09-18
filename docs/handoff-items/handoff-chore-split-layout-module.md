@@ -93,27 +93,27 @@ one-module split is a better outcome than two forced ones.
 
 There is no task file to copy these from, so these are the contract, written here:
 
-- [ ] `src/lib/layout.ts` is at most 400 lines, and no module created by this
+- [x] `src/lib/layout.ts` is at most 400 lines, and no module created by this
       split exceeds it.
-- [ ] Self-edge routing lives in its own module: the five `SELF_LOOP_*` constants,
+- [x] Self-edge routing lives in its own module: the five `SELF_LOOP_*` constants,
       `SelfLoopSlot`, `selfLoopSlots`, `loopsByNode`, `plateTopOf` and `selfLoop`
       are no longer in `layout.ts`.
-- [ ] `src/lib/layout.ts` remains the single public door: `layoutDesign`,
+- [x] `src/lib/layout.ts` remains the single public door: `layoutDesign`,
       `DesignLayout`, `LayoutNode`, `LayoutEdge`, `LayoutBox`, `LayoutPoint`,
       `LABEL_FONT_SIZE`, `TYPE_FONT_SIZE`, `EDGE_LABEL_FONT_SIZE`, `LINE_HEIGHT`,
       `EDGE_LABEL_LINE_HEIGHT`, `MIN_NODE_WIDTH`, `MAX_TEXT_WIDTH`,
       `DRAWING_MARGIN`, `SELF_LOOP_EXTENT` and `EDGE_LABEL_PADDING` are all still
       importable from `./layout` with the same names and the same types.
-- [ ] `src/lib/renderDrawing.ts`, `src/lib/describeDrawing.ts` and
+- [x] `src/lib/renderDrawing.ts`, `src/lib/describeDrawing.ts` and
       `src/pages/index.astro` are **unchanged** — zero lines, confirmed by
       `git diff --stat`.
-- [ ] `src/lib/layout.test.ts` is **unchanged**, and all of its tests pass.
-- [ ] `bun run test` passes with at least the 179 tests that pass on `main` today,
+- [x] `src/lib/layout.test.ts` is **unchanged**, and all of its tests pass.
+- [x] `bun run test` passes with at least the 179 tests that pass on `main` today,
       and `bun run check` is clean.
-- [ ] `bun run test:e2e` passes all 31, and CI is green on the pull request.
-- [ ] D34 and D37 still hold, demonstrated rather than asserted — see "Watch out for".
-- [ ] `docs/DECISIONS.md` records the split and the single-door rule.
-- [ ] No new environment variable; `.env.example` unchanged.
+- [x] `bun run test:e2e` passes all 31, and CI is green on the pull request.
+- [x] D34 and D37 still hold, demonstrated rather than asserted — see "Watch out for".
+- [x] `docs/DECISIONS.md` records the split and the single-door rule.
+- [x] No new environment variable; `.env.example` unchanged.
 
 ### The unchanged test file is the point
 
@@ -461,3 +461,129 @@ Small and real; none of it touched.
 3. **The three items routed to the Firefox cycle are untouched**, as asked:
    `describeLoadError.ts:191` and `:193`, `loadDesign.ts`'s lagging doc comment, and
    `loadDesign.test.ts:146`'s conditional assertion. I did not open those files.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** All ten acceptance criteria verified by exercising them. No defects.
+
+This is a refactor whose only warrant is that nothing changed, so it was judged on
+preservation. Preservation was not taken on report: a worktree of `main` was checked
+out beside the branch and `layoutDesign`'s output compared directly, and the
+extracted modules were mutated to see whether the net still catches them.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| `layout.ts` ≤ 400 lines, and no module created by the split exceeds it | pass | `wc -l`: `layout.ts` 346, `selfLoops.ts` 203, `normaliseDrawing.ts` 115, `layout.types.ts` 90. Baseline `git show main:src/lib/layout.ts` is 625 |
+| Self-edge routing lives in its own module; the five `SELF_LOOP_*` constants, `SelfLoopSlot`, `selfLoopSlots`, `loopsByNode`, `plateTopOf`, `selfLoop` are out of `layout.ts` | pass | `grep` over `layout.ts` finds those names only in one doc-comment line, one `import` of `selfLoop`/`selfLoopSlots`, one `export … from './selfLoops'`, and the two call sites at `:286` and `:293`. No declaration of any of them remains. `loopsByNode` and `plateTopOf` are module-private in `selfLoops.ts` at `:122` and `:141`, as they were before |
+| `./layout` is still the single public door for all 16 named exports | pass | A temporary probe imported all 16 from `./layout` and asserted the ten constant values against main's — `14, 11, 12, 18, 16, 132, 220, 28, 34, {x:7,y:4}` — all equal. The five types were exercised at type level and `bun run check` compiled the probe with 0 errors over 39 files. `DRAWING_MARGIN` and `SELF_LOOP_EXTENT` each have exactly one declaration in the tree, so re-export-never-re-declare holds |
+| `renderDrawing.ts`, `describeDrawing.ts`, `index.astro` unchanged | pass | `git diff --name-only main` over those paths returns zero files, and each file's md5 equals that of `git show main:<path>` |
+| `layout.test.ts` unchanged, and all its tests pass | pass | md5 `05e1ba61ae1591f438f7dbf25bf1c30e` on both `main` and the branch. 26 of 26 pass |
+| `bun run test` passes with at least the 179 on `main`, and `bun run check` is clean | pass | 206 passed in 13 files. A JSON-reporter set comparison against main's run shows **0 of the 179 missing** — none renamed, removed or skipped — and 27 added. `bun run check`: 0 errors, 0 warnings, 0 hints over 38 files |
+| `bun run test:e2e` passes all 31, and CI is green on the pull request | pass | 31 passed locally in 5.9s. CI green on PR #9: typecheck 0 errors, 13 test files passed, 31 e2e passed |
+| D34 and D37 still hold, demonstrated rather than asserted | pass | The invariant check and the mutation table below |
+| `docs/DECISIONS.md` records the split and the single-door rule | pass | D46 appended. `git diff main -- docs/DECISIONS.md` is one added line and no removals, so the append-only rule held |
+| No new environment variable; `.env.example` unchanged | pass | `.env.example` md5 equals main's. The only environment reads in the tree are `process.env.CI` in `playwright.config.ts`, which is CI-provided, predates this branch, and is not app configuration |
+
+### Preservation, verified independently
+
+**Byte-identical output over 19 designs.** A worktree of `main` was checked out
+beside the branch and the same dump script run in both. The design set was written
+without reading Amon's: empty, lone node, order-intake, a four-node design with a
+three-loop and a two-loop node, wrapped and whitespace-only labels, five loops on a
+short node, parallel edges, empty labels, unicode and CJK, a 24-node chain, a
+15-node fan, three nodes looping once each — then a second adversarial pass with a
+300-node/900-edge design, a 400-character unbreakable word, tabs and newlines and
+U+2028 inside labels, twenty loops on one node, and three identical duplicate edges.
+
+`diff` clean both times: 60,916 bytes at md5 `0648512273ef6f0f1bb9bbd35f4e632d`, and
+669,160 bytes on the adversarial set. Layout time on the 300-node design was 174 ms
+on `main` and 170 ms on the branch — no regression.
+
+**D34 and D37 as invariants, over every self-loop in the dump.** Both ends of every
+loop sit exactly on its node's right border and at different heights (D34); each
+loop reaches exactly `SELF_LOOP_EXTENT` further than the one inside it — `worker`'s
+three loops reach 284, 318, 352 — no two label plates overlap, and every plate
+clears the widest loop on its node (D37). The same check gives the same answer on
+`main`.
+
+**Thirteen mutations.** Each was applied to the extracted module, checked to be a
+real edit, then checked to actually move `layoutDesign`'s output before its red was
+trusted — the no-op guard Amon's disclosed near-miss calls for.
+
+| # | Mutation | Output moved | Caught by |
+|---|---|---|---|
+| 1 | `selfLoop` reach loses `slot.ordinal + 1` | yes | `layout.test.ts`, 1 failed |
+| 2 | `plateTopOf` returns a constant 0 | yes | `layout.test.ts`, 1 failed |
+| 3 | `offsetToMargin` normalises to 0 | yes | `layout.test.ts`, 3 failed |
+| 4 | `canvasFor` drops the trailing margin | yes | `layout.test.ts`, 3 failed |
+| 5 | `shiftEdge` leaves the route where dagre put it | yes | `layout.test.ts`, 4 failed |
+| 6 | `selfLoop` band loses the ordinal | yes | `layout.test.ts`, 1 failed |
+| 7 | label column uses its own reach, not the widest | yes | `selfLoops.test.ts`, 1 failed |
+| 8 | plate stack not centred on the node | yes | `layout.test.ts`, 1 failed |
+| 9 | `loopsByNode` keeps only the last loop per node | yes | `layout.test.ts`, 1 failed |
+| 10 | band inset cap removed | yes | `selfLoops.test.ts`, 1 failed |
+| 11 | `shiftBox` moves x only | yes | `layout.test.ts`, 7 failed |
+| 12 | `everyX` ignores route points | yes | `normaliseDrawing.test.ts`, 1 failed |
+| 13 | **control:** duplicate `points:` key, later key wins | **no — no-op** | nothing, correctly |
+
+Mutations 1 to 5 are Amon's, re-run here rather than taken on report; they reproduce
+his counts and his failing test names exactly. Mutations 6 to 12 are mine.
+
+Two things are worth recording. First, mutation 13 is a deliberate replay of the
+no-op Amon disclosed, and the harness flagged it as a no-op on its own — which is
+what licenses trusting the other twelve, all of which did move the output. His
+disclosure was accurate and his redone mutation 5 is real. Second, mutations 7, 10
+and 12 are caught by the **new** test files and not by `layout.test.ts`. Those three
+holes were in the net on `main` too. The additive tests are therefore not a second
+copy of `layout.test.ts`; they close gaps in it.
+
+### Command results
+
+- `bun run test`: 206 passed, 13 files (main baseline 179 in 11; 0 of the 179 missing)
+- `bun run check`: 0 errors, 0 warnings, 0 hints, 38 files
+- `bun run build`: pass, 1 page
+- `bun run test:e2e`: 31 of 31
+- `bun run dev`: serves HTTP 200 with the expected page and no errors in the log; stopped after
+- Secret scan: `gitleaks detect --source . --no-banner` — no leaks found, 15 commits scanned
+- Accessibility: `front-a11y` audit of `src/pages/index.astro` — 0 critical, 0 major, 0 minor. Labelled file input, `<main>`, `lang`, two valid `role="status"` live regions, and the generated SVG carries `role="img"` with `aria-labelledby` to its `<title>` and `<desc>`. The page is byte-identical to `main`, so no regression was possible
+- CI: **green** on PR #9, both the push-triggered and the pull-request-triggered run
+
+### Defects for Amon
+
+None.
+
+### Fixed in place
+
+None. Nothing needed correcting.
+
+### On the third home for `PreparedEdge`
+
+Verified rather than accepted. Dependencies point one way only, with no cycle even
+type-only: `layout.types.ts` imports `design.types` and `shapes` and nothing else in
+the split; `selfLoops.ts` and `normaliseDrawing.ts` each import `layout.types` and
+neither imports the other or `layout.ts`; `layout.ts` imports all three. Nothing
+outside `src/lib/` imports any of the three — `index.astro:74` still imports
+`layoutDesign` from `../lib/layout`. The call is sound and matches D15.
+
+### Confirming Amon's two notes for Jared
+
+Both stand, and neither is this cycle's work.
+
+1. `describeDrawing.test.ts:5` does import `layoutDesign` from `./layout`. Five
+   consumers, not four. It is byte-identical to `main`, so it needed no change.
+2. `straightLine` at `layout.ts:329` does fall back to dagre's centres while every
+   other route runs border to border. It is unreachable through `layoutDesign`
+   today — none of the 19 designs, including the 300-node one, reached it — so it is
+   not a visible defect, and it is byte-identical to the code on `main`. Real, and
+   worth having written down for whenever an exporter starts drawing arrowheads.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/9 — draft, as the process asks.
+Sam marks it ready and merges.
