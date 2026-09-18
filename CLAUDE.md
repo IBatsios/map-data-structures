@@ -15,14 +15,19 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 - Every new environment variable is added to `.env.example` with a placeholder. Secrets never go in code or commits. Today there are no variables.
 - At the end of a phase, write a handoff doc in `docs/handoff-items/`.
 
-## Run and test
+## Status
 
-Commands the stack implies; confirm them once Task 01 has created `package.json`.
+Task 01 (walking skeleton) is done: choose a JSON file, see a box per node and a
+line per edge. No validation, no styling beyond defaults, no export yet. See
+`docs/RUNBOOK.md` for the frontier.
+
+## Run and test
 
 ```
 bun install
-bun run dev
-bun run test
+bun run dev     # http://localhost:4321
+bun run test    # Vitest suite
+bun run build   # static site into dist/
 ```
 
 `bun run test` runs Vitest. Plain `bun test` would run Bun's own runner instead, so always include `run`.
