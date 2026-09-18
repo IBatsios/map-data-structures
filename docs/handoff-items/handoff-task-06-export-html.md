@@ -510,3 +510,176 @@ them too, so the rename touches one more spec than it did.
 `loadDesign.test.ts:146`. I did not open those files. Note that finding 1 above
 lands in the same region — the panel's wording for an engine message — so if the
 crash gets a cycle, that chore is its natural neighbour.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** Every acceptance criterion was exercised and holds. CI is green on the
+pull request. No defect blocks this task; three observations are recorded below
+and none of them changes behaviour.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as HTML: demonstrated end to end | pass | Chose `order-intake.json`, clicked Export HTML, got `Order-intake.html`, saved it to a directory of its own, opened it over `file://` and read the `<h1>`, the drawing and both tables back. Also driven from the keyboard alone. |
+| The page shows the same nodes and edges as the preview, with nothing dropped or mislabeled (5.2) | pass | Own hostile fixture: 8 nodes, 8 edges including a parallel pair. All 35 pieces of text the preview drew appear as visible text in the reopened export; 8 node rows, 8 edge rows, 8 drawn nodes, 8 drawn edges. A 300-node / 299-edge design exported whole — 268,943 bytes, ends in `</html>`, all 599 rows and 300 nodes present. |
+| The file works alone: no stylesheet, script, font, or image is fetched from anywhere | pass | Stricter than the suite's own check: I collected **every** request the reopened file made, not only non-`file:` ones, and asserted the list equals exactly `[the document itself]`. Zero `link`, `script`, `img`, `iframe`, `object`, `embed` elements; exactly one `<style>`; the only absolute URL in the file is the SVG namespace. |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download | pass | `bun run test` 265/265 in 17 files; `bun run test:e2e` 53/53, of which 13 are the HTML export. I also mutation-tested the guard that matters most (below). |
+| Every earlier test still passes; CI is green | pass | Both CI runs on PR #13 green: push-triggered 46s, pull_request-triggered 52s. CI runs `bun run check`, `bun run test` and `bun run test:e2e`. |
+| Best-effort accessibility: the exported page has a title, headings, and the SVG title from Task 03 | pass | Audited a real exported file against `front-a11y`: `<html lang="en">`, `<title>`, headings h1, h2, h2, h2 with no level skipped, a `<main>`, the Task 03 `<title id="drawing-title">` and `<desc id="drawing-description">` behind `role="img"` and `aria-labelledby`, `<caption>` and `<th scope="col">` on both tables, **zero** inline `style` attributes, zero positive `tabindex`. 0 critical, 0 major, 0 minor. Upload page: `role="group"` named "Export the design", both buttons have visible text. |
+| Any new environment variable is in `.env.example` with a placeholder | pass (vacuously) | A grep for `import.meta.env` and `process.env` across `src/` and `e2e/` returns nothing. `.env.example` holds no variables. Only `.env.example` is tracked. `gitleaks detect` over 20 commits: no leaks. |
+
+### Command results
+
+`bun run test`: **265 passed, 17 files** (was 240 / 15)
+
+`bun run test:e2e`: **53 passed** (was 39)
+
+`bun run check`: **0 errors, 0 warnings, 0 hints**
+
+`bun run build`: **pass**, 1 page, static output in `dist/`
+
+`bun run dev`: **pass** — serves on :4321, HTTP 200, the new button in the markup, no errors in the log
+
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**, 20 commits, 945 KB
+
+CI: **green** — https://github.com/IBatsios/map-data-structures/pull/13
+
+### What I tried to break, and could not
+
+**The escaping.** I did not reuse `markup-labels.json`; I wrote a harsher
+fixture and exported it. Node labels that close the SVG, open an HTML comment,
+close a CDATA section, break out of an attribute, close three elements at once,
+and open a nested svg / foreignObject / body with `onload` handlers; edge labels
+that close the style element and reopen it, and that close a table cell to open
+a script; a design **title** that closes `title` and `style` and opens a script;
+and — a vector the shipped fixture does not cover — a node **`type`** that is a
+script element, which reaches both the box face and the Type column.
+
+On the reopened file: 0 `script`, 0 `img`, 0 `iframe`/`object`/`embed`,
+`document.scripts.length === 0`, exactly one `<style>`, exactly one `<svg>`,
+**zero** attributes anywhere whose name begins `on`, zero dialogs, zero page
+errors, and every one of those labels present as visible text. The ampersand-
+first ordering is confirmed: a label that already reads as an escaped script tag
+survives as the doubly-escaped text it said rather than being decoded.
+
+Amon's account of the sanitiser is accurate, and the reason it is accurate is
+structural — I confirmed `renderDrawing` creates no `style` or `script` element
+and no `foreignObject`, and sets text only through `textContent`
+(`renderDrawing.ts:361`), so the `innerHTML` read has no raw-text element to
+serialise through. That is the property the whole approach rests on, and it
+holds today by construction rather than by luck.
+
+**The stylesheet guard.** The claim that a duplicated stylesheet is safe rests
+entirely on `exportStyles.test.ts`, so I mutation-tested it: I changed
+`--shape-fill` for the `service` band in `src/styles/drawing.module.css` from
+`#eef1fe` to `#ff00ff` and re-ran. It failed with a clean diff naming the band.
+The guard bites. Stylesheet restored.
+
+**`straightLine`.** I judged the proof by reading dagre's own source rather than
+taking the summary. `assignNodeIntersects` in
+`node_modules/@dagrejs/dagre/dist/dagre.esm.js` skips an edge whose ends are the
+same node and then, for every other edge, unconditionally unshifts the source
+border intersection and pushes the target's — so at least two points, both on a
+border. Note that skip: dagre deliberately adds **no** intersects to self-loops,
+so leg 3 of the proof is not decoration, it is the leg that carries the weight —
+and it holds, because `selfLoopSlots` (`selfLoops.ts:97`) assigns a slot to
+every self-edge with no cap, so `readRoutedEdges` diverts all of them before the
+dagre lookup.
+
+Empirically I added my own detector — a route of exactly two points equal to the
+two node centres — and ran it over shaped graphs (six self-loops on one node, a
+complete graph on six nodes, a 300-node chain, a fan of 80, two-cycles,
+triple-parallel edges) plus 2,000 fuzzed graphs: **0 fallbacks, minimum 3 points,
+zero edges with exactly 2 points**. Verdict: the proof is sound, and keeping the
+function as a guard is the right call.
+
+**The rest of the adversarial pass.** Empty file, trailing comma, a file that is
+not a design, a dangling edge, duplicate ids, a PNG renamed `.json` — after each
+one **both** buttons are disabled together, and both re-enable together on a good
+file. A design that parses with no nodes exports `Nothing-yet.html` with D51's
+sentence, no `<svg>`, six table headings and no rows. A design title made of
+markup yields a filename with no path separator, no traversal and no reserved
+character.
+
+### Observations for Amon — none blocking
+
+1. **`docs/DECISIONS.md` D57 states a fact that is wrong, and the decision it
+   justifies is still right.** D57 says `?raw` and `?inline` both come back as
+   an empty string under this project's Vitest. I probed both. `?inline` is an
+   empty string, as stated. **`?raw` is not** — it comes back as the CSS-Modules
+   proxy stub: `typeof` `object`, `String()` on it throws "Cannot convert a
+   Symbol value to a string", and reading `.length` returns the invented class
+   name `_length_f9673f`. That makes the decision *stronger*, not weaker — a
+   test written against `?raw` would have thrown a `TypeError` rather than
+   passed on nothing — but a decision record is the project's memory, and this
+   one is the justification for a duplicated stylesheet. Correct it by
+   **appending** a row, never by rewriting D57.
+
+2. **The per-file test counts in "Tests written" are each off by one.**
+   `src/lib/toHtml.test.ts` runs **15**, not 16; `src/lib/exportStyles.test.ts`
+   runs **10**, not 9. The total of 265 is right, and 240 + 15 + 10 = 265.
+   Bookkeeping only.
+
+3. **A label containing a literal NUL character loses that character in the
+   export.** Found with a deliberately hostile label. The preview keeps it
+   (`textContent` accepts it); the exported file carries the raw byte, and the
+   HTML parser drops it on reopen — the preview's first codepoint is 0 and the
+   export's is not. Every other exotic character I tried survives intact: the
+   escape character, the right-to-left override, the zero-width space, Greek,
+   Japanese, Arabic, and astral-plane characters. **I do not think this is
+   fixable and I do not think it should be fixed**: a NUL has no valid
+   representation in HTML at all — the numeric reference for it becomes the
+   replacement character too — so the only remedy is to strip or substitute at
+   the loader, which is exactly the tidying D39 and D56 rule out. Recording it
+   so nobody rediscovers it as a mystery.
+
+### Confirmed for Jared — the out-of-scope crash is real
+
+`layoutDesign` throws on a valid design, exactly as reported. Amon's minimal
+repro reproduces on demand: "Not possible to find intersection inside of the
+rectangle". The cause is confirmed in dagre's own source — `intersectRect`
+throws that message when the horizontal and vertical deltas between two box
+centres are both zero, and it is reached from inside `assignNodeIntersects`,
+that is, during `dagre.layout()`, when two boxes it routes between share a
+centre.
+
+Sizing it, since that is what a scheduling decision needs:
+
+- My own fuzz, a different generator from Amon's: **2 of 2,000** random
+  multigraphs (0.1%). Amon saw 7 of 400 (1.75%). Same class, generator-dependent
+  rate — call it rare but not vanishing.
+- **Exhaustive** over every multigraph on 2 nodes and on 3 nodes with up to 4
+  edges: **zero** crashes. So it is not reachable by a small design. Both of my
+  crashing shapes had 4 nodes and 10 to 11 edges, and both contained a two-cycle
+  and a parallel duplicate, matching Amon's minimal case.
+- It fails safely, as reported: the panel shows the engine's sentence, the page
+  stays intact, no stale drawing is left. The user-facing fault is that a legal
+  design cannot be drawn and the user hears dagre's words rather than the app's
+  — the thing D43 otherwise prevents.
+
+Worth its own cycle. Its natural neighbour is the deferred loader-wording chore
+(`describeLoadError.ts:191` and `:193`), which lives in the same region.
+
+### Fixed in place
+
+Nothing. I found no typo, wrong import or bad assertion to correct. My hostile
+fixture and adversarial spec were temporary and have been removed; the working
+tree carries only the task file's checkboxes, its status line, and this report.
+
+### Process note
+
+I confirm Amon's disclosure that the RED step is not in a commit of its own: the
+pre-commit hook runs `astro check` over the whole tree, so a commit holding a
+test that imports a module which does not exist yet cannot be made. I can verify
+the constraint but not the sequence, and I am recording it as disclosed rather
+than as verified.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/13 — opened as a draft, as
+the runbook asks. Sam marks it ready and merges; I did not.

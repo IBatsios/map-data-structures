@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 03, 05.
 
-**Status:** in progress
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -18,13 +18,13 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can export the design as HTML: demonstrated end to end.
-- [ ] The page shows the same nodes and edges as the preview, with nothing dropped or mislabeled (5.2).
-- [ ] The file works alone: no stylesheet, script, font, or image is fetched from anywhere.
-- [ ] Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Best-effort accessibility: the exported page has a title, headings, and the SVG title from Task 03.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] As a user, I can export the design as HTML: demonstrated end to end.
+- [x] The page shows the same nodes and edges as the preview, with nothing dropped or mislabeled (5.2).
+- [x] The file works alone: no stylesheet, script, font, or image is fetched from anywhere.
+- [x] Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download.
+- [x] Every earlier test still passes; CI is green.
+- [x] Best-effort accessibility: the exported page has a title, headings, and the SVG title from Task 03.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 
