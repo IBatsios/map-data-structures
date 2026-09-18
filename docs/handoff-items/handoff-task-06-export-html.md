@@ -683,3 +683,69 @@ than as verified.
 
 https://github.com/IBatsios/map-data-structures/pull/13 — opened as a draft, as
 the runbook asks. Sam marks it ready and merges; I did not.
+
+---
+
+## Verification and merge by Sam — round 1
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/06-export-html.md` | All 7 boxes checked, `**Status:** done` | None needed |
+| `README.md` | Export HTML documented, commands match `CLAUDE.md`, `bun run test` used correctly throughout | None needed |
+| `CLAUDE.md` | Status section still read "Tasks 01 to 05" and described HTML export as future work | Updated: "Tasks 01 to 06", added the Export HTML paragraph, moved the "still to come" line to PDF and Word only |
+| `docs/DECISIONS.md` | D55–D60 all present and dated; D57 states a fact that is wrong (see below) | Appended D61 correcting the fact, without rewriting D57, per the append-only convention since D32 |
+| `.env.example` | No variables; code reads none | Confirmed with a fresh grep of `import.meta.env`/`process.env` across `src/`; none found. No change needed |
+| Handoff doc (this file) | Jared's assignment, Amon's work, Jahmyr's report all present and legible | This section appended |
+
+**D57 correction, independently verified before recording.** Jahmyr reported
+that D57 states both `?raw` and `?inline` come back as an empty string under
+this project's Vitest (`css: false`); `?inline` does, `?raw` does not. Before
+writing D61, I reproduced this myself with a throwaway probe test
+(`src/lib/__rawcheck.test.ts`, written, run, and deleted — not part of any
+commit) importing `drawing.module.css` both ways under this project's real
+`vitest.config.ts`. Result matched Jahmyr's exactly: `typeof raw` is
+`'object'`, `String(raw)` throws `Cannot convert a Symbol value to a string`,
+`raw.length` reads back the invented class name `_length_f9673f`, and the
+`?inline` import is `''`. D61 records this and leaves D57 itself untouched.
+
+**Per-file test count correction.** Amon's "Tests written" section says
+`toHtml.test.ts` runs 16 and `exportStyles.test.ts` runs 9. Running both files
+directly gives 15 and 10 (25 total, matching 240 + 25 = 265). Jahmyr flagged
+this as bookkeeping-only and non-blocking; recording the corrected counts here
+rather than editing Amon's historical section, for the same reason D57 is
+corrected by addition rather than rewrite: `toHtml.test.ts` — **15**,
+`exportStyles.test.ts` — **10**.
+
+### Gates
+
+`bun run test`: **pass** — 265/265, 17 files, run independently before and
+after the doc-fix commit.
+
+CI: **green** — both `test` checks on PR #13 passed twice: once before this
+round's doc commit (the state Jahmyr signed off on) and once after, on commit
+`93f0b07` (the doc-fix commit), before merging.
+
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**,
+run twice (before and after the doc-fix commit; 21 and 22 commits scanned
+respectively).
+
+### Merge
+
+Squashed as `87fbf33` into `main`. Branch `feature/export-html` deleted. PR
+https://github.com/IBatsios/map-data-structures/pull/13.
+
+The doc fixes (D61, CLAUDE.md's Status section) were committed to
+`feature/export-html` as `93f0b07` before merging, and CI was allowed to
+re-run and go green on that commit before the PR was marked ready and merged.
+
+### Left for a person
+
+Nothing new from this round's document audit — the two corrections above were
+handled within Sam's own remit (documents, not code or generated files).
+
+The carried-forward items in the refreshed `docs/handoff-items/handoff-next-phase.md`
+remain for a person or the next session to schedule, most notably the
+`layoutDesign` crash on a valid design (D43-shaped, needs its own cycle) and
+the loader-wording chore now gated to run before Task 10.
