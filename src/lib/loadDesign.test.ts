@@ -117,7 +117,7 @@ describe('loadDesign', () => {
       expect(() => loadDesign(text)).toThrow(DesignLoadError);
     });
 
-    it('keeps the position JSON.parse reported, for Task 04 to name a line', () => {
+    it('keeps the message JSON.parse produced, word for word', () => {
       // Arrange
       const text = '{\n  "title": "Order intake",\n}';
       const original = syntaxErrorOf(text);
@@ -131,9 +131,21 @@ describe('loadDesign', () => {
       }
 
       // Assert
+      // The message is the contract: whatever the engine said, unedited, plus
+      // the original error as `cause`. What is *in* that message is the
+      // engine's business and not the same everywhere — V8 names a position
+      // and JavaScriptCore names none at all — so the position is asserted
+      // below as a bonus this engine happens to give, not as a promise the
+      // loader makes. Vitest runs on Node, so this file can only ever see V8;
+      // a test here could never have caught Safari, which is exactly why the
+      // claim is not made. Task 04 owns the message for an engine that gives
+      // no position.
       expect(thrown?.message).toBe(original.message);
-      expect(thrown?.message).toMatch(/position \d+/);
       expect(thrown?.cause).toBeInstanceOf(SyntaxError);
+
+      if (/position \d+/.test(original.message)) {
+        expect(thrown?.message).toMatch(/position \d+/);
+      }
     });
 
     it('carries the code invalid-json', () => {

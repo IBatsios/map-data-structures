@@ -1,0 +1,20 @@
+{
+  "title": "Order intake",
+  "nodes": [
+    { "id": "customer", "label": "Customer", "type": "user" },
+    { "id": "api", "label": "Public API", "type": "service" },
+    { "id": "queue", "label": "Order queue", "type": "queue" },
+    { "id": "worker", "label": "Fulfilment worker", "type": "worker" },
+    { "id": "orders", "label": "Order store", "type": "database" },
+    { "id": "payments", "label": "Payments provider", "type": "external" },
+    { "id": "ledger", "label": "Ledger feed", "type": "widget-factory" }
+  ],
+  "edges": [
+    { "from": "customer", "to": "api", "label": "places order" },
+    { "from": "api", "to": "queue", "label": "publishes order" },
+    { "from": "api", "to": "payments", "label": "authorises card" },
+    { "from": "queue", "to": "worker", "label": "delivers order" },
+    { "from": "worker", "to": "orders", "label": "writes order" },
+    { "from": "worker", "to": "ledger", "label": "emits entry" }
+  ]
+}

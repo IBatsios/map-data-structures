@@ -1,0 +1,179 @@
+import { expect, test } from '@playwright/test';
+
+import { UploadPage } from './pages/uploadPage';
+
+/**
+ * The walk the PRD is about: choose a JSON file, get a drawing back.
+ *
+ * This is the only test in the project that exercises the page's `<script>`, so
+ * it is the only one that can tell you the wiring works. The unit suite proves
+ * the layout puts boxes in the right places; this proves a real browser turns a
+ * real file into a real drawing with nothing lost on the way.
+ *
+ * `order-intake.json` is a design the size of the owner's own use cases: seven
+ * nodes, six edges, five kinds of node, and one `type` the app has never heard
+ * of.
+ */
+
+/** Every node label in `e2e/fixtures/order-intake.json`, in file order. */
+const NODE_LABELS = [
+  'Customer',
+  'Public API',
+  'Order queue',
+  'Fulfilment worker',
+  'Order store',
+  'Payments provider',
+  'Ledger feed',
+];
+
+/** Every edge label in `e2e/fixtures/order-intake.json`, in file order. */
+const EDGE_LABELS = [
+  'places order',
+  'publishes order',
+  'authorises card',
+  'delivers order',
+  'writes order',
+  'emits entry',
+];
+
+test.describe('Previewing the generated drawing', () => {
+  test('draws every node and every edge the file named', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    const drawn = await upload.drawnText();
+
+    for (const label of [...NODE_LABELS, ...EDGE_LABELS]) {
+      expect(drawn, `"${label}" is missing from the drawing`).toContain(label);
+    }
+
+    await expect(upload.nodes()).toHaveCount(NODE_LABELS.length);
+    await expect(upload.edges()).toHaveCount(EDGE_LABELS.length);
+  });
+
+  test('shows the drawing within a second of choosing the file', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+
+    // The acceptance criterion, asserted rather than assumed: one second, on a
+    // design the size of the owner's use cases.
+    await expect(upload.svg).toBeVisible({ timeout: 1000 });
+  });
+
+  test('titles the drawing with the name of the design', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    expect(await upload.drawingTitle()).toBe('Order intake');
+    await expect(upload.svg).toHaveAttribute('role', 'img');
+  });
+
+  test('describes every node and edge for a reader who cannot see it', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    const description = await upload.drawingDescription();
+
+    for (const label of [...NODE_LABELS, ...EDGE_LABELS]) {
+      expect(description, `"${label}" is missing from the description`).toContain(label);
+    }
+  });
+
+  test('gives each node the shape its type implies, and draws an unknown type', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    // `worker` is an alias of service and `db` of database; `widget-factory` is
+    // a type this app has never heard of and must still be drawn.
+    expect(await upload.drawnKinds()).toEqual([
+      'user',
+      'service',
+      'queue',
+      'service',
+      'database',
+      'external',
+      'unknown',
+    ]);
+  });
+
+  test('says what loaded in the status region', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+
+    await expect(upload.status).toHaveAttribute('role', 'status');
+    await expect(upload.status).toHaveText('Loaded order-intake.json: 7 nodes, 6 edges.');
+  });
+
+  test('redraws when a second, different file is chosen', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.choose('billing-run.json');
+
+    await expect.poll(() => upload.drawingTitle()).toBe('Billing run');
+    await expect(upload.nodes()).toHaveCount(2);
+    await expect(upload.edges()).toHaveCount(1);
+    expect(await upload.drawnText()).not.toContain('Customer');
+  });
+
+  test('redraws when the same file is chosen a second time', async ({ page }) => {
+    // Re-picking an identical file fires no `change` event unless the input's
+    // value is cleared after each read. Without that, a user who edits their
+    // JSON and picks the same path again is shown the previous drawing and the
+    // previous status line, both still claiming to describe the new file.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.choose('billing-run.json');
+    await expect.poll(() => upload.drawingTitle()).toBe('Billing run');
+
+    await upload.choose('order-intake.json');
+
+    await expect.poll(() => upload.drawingTitle()).toBe('Order intake');
+    await expect(upload.status).toHaveText('Loaded order-intake.json: 7 nodes, 6 edges.');
+  });
+
+  test('clears the drawing and says so when the file is not a design', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.choose('not-a-design.json');
+
+    // Task 04 owns the wording. What this pins is that the failure is never
+    // silent and never leaves a drawing on screen that the status line has
+    // stopped describing.
+    await expect(upload.svg).toHaveCount(0);
+    await expect(upload.status).toContainText('could not be drawn');
+  });
+});

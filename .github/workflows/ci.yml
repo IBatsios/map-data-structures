@@ -11,5 +11,19 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install
         run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run check
       - name: Test
         run: bun run test
+      # Only the browser the e2e project actually uses, per playwright.config.ts.
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+      - name: Test end to end
+        run: bun run test:e2e
+      - name: Upload the Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
