@@ -409,8 +409,8 @@ function sheetCount(
   room: SheetRoom,
   scale: number,
 ): number {
-  const columns = cutsAlong(size.width, room.width / scale, spans.x).length;
-  const rows = cutsAlong(size.height, room.height / scale, spans.y).length;
+  const columns = greedyCuts(size.width, room.width / scale, spans.x).length;
+  const rows = greedyCuts(size.height, room.height / scale, spans.y).length;
 
   return columns * rows;
 }
@@ -418,16 +418,48 @@ function sheetCount(
 /**
  * Where the sheets start along one axis.
  *
+ * Two goes at it, and the second is about what the reader sees. The greedy pass
+ * below decides how many sheets it takes and guarantees that no shape is left
+ * cut in half; what it does not do is space them well, because its last sheet
+ * is pulled flush to the end of the drawing however close that leaves it to the
+ * one before. On `platform-overview.json` that produced a third sheet starting
+ * 25 pixels after the second — two sheets of paper showing very nearly the same
+ * picture, which reads as a mistake even though nothing is missing.
+ *
+ * So once the count is known, the same number of sheets is spread evenly over
+ * the drawing and the result is kept if it leaves at least as many shapes whole
+ * as the greedy one did. Even spacing usually does, because it moves the cuts
+ * away from where the greedy one was forced to put them rather than towards it,
+ * and when it does not the greedy answer stands. Neither pass can change the
+ * number of sheets, so the cap and the pixel budget hold whichever wins.
+ */
+function cutsAlong(length: number, sheet: number, spans: readonly Span[]): number[] {
+  const greedy = greedyCuts(length, sheet, spans);
+
+  if (greedy.length < 3) {
+    return greedy;
+  }
+
+  const spread = spreadCuts(length, sheet, greedy.length);
+
+  return wholeUnder(spread, sheet, spans) >= wholeUnder(greedy, sheet, spans)
+    ? spread
+    : greedy;
+}
+
+/**
+ * The fewest sheets that leave no shape cut in half, found one cut at a time.
+ *
  * Each sheet begins where the last one ended, except that a sheet whose edge
  * would fall through a shape starts back at that shape's own near edge instead,
  * so the shape is whole on it. Two rules keep that from running away: a shape
  * too large for a sheet cannot pull an edge back at all, because no sheet could
- * ever hold it whole and the ink still appears on every sheet it crosses; and
+ * ever hold it whole and its ink appears on every sheet it crosses anyway; and
  * no sheet advances by less than half a sheet, whatever it was about to cut.
- * The last sheet is pulled back to end exactly at the far edge of the drawing,
- * so the drawing never ends in a strip of blank paper.
+ * The last sheet ends exactly at the far edge of the drawing, so the drawing
+ * never ends in a strip of blank paper.
  */
-function cutsAlong(length: number, sheet: number, spans: readonly Span[]): number[] {
+function greedyCuts(length: number, sheet: number, spans: readonly Span[]): number[] {
   if (length <= sheet || sheet <= 0) {
     return [0];
   }
@@ -452,6 +484,24 @@ function cutsAlong(length: number, sheet: number, spans: readonly Span[]): numbe
   }
 
   return starts;
+}
+
+/** The same number of sheets, spaced evenly from one end to the other. */
+function spreadCuts(length: number, sheet: number, count: number): number[] {
+  const last = length - sheet;
+
+  return Array.from({ length: count }, (_, index) => (last * index) / (count - 1));
+}
+
+/** How many shapes a set of sheets holds whole, which is what to maximise. */
+function wholeUnder(
+  starts: readonly number[],
+  sheet: number,
+  spans: readonly Span[],
+): number {
+  return spans.filter((span) =>
+    starts.some((start) => start <= span.start && span.end <= start + sheet),
+  ).length;
 }
 
 /** The drawing cut into its sheets at a settled scale, with its sentences. */

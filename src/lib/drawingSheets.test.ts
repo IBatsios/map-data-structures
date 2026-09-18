@@ -222,6 +222,22 @@ describe('planDrawingSheets', () => {
       expect(plan.sheets[0]?.row).toBe(1);
     });
 
+    it('spaces the sheets evenly rather than stacking two on one strip', () => {
+      // The greedy pass pulls its last sheet flush to the end of the drawing,
+      // which on this design left the third sheet starting 25 pixels after the
+      // second: two sheets of paper showing very nearly the same picture. What
+      // a reader sees is part of whether the fix worked, so it is pinned.
+      const starts = plan.sheets
+        .filter((sheet) => sheet.row === 1)
+        .map((sheet) => sheet.region.x);
+      const gaps = starts.slice(1).map((start, index) => start - (starts[index] ?? 0));
+
+      expect(gaps.length).toBeGreaterThan(1);
+      for (const gap of gaps) {
+        expect(gap).toBeCloseTo(gaps[0] ?? 0, 5);
+      }
+    });
+
     it('places every sheet inside the room it was given', () => {
       for (const sheet of plan.sheets) {
         expect(sheet.width).toBeLessThanOrEqual(PDF_ROOM.sheet.width + 0.001);
