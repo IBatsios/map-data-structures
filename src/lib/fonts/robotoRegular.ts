@@ -17,10 +17,15 @@
  * `Roboto-LICENSE.txt`. The OFL permits embedding in a document, which is
  * precisely what an exported PDF does, so D7 is satisfied.
  *
- * **What it does not cover.** No font this size covers every script. A label in
- * Chinese, Japanese, Korean, Arabic, Hebrew or an Indic script has no glyph
- * here and is left out of the PDF, though the other three exports still show
- * it. That is a recorded limit rather than something to be comfortable with.
+ * **What it does not cover.** No font this size covers every script, and the
+ * gap is wider than the scripts: along with Chinese, Japanese, Korean, Arabic,
+ * Hebrew and the Indic scripts, this face has no `→`, `←`, `↔`, `⇒`, `✓`, `✗`
+ * or `∈` — which reaches ordinary English designs, since an arrow in a label is
+ * an everyday thing in a drawing of a system. jsPDF's answer to a character it
+ * cannot map is to write nothing at all, so `drawableText.ts` marks every one
+ * of them instead and the page says how many there were (D69). What the face
+ * covers is never written down here: `fontCoverage.ts` reads it out of the
+ * bytes below, so the answer cannot drift from the font (D70).
  *
  * **Generated, not written.** The bytes are
  * `400Regular/Roboto_400Regular.ttf` from `@expo-google-fonts/roboto@0.4.3`

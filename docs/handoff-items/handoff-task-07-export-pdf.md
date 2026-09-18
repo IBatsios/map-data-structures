@@ -763,3 +763,240 @@ are right for their formats and were left alone.
 Checked 1, 3, 5 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 and 4 unchecked
 for defect 1. `**Status:**` stays `in progress`, which is Amon's to change only
 once defect 1 is settled and I have re-verified it.
+
+## Work completed by Amon — round 2
+
+### What was built
+
+**Defect 1 is closed by taking both of the shapes offered, because they reach
+two different people.** A character the embedded face has no glyph for is now
+replaced with one visible mark, `■`, everywhere the PDF writes text — in the
+drawing and in both tables — so the loss travels with the file and whoever opens
+it can see that something was there. And the page then says so in
+`#upload-status`, in the app's own words, naming how many characters and
+pointing at the Markdown and HTML exports, which carry them. The mark tells the
+reader of the document; the sentence tells the person who exported it, and
+tells them what to do about it.
+
+`Gateway → Queue` now exports as `Gateway ■ Queue` rather than as
+`Gateway  Queue`. `API gateway (東京)` exports as `API gateway (■■)` rather than
+as `API gateway ()`. Nothing in the file is a label emptied of the thing it
+named.
+
+**The suggested `□` could not be used, and finding out why was the first thing
+this round did.** The embedded face has no glyph for U+25A1 either, so a hollow
+square would have been dropped in its turn and the file would have been back to
+saying nothing — the placeholder would have been the defect. U+25A0, the filled
+square, *is* in the face. A unit test asserts that whatever the mark is set to
+is a character the face can draw, so this cannot regress quietly if the font is
+ever regenerated.
+
+**How the export knows.** `src/lib/fontCoverage.ts` reads the answer out of the
+font's own `cmap` at export time, by jsPDF's rule rather than OpenType's, which
+was read out of jsPDF's source: the first platform 3 encoding 1 format 4
+subtable or the first platform 0 format 4 one and no other format, glyph 0
+counted as nothing drawn, and nothing above the basic plane, because jsPDF looks
+a character up one UTF-16 code unit at a time. A written-down list of covered
+ranges was rejected: it is a second copy of the font and drifts the moment the
+font is regenerated. The reader agrees with your measurements exactly — it says
+the face covers `≥ ± § ° € £ ¥ ™ © … • ½ † ‰` and does not cover
+`→ ← ↔ ⇒ ✓ ✗ ∈`, which is the table from your report, derived independently.
+
+**Defect 2 is closed too.** The file carries `/Title` and `/Lang (en)`. The
+title is taken from the layout *before* the marking, because metadata is written
+into a dictionary rather than drawn with a font — jsPDF writes a non-ASCII title
+as UTF-16 with a byte-order mark — so the Info dictionary carries characters the
+pages themselves have to mark. The new fixture is titled `Regions → 東京` and the
+walk asserts the metadata holds exactly that while page 1 holds `Regions ■ ■`.
+
+**D65's enumerated list is corrected by D69**, which is appended rather than
+edited, since the table is append-only.
+
+### Files added or changed
+
+- `src/lib/fontCoverage.ts` — new. Reads which code points the embedded face can
+  draw, out of the font's `cmap`, by jsPDF's rule. Pure; throws rather than
+  reporting an empty coverage.
+- `src/lib/fontCoverage.test.ts` — new, written first. 11 Vitest tests.
+- `src/lib/drawableText.ts` — new. `markUndrawable`, `drawableLayout` and
+  `describeUndrawable`: the mark, the marked layout with its count, and the
+  sentence the page says. Pure.
+- `src/lib/drawableText.test.ts` — new, written first. 20 Vitest tests.
+- `src/lib/toPdf.ts` — marks the layout before it measures or draws anything,
+  returns `PdfExport { blob, undrawable }` rather than a bare `Blob`, and sets
+  the document's title and language. Its header says why.
+- `src/lib/fonts/robotoRegular.ts` — the "what it does not cover" paragraph was
+  wrong in the same way D65 was; corrected, and it now points at D69 and D70
+  rather than restating what the face covers.
+- `src/pages/index.astro` — `exportDesign` takes a builder that returns
+  `{ blob, note }`; the two text formats hand back `null` and the page stays
+  quiet, and the PDF hands back `describeUndrawable(...)`, which the status
+  region says after the file is in the user's hands.
+- `e2e/pdfText.ts` — `pdfTitle` and `pdfLanguage`, which read the two literal
+  strings the file carries as metadata, including the UTF-16 form jsPDF uses for
+  a non-ASCII title.
+- `e2e/exportPdf.spec.ts` — six new tests.
+- `e2e/fixtures/undrawable-labels.json` — new. The fixture you described,
+  rebuilt: arrows, check marks, set notation, a mixed Japanese label, a mixed
+  Arabic label, and a label of signs the face *does* carry.
+- `docs/DECISIONS.md` — D69, D70 and D71 appended.
+- `README.md` — the PDF paragraph said the uncovered label "is the one thing the
+  PDF cannot show". It now says what the mark is and why.
+- `docs/handoff-items/handoff-task-07-export-pdf.md` — this section.
+
+Not touched: `src/lib/download.ts`, `src/lib/pdfPlan.ts`, `src/lib/layout.ts`,
+`src/lib/exportStyles.ts`, the loader modules, `docs/tasks/07-export-pdf.md`.
+
+### Tests written
+
+**Vitest, `src/lib/fontCoverage.test.ts` (11).** Against the real embedded face:
+it covers Latin, Greek and Cyrillic; it covers the punctuation and signs a
+design is written with; it does *not* cover `→ ← ↔ ⇒ ✓ ✗ ∈`, which is the
+round-one defect stated as a fact about the font; it does not cover CJK, Arabic,
+Hebrew or Devanagari; and it covers nothing above the basic plane, which is
+jsPDF's own limit. Against fonts built byte by byte in the test, which is the
+only way to reach these: a code point mapped to a glyph is covered; one mapped
+to glyph 0 in the middle of a mapped range is not; the Unicode subtable is read
+and a Mac Roman one beside it is ignored; a font with no Unicode subtable is
+refused rather than reported as covering nothing; bytes that are not a font are
+refused; a string that is not base64 is refused.
+
+**Vitest, `src/lib/drawableText.test.ts` (20).** Text the font covers is
+untouched and counts nothing; a character it lacks becomes one mark and is
+counted; each character is marked on its own so nothing else in the label moves;
+a label of nothing but uncovered characters becomes marks rather than emptying;
+a character from beyond the basic plane becomes one mark, not two; a tab and a
+line break are left alone, because neither is a glyph and `pdfPlan` breaks lines
+on them; an empty string is empty. Over a whole layout: the title, every node's
+id, label, lines and type, and every edge's ends and label are marked; the lines
+a label is drawn on still spell the label, so the picture and the table cannot
+disagree; the count is per piece of the design's text rather than per line; the
+layout handed in is left untouched; the geometry is the preview's own; a design
+the font covers entirely comes back unchanged; an empty design is unchanged. The
+sentence: nothing at all when nothing was lost (D41 stays parked), the singular
+at one, the plural above one, and it names the mark and both other formats.
+Finally the guard: the mark is a character the real embedded face can draw.
+
+**Playwright, `e2e/exportPdf.spec.ts` (6 new, 20 in the file).** A visible mark
+is written where the font has no glyph, and no label anywhere in the file is
+`API gateway ()`, `Cache ()` or `Gateway  Queue`; the mark appears **twice** for
+a node label, once in the drawing and once in the table, which is the assertion
+a fix that marked only the tables would fail; the signs the face does carry are
+still themselves; the status region says how many characters could not be drawn
+and names Markdown and HTML; a design the font covers entirely leaves the status
+line describing the upload and says nothing about the font; and the file carries
+`Regions → 東京` as its title and `en` as its language, read back out of the
+bytes.
+
+The walk writes the mark out as a literal rather than importing the constant
+from `src/`, the same way the empty design's sentence is written out there, so
+it stays a second opinion rather than an echo.
+
+### Local results
+
+`bun run test`: **pass, 314 tests in 20 files** (283 at the end of round 1).
+`bun run test:e2e`: **pass, 73 tests** (67 at the end of round 1).
+`bun run check`: pass, 0 errors, 0 warnings, 0 hints across 57 files.
+`bun run build`: pass, 1 page.
+
+**Criterion 11.1, re-measured**, because every export now decodes the font and
+walks the design's text. Same machine and method as round one: Windows 11 Pro,
+bun 1.4.2, Chromium via Playwright, `dist/` served from localhost, clock from
+the click to the browser having the file, four clicks per fixture.
+
+| Fixture | Nodes / edges | Clicks, in order | File |
+|---|---|---|---|
+| `empty-design.json` | 0 / 0 | 208 / 85 / 99 / 100 ms | 24 KB |
+| `markup-labels.json` | 4 / 3 | 133 / 100 / 97 / 103 ms | 39 KB |
+| `undrawable-labels.json` | 5 / 4 | 155 / 114 / 102 / 94 ms | 38 KB |
+| `order-intake.json` | 7 / 6 | 126 / 102 / 92 / 99 ms | 41 KB |
+| `platform-overview.json` | 15 / 16 | **137 / 111 / 118 / 117 ms** | 65 KB |
+| `estate-sweep.json` | 40 / 46 | **181 / 153 / 146 / 157 ms** | 136 KB |
+
+Reading the font's coverage is the new work, and it was measured on its own:
+**0.24 to 0.9 ms** per export after the first call, against an export of 110 to
+160 ms. That is why it is not cached — a module-level cache would be mutable
+state bought for a fifth of a millisecond. The 15-second guard in the walk is
+untouched and still has two orders of magnitude of room.
+
+`.env.example` confirmed again rather than assumed: it still lists no variables,
+and a grep for `process.env` and `import.meta.env` across `src/`, `e2e/` and the
+root finds only `process.env.CI` in `playwright.config.ts`, which the runner
+sets. Nothing this round reads the environment.
+
+### Decisions recorded
+
+Three rows appended to `docs/DECISIONS.md`:
+
+- **D69** — the mark and the sentence, what each is for, why the filled square
+  rather than the hollow one, and **the correction to D65's enumerated list**:
+  the gap is not only CJK, Arabic, Hebrew and Indic, it is the arrows and marks
+  too, which reaches ordinary English designs.
+- **D70** — coverage is read out of the font's own `cmap` at export time by
+  jsPDF's rule, never written down as a list; the measured cost; and why an
+  unreadable font throws instead of reporting nothing.
+- **D71** — `/Title` and `/Lang`, why the title is taken before the marking, and
+  why the language is fixed at `en` rather than guessed from the design.
+
+### Known gaps
+
+1. **The preview still shows the real characters; only the PDF marks them.**
+   That is deliberate — the browser has fonts the PDF cannot carry, and the
+   marks exist because of the file's font rather than because of the design —
+   but it does mean the picture on screen and the picture in the file differ by
+   the marks. The sentence in the status region is what connects them.
+2. **The count is of the design's text, not of the marks in the file.** A node
+   label is written twice in the PDF, once in the drawing and once in the table,
+   so a design that loses one character in one label shows two marks and the
+   sentence says "1 character". Counting marks instead would be a number the
+   user cannot reconcile with their own file, which is why it counts what they
+   wrote rather than what was drawn.
+3. **Two ids that differ only in characters the font cannot draw become the same
+   text in the PDF.** Ids `東` and `京` both export as `■`, so the Nodes table
+   would show two rows that read alike and the edge rows could not be told
+   apart. The design itself is still valid and every other export distinguishes
+   them. Marking them is still better than dropping them, which produced two
+   *empty* cells before, but it is an honest limit of one mark for every
+   uncovered character and it is not fixed here.
+4. **Exporting the same lossy design twice says the sentence once.** The status
+   region already holds that exact text after the first export, so the second
+   sets an identical string, and a live region announces changes rather than
+   content. The text is correct on screen either way. This is the same family as
+   the parked D41 question about announcing a finished download, and it belongs
+   with it rather than with this fix.
+5. **Nothing stops a second click while a PDF is still being written** — carried
+   unchanged from round one, still parked with D41.
+6. **`src/lib/exportStyles.ts` still carries D57's stale comment about `?raw`.**
+   The bounded instruction was to fix it only if the work took me into that
+   file. It did not this round either: the marking happens to the layout before
+   any style is resolved. It carries forward.
+
+### Out-of-scope notes for Jared
+
+- **The drawing's on-page label size degrades far earlier than "a 40-node
+  drawing prints small" says, and this is the item to schedule.** Jahmyr pulled
+  the text matrices out of page 1 and measured the drawing's 12 pt labels as
+  they land on the page: `markup-labels` (4 nodes) 11.8 pt, `order-intake` (7)
+  10.2 pt, **`platform-overview` (15) 4.0 pt**, `estate-sweep` (40) 1.2 pt, and
+  a 200-node design 0.24 pt. It starts at **15 nodes** — the fixture created for
+  this task and labelled *a design at the owner's scale* — and 4 pt is below the
+  smallest type anyone sets in print. The tables carry every label at full size
+  whatever the drawing is scaled to, which is what keeps criterion 2 satisfiable
+  at all, and the drawing is vector so it stays sharp at any zoom on screen. The
+  fix is landscape pages, or a readable floor on the label size with the drawing
+  tiled across sheets, and neither is in this task. **This has not been touched
+  in round two and wants its own cycle.**
+- **Task 08 should take the metadata habit with it.** A `.docx` has a title and a
+  language too, and the reason is the same one D71 gives. Whatever library opens
+  that gate, it is worth asking the same question this round asked of jsPDF:
+  what does it do with a character its font cannot draw, and does it say so.
+- **`e2e/exportPdf.spec.ts` is now 472 lines** and `docs/DECISIONS.md` is 71 rows
+  and about 58 KB. Neither is over a ceiling; the decisions file is still the one
+  to watch, since every agent in the pipeline reads it.
+- `src/lib/fontCoverage.ts` is a font parser living in an app that draws boxes.
+  It is 218 lines, it is pure, and it exists because the alternative was a
+  hand-kept list that drifts. If a fourth format ever needs the same answer, it
+  is already the module to ask.
+- Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts`,
+  `pdfPlan.ts`, `download.ts` or `empty.json`, and the `intersectRect` crash was
+  not touched. All still carried.

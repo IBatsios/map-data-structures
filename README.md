@@ -79,9 +79,14 @@ two tables, running onto as many pages as the design needs. The drawing goes in
 as vector rather than as a picture, so its text stays selectable and searchable
 and nothing blurs however far you zoom in. The file carries the one font it
 draws with, so it opens the same everywhere — including a label in Greek or
-Cyrillic, which the PDF standard fonts cannot spell. A label in a script that
-font does not cover, such as Chinese or Arabic, is the one thing the PDF cannot
-show; the other three exports still do.
+Cyrillic, which the PDF standard fonts cannot spell.
+
+No font of a sensible size covers every character, so where that one has no
+glyph — an arrow such as `→`, or a label in Chinese, Arabic, Hebrew or an Indic
+script — the PDF draws a `■` in its place and the page says how many characters
+that was. The mark is there so that nothing goes missing quietly: `Gateway →
+Queue` comes out as `Gateway ■ Queue` rather than as `Gateway  Queue`. The
+Markdown and HTML exports carry every character as it was written.
 
 Every button is disabled until there is something to export, and goes back to
 disabled the moment a file fails, so none of them ever saves the design before
