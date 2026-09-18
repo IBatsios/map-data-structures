@@ -1,105 +1,111 @@
-# Handoff — after Task 05
+# Handoff — after Task 06
 
 **Date:** 2026-09-18
-**Phase finished:** Task 05: Export as Markdown
-**Next phase:** Task 06: Export as HTML
+**Phase finished:** Task 06: Export as HTML
+**Next phase:** Task 07: Export as PDF
 
 ## Where things stand
 
-`main` has Tasks 01 to 05, squashed as `e3416b3`, PR #11. `bun install`, `bun
+`main` has Tasks 01 to 06, squashed as `87fbf33`, PR #13. `bun install`, `bun
 run dev`, `bun run test`, `bun run test:e2e`, `bun run check`, and `bun run
 build` all work as `README.md` and `CLAUDE.md` describe. CI
-(`.github/workflows/ci.yml`) is green: 240 Vitest (up from 206), 40 Playwright
-(up from 31), typecheck clean. `gitleaks detect` finds nothing.
+(`.github/workflows/ci.yml`) is green: 265 Vitest (up from 240), 53 Playwright
+(up from 40), typecheck clean. `gitleaks detect` finds nothing.
 
 Choose a JSON file, with the picker or by dropping it on the page: validated
 against `src/lib/design.schema.ts`, syntax and schema errors explained beside
 the upload control, a loaded design laid out with `@dagrejs/dagre` and drawn
 as an SVG.
 
-**New this cycle: Export Markdown.** With a design on screen, a button above
-the preview downloads `<design>.md` — the title as a heading, a table of
-every node, a table of every edge, and the drawing as a fenced ` ```mermaid `
-`flowchart TD` block keyed off `shapes.ts` so it never disagrees with the
-preview. The block was verified against real Mermaid 10 and 11 and against
-GitHub's own Markdown pipeline, not just unit-tested.
+**New this cycle: Export HTML.** With a design on screen, a second button in
+the export row (now a named `role="group"`, `aria-label="Export the design"`)
+downloads `<design>.html` — one standalone page holding the preview's own
+inline SVG, the same node/edge tables as the Markdown export, and every style
+carried inline in a `<style>` block. It opens from any folder, offline, with
+nothing fetched — verified with a Playwright walk that reopens the saved file
+over `file://` and asserts zero non-document requests. User text, including a
+label that is literally markup, is escaped into the page rather than run or
+stripped; the SVG half is made safe by serialising the preview's own DOM
+element rather than rebuilding it from a string, so there is only one SVG
+renderer in the project.
 
-**The durable piece: `src/lib/download.ts`.** `downloadBlob(blob, fileName,
-doc)` takes a `Blob` (so Task 07's PDF bytes and Task 08's `.docx` bytes both
-fit with no rewrite) and its `Document` as a parameter (no DOM in this
-project's Vitest run — pure logic in Vitest, DOM work in Playwright).
-`fileNameFor(title, extension)` is the one place a title becomes a file
-stem; Tasks 06-08 call it with their own extension. The page now holds the
-layout it drew, through one function (`holdDrawing`), and the export button
-is present-and-disabled until there is something to export, and disabled
-again the instant a file fails — so it can never export the design before
-last.
+**`straightLine` (`src/lib/layout.ts`) reached a verdict.** It is proven
+unreachable — dagre's own `assignNodeIntersects` guarantees every edge comes
+back with at least two border-to-border points, self-edges never reach it,
+and the lookup that feeds it never misses. Kept in place as a guard rather
+than deleted, so a future dagre change fails visibly instead of drawing an
+edge with an empty path.
 
 Not live anywhere yet — Task 10 is what deploys to Netlify.
 
 ## What to do next, in order
 
-1. **Start Task 06** (`docs/tasks/06-export-html.md`) from `main`, on a
-   branch named `feature/export-html`. Unblocked — 01, 03, and 05 are all
-   done. Build `toHtml(design, layout)`: a complete standalone page with the
-   title, the inline SVG drawing (reuse Task 03's `renderDrawing` output
-   verbatim — the notes call this "the cheapest way to keep the export
-   identical to the preview"), and the node/edge tables from Task 05, styles
-   inline, no external assets. Wire the button through the existing
-   `downloadBlob` / `fileNameFor` helpers — no changes to `download.ts`
-   should be needed, since it was built for this.
-2. **`straightLine` at `src/lib/layout.ts:329` is now this task's**, not
-   parked further. It falls back to dagre's *centres* while every other
-   route runs border to border, so an arrowhead drawn on that path would
-   land inside a box. Task 06 is the first exporter to embed the SVG itself
-   (Task 05's Mermaid block computes its own layout and never reads
-   `LayoutEdge.points`), so this is where the exposure, if any, first
-   reaches an export. Unreachable across the 19 designs tried so far,
-   including a 300-node one — check whether HTML export's own inputs can
-   reach it before deciding whether it needs fixing here or stays parked
-   again with a fresh reason.
-3. **A node label that is literally HTML needs a decision.** Mermaid's
-   `strict` security level sanitized a label like
-   `<script>alert(1)</script>` away in Task 05's block, so that box rendered
-   with no visible text — the node table still listed the label, so
-   criterion 5.2 held there. HTML export has no such sanitizer in front of
-   it by default; decide how labels are escaped into the page (this is
-   almost certainly the same escaping question raised by embedding user text
-   in an SVG `<title>`/`<desc>` and in the node/edge tables) and record the
-   choice in `docs/DECISIONS.md`.
-4. **The export row wants a name or a group once HTML's button joins
-   Markdown's.** Two buttons in a row read better as a labelled group (a
-   `<fieldset>`/`<legend>` or an `aria-label` on a wrapper) than as two
-   unrelated controls — worth deciding once here rather than piecemeal
-   across Tasks 07 and 08.
-5. **Carried forward, not blocking Task 06:**
-   - `e2e/fixtures/empty.json` (zero-byte file, the empty-*file* case) sits
-     beside `e2e/fixtures/empty-design.json` (a valid empty design) and the
-     two names read confusingly alike. A rename touches
-     `e2e/validation.spec.ts`, so it belongs in its own chore, not a task.
-   - Nothing on the page confirms a download happened beyond the browser's
-     own UI. This is a live-region question (D41, Task 04's), not an
-     exporter question — if the answer becomes "yes, announce it," all four
-     exporters should do it the same way. Worth deciding once, not per task.
-   - A `disabled` button is out of the tab order by definition (Task 05's
-     Export Markdown button). Revisit once the export row has four buttons,
-     which starts with this task's second button.
-   - Still queued for its own small cycle, overdue by one task now: the
-     Firefox/SpiderMonkey wording fault (`describeLoadError.ts:191`, `:193`),
-     `loadDesign.ts`'s lagging doc comment, and `loadDesign.test.ts:146`'s
-     conditional assertion.
-   - Page styling outside the drawing is still parked to Task 09.
-6. Update `README.md` or `CLAUDE.md` if a command changes.
-7. When Task 06 ends, write the next handoff doc here, in this shape, and
-   append its own detail to a new `docs/handoff-items/handoff-task-06-*.md`.
+1. **Start Task 07** (`docs/tasks/07-export-pdf.md`) from `main`, on a branch
+   named `feature/export-pdf`. Unblocked — 01, 03, and 05 are all done (06 is
+   also done, though the task file does not require it).
+   - **Confirm the PDF route with the user before adding a library.** The
+     task file names two open-source options and asks that the choice be
+     confirmed rather than assumed: vector output via `svg2pdf.js` on
+     `jsPDF` (text stays selectable and the file stays small) or rasterizing
+     the SVG and placing it with `pdf-lib` (simpler, blurs when zoomed).
+     Record the choice and its trade-off in `docs/DECISIONS.md`.
+   - **The task file's `toPdf(design, layout)` sketch is stale**, the same
+     way Task 06's `toHtml(design, layout)` sketch was — D48 already settled
+     that exporters take the layout alone. Do not reopen it; a new decision
+     recording the PDF module's actual signature (design half already
+     settled, whatever the byte-producing half needs) is still worth adding,
+     the way D55 did for `toHtml`.
+   - **Criterion 11.1 is a real one to test, not just assert**: the download
+     has to finish within a few seconds for a design the size of the owner's
+     use cases. Time it against a design at that scale as part of the
+     Playwright walk, not just the smallest fixture.
+   - Wire the button through the existing `downloadBlob` / `fileNameFor`
+     helpers — no change to `src/lib/download.ts` should be needed, exactly
+     as Tasks 05 and 06 found.
+   - The export row is already a named group of two; Task 07 adds a third
+     button to it and nothing else structural, per D59.
+2. **Carried forward, not blocking Task 07 but worth its own cycle: a valid
+   design can make `layoutDesign` throw.** Dagre's own `intersectRect` throws
+   "Not possible to find intersection inside of the rectangle" when two boxes
+   it is routing between share a centre, reached from inside
+   `assignNodeIntersects` during `dagre.layout()`. It needs *both* a
+   two-cycle and a parallel duplicate of the same edge in one design — a
+   two-cycle alone, a parallel pair alone, and a three-cycle are all fine.
+   Two independent fuzzers hit it at similar low rates (2/2000, 7/400), and
+   an exhaustive sweep of every 2- and 3-node multigraph with up to 4 edges
+   found zero crashes, so it is not reachable by a small design. It fails
+   safely today — the panel shows an error, the page stays intact, no stale
+   drawing — but the message is dagre's own words rather than the app's,
+   which is what D43 otherwise prevents for every other failure. Its natural
+   neighbour is the deferred loader-wording chore below; both live in the
+   error-message region of the app.
+3. **The deferred loader chore is now gated: it runs before Task 10.** If it
+   is still open when Task 10 is picked, it becomes blocking rather than
+   schedulable. It covers `describeLoadError.ts:191`/`:193` (the
+   Firefox/SpiderMonkey wording fault), `loadDesign.ts`'s lagging doc
+   comment, and `loadDesign.test.ts:146`'s conditional assertion — read and
+   found not to be a vacuous test, since Vitest runs on Node and the V8
+   message always matches.
+4. **A literal NUL character in a label is dropped on reopen of an exported
+   file.** The preview keeps it; the HTML parser drops it when the file is
+   reopened. Every other exotic character tried survives. This is recorded
+   as a known limit, not a defect to fix: U+0000 has no valid HTML
+   representation, and the only remedy would be loader-side tidying, which
+   D39 and D56 rule out.
+5. `e2e/fixtures/empty.json` is still misnamed next to
+   `e2e/fixtures/empty-design.json` — one is the zero-byte file case, the
+   other a valid empty design. Still its own small chore, not blocking.
+6. Page styling outside the drawing is still parked to Task 09.
+7. Update `README.md` or `CLAUDE.md` if a command changes.
+8. When Task 07 ends, write the next handoff doc here, in this shape, and
+   append its own detail to a new `docs/handoff-items/handoff-task-07-*.md`.
 
 ## Suggested skills for the next session
 
-From Task 06's file (`docs/tasks/06-export-html.md`):
+From Task 07's file (`docs/tasks/07-export-pdf.md`):
 
-- `front-review`: review the exported page's markup as you would a component.
-- `front-a11y`: check the standalone page — title, headings, the SVG title
-  from Task 03.
-- `tdd-workflow`: the renderer test before the renderer.
-- `e2e-testing`: the download assertion, extending the same walk Task 05
-  added to.
+- `anthropic-skills:pdf`: PDF structure and pitfalls while choosing the
+  route.
+- `tdd-workflow`: test the bytes for the page count and the text before the
+  button exists.
+- `e2e-testing`: the download assertion.
