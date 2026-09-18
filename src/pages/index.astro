@@ -1,5 +1,6 @@
 ---
 import drawingStyles from '../styles/drawing.module.css';
+import exportStyles from '../styles/exports.module.css';
 import styles from '../styles/upload.module.css';
 
 const pageTitle = 'MapDataStructures';
@@ -60,6 +61,20 @@ const pageTitle = 'MapDataStructures';
 
       <p id="upload-status" role="status"></p>
 
+      {/*
+       * Disabled until a design is drawn, and disabled again the moment one
+       * fails, because there is nothing to export in either case and a button
+       * that downloads the file before last is worse than one that waits. It
+       * is in the page from the first paint rather than appearing with the
+       * drawing, so the page does not rearrange itself under a reader who is
+       * part-way down it.
+       */}
+      <div class={exportStyles.actions}>
+        <button id="export-markdown" class={exportStyles.action} type="button" disabled>
+          Export Markdown
+        </button>
+      </div>
+
       <div id="drawing" class={drawingStyles.drawing}></div>
     </main>
 
@@ -70,11 +85,21 @@ const pageTitle = 'MapDataStructures';
         describeUnsupportedFile,
       } from '../lib/describeLoadError';
       import { describeUpload } from '../lib/describeUpload';
+      import { downloadBlob, fileNameFor } from '../lib/download';
       import { looksLikeJsonFile } from '../lib/jsonFile';
+      import type { DesignLayout } from '../lib/layout';
       import { layoutDesign } from '../lib/layout';
       import { loadDesign } from '../lib/loadDesign';
       import { renderDrawing } from '../lib/renderDrawing';
       import { renderProblems } from '../lib/renderProblems';
+      import { toMarkdown } from '../lib/toMarkdown';
+
+      /** What a `.md` file is, for the browser that is about to save one. */
+      const MARKDOWN_MEDIA_TYPE = 'text/markdown;charset=utf-8';
+
+      /** Said in the status region if an export ever fails to build. */
+      const EXPORT_FAILED =
+        'Sorry — that design could not be exported. Choose the file again, and if it keeps happening the design is one this app cannot write out.';
 
       interface PageElements {
         readonly fileInput: HTMLInputElement;
@@ -82,24 +107,46 @@ const pageTitle = 'MapDataStructures';
         readonly status: HTMLElement;
         readonly problems: HTMLElement;
         readonly drawing: HTMLElement;
+        readonly exportMarkdown: HTMLButtonElement;
       }
 
       /**
+       * The drawing currently on screen, or `null` when there is none.
+       *
+       * The page held nothing before this: it computed design → layout → SVG
+       * and let both go. The export needs the design that is on screen, and it
+       * needs it to be *that* one — so this is set when a drawing appears and
+       * cleared when a file fails, which is what stops the button quietly
+       * exporting the previous design while an error panel is showing.
+       *
+       * It holds the layout rather than the design because the layout is what
+       * the preview was drawn from and what `toMarkdown` reads, so the file and
+       * the picture cannot come from two different places.
+       */
+      let drawn: DesignLayout | null = null;
+
+      /**
        * Choose a file or drop one on the page, read it here in the browser, say
-       * what it holds, and draw it.
+       * what it holds, draw it, and export it.
        *
        * Nothing with logic in it lives in this script. Validating is
        * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
-       * `renderDrawing`'s, counting is `describeUpload`'s and every sentence
-       * about a file that failed is `describeLoadError`'s — all in `src/lib`,
-       * all tested. What is left here is wiring: find the elements, listen, and
-       * put the result in the right place.
+       * `renderDrawing`'s, counting is `describeUpload`'s, writing the `.md` is
+       * `toMarkdown`'s, naming and saving it are `download`'s, and every
+       * sentence about a file that failed is `describeLoadError`'s — all in
+       * `src/lib`, all tested. What is left here is wiring: find the elements,
+       * listen, and put the result in the right place. The one piece of state
+       * it keeps is `drawn`, above.
        */
       function startUploadPage(): void {
         const elements = findPageElements();
 
         elements.fileInput.addEventListener('change', () => {
           void showFile(elements.fileInput.files?.[0], elements);
+        });
+
+        elements.exportMarkdown.addEventListener('click', () => {
+          exportMarkdown(elements);
         });
 
         watchForDroppedFiles(elements);
@@ -111,18 +158,20 @@ const pageTitle = 'MapDataStructures';
         const status = document.querySelector('#upload-status');
         const problems = document.querySelector('#upload-problems');
         const drawing = document.querySelector('#drawing');
+        const exportMarkdown = document.querySelector('#export-markdown');
 
         if (
           !(fileInput instanceof HTMLInputElement) ||
           !(dropZone instanceof HTMLElement) ||
           !(status instanceof HTMLElement) ||
           !(problems instanceof HTMLElement) ||
-          !(drawing instanceof HTMLElement)
+          !(drawing instanceof HTMLElement) ||
+          !(exportMarkdown instanceof HTMLButtonElement)
         ) {
           throw new Error('The upload page is missing one of its elements.');
         }
 
-        return { fileInput, dropZone, status, problems, drawing };
+        return { fileInput, dropZone, status, problems, drawing, exportMarkdown };
       }
 
       /**
@@ -223,13 +272,15 @@ const pageTitle = 'MapDataStructures';
         fileText: string,
       ): void {
         const design = loadDesign(fileText);
-        const drawing = renderDrawing(layoutDesign(design), document);
+        const layout = layoutDesign(design);
+        const drawing = renderDrawing(layout, document);
         const description = describeUpload(fileName, design);
 
         elements.problems.dataset.state = 'empty';
         elements.problems.replaceChildren();
         elements.drawing.replaceChildren(drawing);
         elements.status.textContent = description;
+        holdDrawing(elements, layout);
       }
 
       /**
@@ -243,6 +294,43 @@ const pageTitle = 'MapDataStructures';
         elements.drawing.replaceChildren();
         elements.problems.dataset.state = 'problems';
         elements.problems.replaceChildren(...renderProblems(report, document));
+        holdDrawing(elements, null);
+      }
+
+      /**
+       * Remembers the drawing on screen, and points the export buttons at it.
+       *
+       * One function for both halves on purpose: the drawing, the held layout
+       * and what the buttons offer are one state, and a page that set them in
+       * two places would eventually set only one of them.
+       */
+      function holdDrawing(elements: PageElements, layout: DesignLayout | null): void {
+        drawn = layout;
+        elements.exportMarkdown.disabled = layout === null;
+      }
+
+      /**
+       * Builds the `.md` for the drawing on screen and hands it to the browser.
+       *
+       * The guard is not decoration: the button is disabled with nothing drawn,
+       * and this says what happens if it is ever reached anyway. Nothing that
+       * could throw touches the page, and if the export cannot be built the
+       * status region says so in the app's own words rather than the engine's
+       * (D43) — an unexplained button that does nothing is worse than a
+       * sentence.
+       */
+      function exportMarkdown(elements: PageElements): void {
+        if (drawn === null) {
+          return;
+        }
+
+        try {
+          const file = new Blob([toMarkdown(drawn)], { type: MARKDOWN_MEDIA_TYPE });
+
+          downloadBlob(file, fileNameFor(drawn.title, 'md'), document);
+        } catch {
+          elements.status.textContent = EXPORT_FAILED;
+        }
       }
 
       /**
