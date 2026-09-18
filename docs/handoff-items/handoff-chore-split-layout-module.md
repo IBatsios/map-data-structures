@@ -277,3 +277,187 @@ Every acceptance criterion above is checked in this document, `bun run test`
 passes, and CI is green on the pull request.
 
 ---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+`src/lib/layout.ts` was 625 lines. It is 346 now, and both seams named in the
+assignment are out — the second one because it had to be, not because it was
+tempting: with the self-edge module extracted, `layout.ts` still stood at 436 lines,
+past the 400 the first criterion asks for. Taking the normalisation group as well
+landed it at 346.
+
+Four modules where there was one:
+
+- **`layout.ts`** (346) — `layoutDesign`, the sizing and graph-building group,
+  `readPlacedNodes`, `readRoutedEdges`, `labelCentre`, `straightLine`, `toPoint`. It
+  is the single public door: every name in the criterion list is still importable
+  from `./layout`, and the ones that moved are **re-exported, never re-declared**.
+  Its top doc comment is kept and extended with a paragraph naming where the parts
+  now live and restating the one-door rule for whoever moves the next piece.
+- **`selfLoops.ts`** (203) — the five `SELF_LOOP_*` constants, `SelfLoopSlot`,
+  `selfLoopSlots`, `loopsByNode`, `plateTopOf`, `selfLoop`, each with its own doc
+  comment, under a module comment that carries D34's and D37's reasoning: why the
+  route is ours rather than dagre's, and why the ordinal is what makes two loops two
+  loops. `SELF_LOOP_EXTENT` is exported from here and re-exported by `layout.ts`; the
+  other four constants stay module-private exactly as they were.
+- **`normaliseDrawing.ts`** (115) — `DRAWING_MARGIN`, `offsetToMargin`, `everyX`,
+  `everyY`, `shiftBox`, `shiftEdge`, `canvasFor`. `everyX` and `everyY` stay private.
+- **`layout.types.ts`** (90) — `LayoutPoint`, `LayoutBox`, `LayoutNode`,
+  `LayoutEdge`, `DesignLayout`, `EdgeLabelPlate`, `PreparedEdge`.
+
+**`PreparedEdge`, the piece that straddles the seam.** You offered two homes and I
+took a third, which is the one decision here worth arguing with. `selfLoop` returns a
+`LayoutEdge` and takes a `LayoutBox`, so a type crosses that seam whatever
+`PreparedEdge` does — putting it in either module leaves the other importing back,
+and an import cycle that is type-only today is a real one the day someone needs a
+value from it. A types module is this project's own existing answer to that
+(`design.types.ts`, D15), so the layout vocabulary went the same way. Every
+dependency now points one direction: `layout.types` ← `selfLoops` ← `layout`, and
+`layout.types` ← `normaliseDrawing` ← `layout`. Nothing outside `src/lib/` imports
+any of the three; `./layout` is still the only door anyone knocks on.
+
+Both load-bearing properties from the module doc comment hold of all four modules: no
+`document`, no measuring, no clock, and nothing returned but plain numbers, strings
+and arrays.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/layout.ts` | 625 → 346 lines. Keeps `layoutDesign` and the dagre-facing group; imports and re-exports what moved; doc comment extended with where the parts live. |
+| `src/lib/layout.types.ts` | New, 90. The shared vocabulary, including `PreparedEdge` and `EdgeLabelPlate`. |
+| `src/lib/selfLoops.ts` | New, 203. Self-edge routing, moved verbatim with its comments. |
+| `src/lib/normaliseDrawing.ts` | New, 115. Margin offset, the two shifts, and the canvas, moved verbatim with their comments. |
+| `src/lib/selfLoops.test.ts` | New, 15 tests. Additive — nothing was moved out of `layout.test.ts`. |
+| `src/lib/normaliseDrawing.test.ts` | New, 12 tests. Also additive. |
+| `docs/DECISIONS.md` | One row appended: D46. |
+| This doc | This section. |
+
+**Unchanged, as the criteria require:** `src/lib/layout.test.ts`,
+`src/lib/renderDrawing.ts`, `src/lib/describeDrawing.ts`, `src/pages/index.astro`,
+`.env.example`, `README.md`, `CLAUDE.md`. `git diff --stat main` lists exactly the
+four source files and two test files above, plus the two docs.
+
+`README.md` was checked and left alone on purpose: no command changed, and its
+`## Layout` section describes `src/lib/` by what it holds rather than file by file,
+so it is still true.
+
+### Tests written
+
+Both files are new and both are additive — no existing self-loop test was moved.
+Each was written before its module existed and first failed on `Cannot find module`,
+which is the honest RED for a module that is not there yet.
+
+`src/lib/selfLoops.test.ts` — 15 tests:
+
+| Test | What it pins |
+|---|---|
+| gives a slot to every self-edge and to no other edge | only `from === to` gets a slot, keyed by its place in the file |
+| numbers a node's loops from zero in the order the file listed them | the ordinal, and that an intervening ordinary edge does not consume one |
+| counts each node's loops separately | three nodes looping once each are each their node's first — D37's "unchanged" case |
+| starts the first plate at the top of the stack and clears every earlier one | `plateTop` grows past every earlier plate **plus a gap** — the assertion the constant-return mutation fails |
+| measures the stack as every plate plus the gaps between them | `stackHeight` ends exactly where the last plate does, which is what lets the column centre |
+| gives a lone loop a stack of its own plate and nothing else | the whole slot for the single-loop case, by value |
+| finds no slots in a design that loops nowhere | the empty map |
+| hangs both ends of the loop on the node's right border | D34: both ends on the border, neither at the same height |
+| reaches SELF_LOOP_EXTENT past the border for the first loop, twice for the second | the ordinal in the reach |
+| meets the border further from its middle the further out the loop reaches | the band steps with the ordinal |
+| keeps a loop's ends off the corners of a short node | `SELF_LOOP_BAND_INSET`: the cap, on a 40px-tall node with five loops |
+| puts the label plate past the widest loop, not just past its own | plates share one column, so none cuts an outer loop's line |
+| centres the stack of plates on the middle of the node | the `middle - stackHeight / 2 + plateTop` arithmetic, and that two plates do not overlap |
+| carries the edge's own words and lines through untouched | a label with interior spaces is not tidied |
+| reads the node box without touching it | purity |
+
+`src/lib/normaliseDrawing.test.ts` — 12 tests: `offsetToMargin` puts the
+top-left-most thing at exactly `DRAWING_MARGIN`, brings a drawing back from dagre's
+negative coordinates, measures route points and plates and not only boxes, and moves
+nothing when nothing is placed; `shiftBox` moves a box, keeps everything else it
+carries, and returns a new one; `shiftEdge` moves every point and the plate with them
+and leaves the label alone; `canvasFor` fits with a margin all round, counts a plate
+reaching past the last box, rounds a fractional extent up, and still gives an empty
+design a canvas (D19).
+
+### Local results
+
+- `bun run test`: **pass — 206 tests in 13 files.** Baseline was 179 in 11 files; the
+  27 new ones are the two files above, and every one of the original 179 still passes.
+- `bun run check`: **pass — 0 errors, 0 warnings, 0 hints** (38 files).
+- `bun run build`: **pass** — 1 page built.
+- `bun run test:e2e`: **pass — 31 of 31** against the built `dist/`.
+
+### Preservation, demonstrated rather than asserted
+
+**1. The output is byte-identical.** Before touching anything I dumped
+`layoutDesign`'s full result over six designs — empty; a lone node; the README's
+order-intake example; one self-edge; a four-node design whose `worker` carries three
+loops, one of them with a label long enough to wrap, and whose `who` carries two; and
+a design of wrapped labels and a whitespace-only label. The same dump was taken after
+each seam: `diff` clean both times, md5 `5b9e661f5815a09321b151cce8eadd9d` throughout.
+
+**2. Five deliberate mutations, each caught by the untouched `layout.test.ts`.** Run
+as `bunx vitest run src/lib/layout.test.ts` on its own, so the evidence is that file
+and not my new ones:
+
+| Mutation | `layout.test.ts` result |
+|---|---|
+| `selfLoop`: reach loses `slot.ordinal + 1` | **1 failed** — "draws two self-edges on one node as two loops, neither hiding the other": `expected 229 to be greater than 229`. The second loop stopped reaching further than the first. |
+| `plateTopOf`: returns a constant `0` | **1 failed** — same test: `expected true to be false`, which is `overlaps(first.labelBox, second.labelBox)`. Both plates landed on one spot: D37's lost label, exactly. |
+| `offsetToMargin`: normalises to 0 instead of `DRAWING_MARGIN` | **3 failed** — "starts the drawing exactly one margin…", "fits the canvas…", "places a lone node at the margin…" |
+| `canvasFor`: drops the trailing margin | **3 failed** — including "lays an empty design out as an empty canvas that still has size" |
+| `shiftEdge`: leaves the route where dagre put it | **4 failed** — including all three self-edge tests |
+
+Worth reporting rather than hiding: my **first** attempt at the fifth mutation was a
+no-op. I inserted `points: edge.points` above the existing `points:` key and the
+later key won, so the suite passed and for a moment it looked like a hole in the net.
+Reading the mutated source showed it; redone as a replacement, it produced the four
+failures above. Small, but it is the exact failure mode "prove, do not assert" guards
+against — a mutation that does not mutate proves nothing, and a green run looks the
+same either way.
+
+### Decisions recorded
+
+One row appended to `docs/DECISIONS.md`, **D46**: the two seams and the four modules,
+why now (the module was about to gain four readers), why both seams were needed (436
+lines after the first), the single-door rule and why re-export rather than
+re-declare, and `PreparedEdge`'s third home with the D15 reasoning behind it. It also
+records that preservation was shown by the byte-identical dump and the five mutations
+rather than claimed.
+
+### Known gaps
+
+- **Nothing in the assignment is unfinished.** Every criterion has been exercised
+  locally; the boxes are left unchecked for Jahmyr, and CI is his to see, since
+  pushing is his.
+- `layout.types.ts` exports `EdgeLabelPlate` and `PreparedEdge`, which were private to
+  `layout.ts` before. Neither is re-exported from `layout.ts`, so **no public surface
+  widened** — but a module boundary means any file in `src/lib/` could now import
+  them. That is the price of the seam; the alternative was an import cycle.
+- Both new test files construct their inputs by hand rather than through
+  `layoutDesign`. That is deliberate — it is what makes them tests of the extracted
+  modules rather than a second copy of `layout.test.ts` — but it does mean they would
+  not notice if `readRoutedEdges` began handing `selfLoopSlots` something other than
+  what it hands it today. `layout.test.ts` is what covers that, and it does: mutation
+  5 above is that exact kind of miswiring, and it fails four of its tests.
+
+### Out-of-scope notes for Jared
+
+Small and real; none of it touched.
+
+1. **`describeDrawing.test.ts` is a fifth consumer of `layout.ts`.** The assignment
+   names four (`renderDrawing.ts`, `describeDrawing.ts`, `index.astro`,
+   `layout.test.ts`); `describeDrawing.test.ts:5` also imports `layoutDesign`. It
+   needed no change, and the count does not weaken the argument for doing this now —
+   noting it only so the consumer list is right when Task 05 adds to it.
+2. **`straightLine` falls back to dagre's *centres* while every other route runs
+   border to border.** `layout.ts:329`. On that fallback an edge is drawn from one
+   box's middle to the other's, so its ends sit under the two boxes rather than on
+   their borders. It is unreachable today — dagre gives points for every edge a
+   loaded design can produce, and no test in `layout.test.ts` reaches it — so it is
+   not a defect anyone can see, and I left it exactly as it was. Worth a look
+   whenever an exporter starts drawing arrowheads, because on that path one would
+   land inside a box.
+3. **The three items routed to the Firefox cycle are untouched**, as asked:
+   `describeLoadError.ts:191` and `:193`, `loadDesign.ts`'s lagging doc comment, and
+   `loadDesign.test.ts:146`'s conditional assertion. I did not open those files.
