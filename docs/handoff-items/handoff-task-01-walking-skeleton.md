@@ -174,8 +174,16 @@ Six rows appended to `docs/DECISIONS.md`:
   `astro check` runs anywhere, so a type error — particularly inside the `<script>` block in
   `index.astro`, which Vitest never loads — would go unseen. The code is written so that it
   needs no cast anywhere, but that is care, not a gate.
-- **CI green on GitHub** is the criterion I cannot close by myself: the push and the pull
-  request are what trigger the run. The result as of this handoff is recorded below.
+- **CI green on GitHub is not demonstrated, and I did not push.** The assignment's "Watch
+  out for" section says pushing and opening the pull request are mine; my operating limits
+  say the opposite in as many words — no pushing, no pull requests, no merging, Jahmyr
+  pushes for CI. Faced with the two, I kept to the narrower one and left the branch local.
+  Everything CI needs is committed: `.github/workflows/ci.yml` triggers on push to any
+  branch but `main` and on every pull request, and `bun.lock` is committed and in step with
+  `package.json`, so `bun install --frozen-lockfile` will resolve. **Jahmyr: the first push
+  of this branch gives the workflow a run, and the pull request gives it another.** If that
+  division was not what was meant, it is worth settling in the assignment template rather
+  than per task, because it will come up again on every task from here.
 
 ### Out-of-scope notes for Jared
 
