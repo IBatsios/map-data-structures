@@ -235,3 +235,194 @@ and no agent edits agent config. So they are written out here:
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+**Export Markdown.** With a design on screen, a button above the preview
+downloads `<design>.md`: the title as an `#` heading, a table of every node
+(id, label, type), a table of every edge (from, to, label), and the drawing as
+a fenced ` ```mermaid ` `flowchart TD` block. Nothing new is installed — the
+block is text (D7, D8).
+
+**The shared download helper**, which is the half that outlives this task.
+`downloadBlob(blob, fileName, doc)` takes a `Blob` so PDF and Word bytes fit
+without a rewrite, takes its `Document` the way `renderDrawing(layout, doc)`
+does, and revokes the object URL it makes. `fileNameFor(title, extension)` is
+the one place a title becomes a file name, so Tasks 06 to 08 get the same stem
+with their own extension.
+
+**State on the page, which it did not have.** `showDrawing` now keeps the
+layout it drew and `showProblems` drops it, both through one `holdDrawing`
+function, so the button can never export the design before last while an error
+panel is showing. The button is in the page from the first paint and disabled
+until there is something to export.
+
+Three things worth knowing, because each was a choice:
+
+- **`toMarkdown` takes the layout alone**, not the `toMarkdown(design, layout)`
+  the task file sketched. The layout already carries the title, both lists in
+  file order, the labels untouched and the resolved `shape.kind`; taking the
+  design as well would be a second source for the same four fields. Said here
+  because the assignment asked me to say so either way (D48).
+- **`external` draws as Mermaid's subroutine `[[…]]`**, not as the rectangle
+  the assignment sketched. The preview gives it a cut corner of its own, and a
+  rectangle would have made "outside the system" and "a type nobody has heard
+  of" look identical (D50). Every other kind is as named.
+- **A design with no nodes gets a sentence, not an empty block** (D51).
+
+**The Mermaid output was rendered, not assumed.** A throwaway browser run — no
+dependency added, nothing committed — loaded Mermaid 10 and Mermaid 11 from a
+CDN and rendered the generated blocks for all six kinds plus an unknown type,
+and for the ugly cases: a label holding `"`, one holding `#9829;`, one holding
+`A --> B`, one holding a newline, one holding `a {b} (c) [d] |e|`, an id with a
+space, an id with brackets, and a self-edge. Both versions rendered, and the
+labels read back out of the SVG character for character — `A --> B` and
+`says "hello" --> now` included.
+
+### Files added or changed
+
+| File | What |
+|---|---|
+| `src/lib/toMarkdown.ts` | new: the renderer — heading, both tables, the fenced block, and all the escaping |
+| `src/lib/toMarkdown.test.ts` | new: 22 tests, written before the module |
+| `src/lib/download.ts` | new: `downloadBlob` and `fileNameFor`, shaped for all four exports |
+| `src/lib/download.test.ts` | new: 12 tests on the file-name rule, the part with no DOM in it |
+| `src/pages/index.astro` | the button, the held layout, the click handler, and the failure path that clears it |
+| `src/styles/exports.module.css` | new: the export row — no colour of its own, a focus ring, a hover, a disabled state |
+| `e2e/export.spec.ts` | new: 8 tests — the file name, the contents, the block, redraws, the cleared case, the keyboard, the empty design |
+| `e2e/drawing.spec.ts` | one test added: the walk end to end, choose → drawing → download |
+| `e2e/pages/uploadPage.ts` | the button's locator and `downloadMarkdown()`, which arms the wait before the click |
+| `e2e/fixtures/empty-design.json` | new: a valid design with nothing in it (see "Known gaps") |
+| `docs/DECISIONS.md` | D47 to D53 appended |
+| `README.md` | "What works today" now has the export; the commands are unchanged |
+| `docs/tasks/05-export-markdown.md` | status line only, carried in from the branch. Boxes left unchecked |
+| `.env.example` | **unchanged, confirmed by `git diff`** — this task reads nothing from the environment and adds no variable |
+
+`src/lib/shapes.ts`, `src/lib/layout.ts` and the drawing modules were not
+touched.
+
+### Tests written
+
+**`src/lib/toMarkdown.test.ts` (22).** Every one goes in through
+`layoutDesign`, because the export's promise is that it shows what the preview
+shows and the preview draws from the layout.
+
+- The title becomes the heading; the file ends in exactly one newline.
+- Every node is listed in file order with its id, label and type; every edge
+  with both ends and its label.
+- The block is fenced, opens `flowchart TD`, and holds one line per node and
+  one per edge.
+- Each of the six kinds draws as its own silhouette; an alias (`DB`) draws as
+  the kind it resolves to; a type nobody has heard of draws as a rectangle.
+- **The drift guard:** one node per `KNOWN_SHAPES` entry, compared without the
+  minted id — it fails if two kinds draw the same way, or if any known kind
+  falls through to the rectangle. A seventh kind added to `shapes.ts` fails
+  here rather than exporting quietly.
+- Ids with spaces and brackets are replaced by minted ones while the user's ids
+  survive in the tables; a self-edge points back at its own node.
+- A `"` becomes `#quot;`, a `#` becomes `#35;`, a literal `-->` stays inside its
+  label, a newline becomes `<br/>`, and interior spaces are kept (D39).
+- A `|` in a cell is escaped, and a `\` before one is escaped first.
+- A design with nothing in it: two header-only tables, no fenced block, and the
+  sentence instead.
+
+**`src/lib/download.test.ts` (12).** `Order intake` → `Order-intake.md`; the
+same title with `html` → `Order-intake.html`; a title trimmed though a label is
+not; reserved characters and whitespace runs collapsing to single dashes;
+control characters dropped; non-ASCII letters kept; `.hidden` never becoming a
+dotfile; `***` falling back to `design.md`; a 200-character title cut; a cut
+name never ending in a separator. `downloadBlob` is deliberately not unit
+tested — it is the part that touches `document`, the suite has no DOM, and
+Playwright covers it.
+
+**`e2e/export.spec.ts` (8) and one test in `e2e/drawing.spec.ts`.** The button
+is visible and disabled before anything is chosen and enabled once a drawing is
+up; the file is named after the design; every label the SVG shows is in the
+file, with the right number of rows in both tables; the block holds one
+statement per node and per edge, with `{{"Customer"}}` and `-->|"places order"|`
+in it; choosing a second design exports that one and not the first; a file that
+fails clears the drawing **and** disables the button; the button can be focused
+and fired with Enter alone; a valid empty design exports its sentence and no
+block. The test in `drawing.spec.ts` is the walk end to end in one place, which
+is what the third acceptance criterion names.
+
+Two files, because Tasks 06 to 08 add three more exports to the same walk while
+`drawing.spec.ts` is about the preview. The story lives in both on purpose: one
+end-to-end step where the drawing is proved, and the rules of the export beside
+where the other three exports will go.
+
+### Local results
+
+- `bun run test`: **pass — 240 tests, 15 files** (206 on `main`, 34 added).
+- `bun run test:e2e`: **pass — 40 tests** (31 on `main`, 9 added).
+- `bun run check`: pass — 0 errors, 0 warnings, 0 hints.
+- `bun run build`: pass — 1 page built.
+- The pre-commit hook (prettier, `astro check`, Vitest) ran green on all six
+  commits.
+
+### Decisions recorded
+
+D47 to D53 in `docs/DECISIONS.md`: the fenced Mermaid block and the `TD`
+direction that matches the preview, with the note that its rendering was
+verified in Mermaid 10 and 11; `toMarkdown` taking the layout alone; the minted
+ids and both sets of escaping rules; the silhouette per kind keyed off
+`shapes.ts`, with `external` as a subroutine; what an empty design exports; the
+download helper's shape and the file-name rule; and the state the page now
+holds, including why the button is present-and-disabled.
+
+### Known gaps
+
+- **The Mermaid check is not in the suite.** It needed a CDN and a browser, and
+  adding a Mermaid dependency to render a block we only ever write as text is
+  not worth it (D7, D8, and the assignment's "no new dependency"). So nothing in
+  CI will notice if a future change breaks the block's *syntax* — the unit tests
+  pin its exact text, which is the next best thing. Worth one manual paste into
+  a GitHub or GitLab preview during testing.
+- **`e2e/fixtures/empty.json` is not what the assignment took it for.** It is a
+  zero-byte file — the empty-*file* syntax case `validation.spec.ts` uses — and
+  not a valid design with empty lists. I added `e2e/fixtures/empty-design.json`
+  beside it rather than renaming the old one, because a rename would have
+  touched `validation.spec.ts`, which is not this task's. The two names sitting
+  together are confusing; see the note below.
+- **Nothing on the page confirms a download.** The browser's own download UI is
+  the only feedback. Saying so in the status region would overwrite the "is
+  drawn below" sentence, and that region's protocol is D41's, which is Task
+  04's — so I left it rather than quietly changing the rule. Named below.
+- **The disabled button is not in the tab order**, which is what `disabled`
+  means. A keyboard user exploring the page before choosing a file will not meet
+  it. The alternative — `aria-disabled` plus a click that refuses — is more
+  machinery than this earns today, and is worth revisiting when the row has four
+  buttons.
+- **The button's styling is deliberately thin**: no colour of its own, so it
+  borrows the page's text colour and its type through `currentColor` and
+  `font: inherit`. Task 09 makes that decision once, for both pages, and there
+  is no new colour here for it to undo.
+
+### Out-of-scope notes for Jared
+
+- **The export row will want a name once it has four buttons.** One button with
+  a clear label needs nothing; four in a row would read better as a group with
+  an accessible name, or under a small heading. Worth deciding in Task 06 rather
+  than four times.
+- **Whether an export should announce itself.** See the gap above: it is a
+  live-region question (D41) rather than an export question, so it wants its own
+  decision — and if the answer is yes, all four exporters should do it the same
+  way.
+- **`e2e/fixtures/empty.json` reads like a fixture for an empty design and is
+  not one.** A rename — `no-bytes.json`, say — would stop the next person making
+  the same assumption. It touches `validation.spec.ts`, so it belongs in a
+  chore rather than here.
+- **Nothing was touched in the parked items**: the Firefox/SpiderMonkey wording
+  (`describeLoadError.ts:191`, `:193`), `loadDesign.ts`'s doc comment,
+  `loadDesign.test.ts:146`'s conditional assertion, and `straightLine` at
+  `layout.ts:329`. Confirming the premise of the last one from inside the task:
+  this export reads no `LayoutEdge.points` at all, because Mermaid places and
+  draws every arrow itself.
+- **`layout.ts` now has six consumers**, not five: `renderDrawing.ts`,
+  `describeDrawing.ts`, `index.astro`, `layout.test.ts`,
+  `describeDrawing.test.ts` and `toMarkdown.ts` — plus `toMarkdown.test.ts`,
+  which imports it to build the layouts it asserts on.
