@@ -418,6 +418,33 @@ test.describe('Exporting the design as HTML', () => {
     expect(dialogs).toEqual([]);
   });
 
+  test('keeps a label that is not plain ASCII, read straight off the disk', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('markup-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadHtml(
+      test.info().outputPath('encoding', 'Labels-that-look-like-markup.html'),
+    );
+
+    await page.goto(pathToFileURL(file.path).href);
+
+    // Opened from a folder, there is no header to say how the bytes are
+    // encoded: the file's own `<meta charset>` is the only thing standing
+    // between a Greek label and a row of question marks.
+    await expect(
+      page.getByRole('cell', { name: 'Παραγγελίες — naïve café', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('cell', { name: 'δίνει «σήμα»', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('svg text', { hasText: 'naïve café' })).toHaveCount(1);
+  });
+
   test('exports a design with nothing in it without showing an empty canvas', async ({
     page,
   }) => {

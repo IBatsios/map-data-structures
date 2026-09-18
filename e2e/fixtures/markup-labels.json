@@ -3,10 +3,12 @@
   "nodes": [
     { "id": "script", "label": "<script>alert('x')</script>", "type": "service" },
     { "id": "img", "label": "<img src=x onerror=alert('y')>", "type": "database" },
-    { "id": "amp", "label": "Tom & Jerry \"quoted\"", "type": "queue" }
+    { "id": "amp", "label": "Tom & Jerry \"quoted\"", "type": "queue" },
+    { "id": "accents", "label": "Παραγγελίες — naïve café", "type": "external" }
   ],
   "edges": [
     { "from": "script", "to": "img", "label": "</style><script>alert('z')</script>" },
-    { "from": "img", "to": "amp", "label": "a & b" }
+    { "from": "img", "to": "amp", "label": "a & b" },
+    { "from": "amp", "to": "accents", "label": "δίνει «σήμα»" }
   ]
 }
