@@ -83,3 +83,127 @@ Do not touch `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, or `docs/
 ### Definition of done for this cycle
 
 Every acceptance criterion above is checked in the task file, `bun run test` passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+There is a project where there was none. `bun install`, `bun run dev`, `bun run test`
+and `bun run build` all work. One page at `/` has a labelled file input; choosing a
+JSON file reads it in the browser with the File API, parses it, hands it to
+`parseDesign`, and draws one SVG with a box per node and a line per edge. Nothing is
+posted anywhere and nothing is stored. Vitest runs four tests over the one pure
+function, GitHub Actions runs them on every push and pull request, and a pre-commit
+hook formats staged files and runs the suite before a commit lands.
+
+The scaffolder would not write into a non-empty directory, so it was run into a
+temporary subdirectory and its files moved into the root. `docs/`, `CLAUDE.md`,
+`LICENSE`, `.claude/` and `.env.example` are byte-for-byte untouched, and Astro's
+`.gitignore` entries were merged into the existing file rather than replacing it —
+only five dependency-manager log patterns were actually new.
+
+### Files added or changed
+
+- `package.json` — new. Name `map-data-structures`, `"test": "vitest run"`, `"prepare": "husky"`.
+- `bun.lock` — new, committed. CI installs with `--frozen-lockfile`, so it is load-bearing.
+- `astro.config.mjs`, `tsconfig.json` — new, from the scaffold. `tsconfig.json` extends `astro/tsconfigs/strict`.
+- `vitest.config.ts` — new. Built on Astro's `getViteConfig`, so a test resolves imports the way a page does.
+- `src/lib/design.types.ts` — new. `Design`, `DesignNode`, `DesignEdge`: the data model from `docs/ARCHITECTURE.md`.
+- `src/lib/parseDesign.ts` — new. The one pure function; no validation, by design.
+- `src/lib/parseDesign.test.ts` — new, written first. Holds the two-node one-edge fixture inline.
+- `src/pages/index.astro` — the one page: file input, status line, SVG drawing.
+- `public/favicon.ico`, `public/favicon.svg` — from the scaffold.
+- `.github/workflows/ci.yml` — new, the task file's YAML verbatim.
+- `README.md` — new. Run, test and build commands, checked against `CLAUDE.md`.
+- `.gitignore` — merged, not replaced. Added only the `npm/yarn/pnpm/bun-debug.log*` patterns.
+- `.husky/pre-commit`, `.lintstagedrc`, `.prettierrc`, `.prettierignore` — new, the pre-commit setup.
+- `docs/DECISIONS.md` — appended D12 to D17.
+- `docs/tasks/01-walking-skeleton.md` — untouched. The boxes are yours.
+- `.env.example` — untouched, deliberately. See the notes at the end.
+
+### Tests written
+
+Four, all in `src/lib/parseDesign.test.ts`, all pure: no browser, no DOM, no library
+beyond Vitest, so CI needs nothing but bun.
+
+1. _returns the title, nodes and edges of a two-node, one-edge design_ — pins the whole
+   return shape, field by field. This is the contract Task 02's `loadDesign` has to keep.
+2. _keeps every node and every edge, in the order the file lists them_ — the PRD's rule
+   that the drawing shows everything in the JSON, with nothing dropped or mislabeled.
+3. _returns empty lists for a design that has no nodes and no edges_ — the empty case
+   returns empty lists rather than throwing.
+4. _does not mutate the object it was given_ — pins purity, and that the result is a copy
+   rather than a view onto the parsed file, which is what lets Task 03's layout and the
+   exporters hold it safely.
+
+### Local results
+
+`bun run test`: pass — 1 file, 4 tests, about 200ms.
+`bun run build`: pass — 1 page built, static output to `dist/`.
+`bun run dev`: pass — server up on 4321, `GET /` returned 200, and `astro dev logs` shows
+no errors or warnings.
+
+### Decisions recorded
+
+Six rows appended to `docs/DECISIONS.md`:
+
+- **D12** the scaffold flags, and why the files were moved in from a temporary folder.
+- **D13** confirms `oven-sh/setup-bun@v2`, `--frozen-lockfile` and `bun run test` — the three
+  things the task file flagged as unconfirmed guesses.
+- **D14** the provisional JSON shape, including `from` and `to` as the edge's endpoints,
+  explicitly marked as Task 02's to rename before anything is published.
+- **D15** the types module and the `Design`-prefixed names, because `Node` is a DOM global.
+- **D16** the Prettier configuration and why it differs from the `setup-pre-commit` defaults.
+- **D17** that TypeScript is not installed, so nothing type-checks today.
+
+### Known gaps
+
+- **The drawing was not verified in a real browser.** Playwright is Task 03's, and this task
+  is told to keep the suite free of the browser. What I did instead: served the page and read
+  the markup back, then ran the page's own client script under a throwaway DOM stub in the
+  scratch directory and inspected the SVG it produced — two `rect`s at x=24 and x=240, a
+  `line` from x=184 to x=240 at y=56, both labels centred, and the `title` element present.
+  That is strong evidence, not a demonstration. **Please open it in a browser and choose a
+  real file**; the JSON block in `README.md` is a fixture you can paste into a file and use.
+- **The page's client script has no automated test.** Testing it needs a DOM environment
+  (jsdom or happy-dom), which this task's dependency limit excludes. It stays uncovered until
+  Task 03's Playwright walk.
+- **Nothing type-checks.** See D17. `tsconfig.json` is strict, but no `tsc` and no
+  `astro check` runs anywhere, so a type error — particularly inside the `<script>` block in
+  `index.astro`, which Vitest never loads — would go unseen. The code is written so that it
+  needs no cast anywhere, but that is care, not a gate.
+- **CI green on GitHub** is the criterion I cannot close by myself: the push and the pull
+  request are what trigger the run. The result as of this handoff is recorded below.
+
+### Out-of-scope notes for Jared
+
+Real things I found and left alone:
+
+1. **No typecheck gate anywhere (D17).** Worth a task of its own, or a line in an existing
+   one: add `typescript` and `@astrojs/check`, an `astro check` script, a CI step, and the
+   typecheck line the `setup-pre-commit` skill wanted in the hook. The blind spot is the
+   `<script>` block in every `.astro` page, which no test ever imports.
+2. **Astro 7 changed `astro dev` into a detached background server.** It prints a pid and
+   returns immediately; it is controlled with `astro dev status`, `astro dev logs` and
+   `astro dev stop`. Task 03's Playwright `webServer` config, and anything else that expects
+   `bun run dev` to block, will need to account for that.
+3. **The pre-commit hook runs the whole suite.** That is 200ms today. Once Task 03 adds
+   Playwright, make sure the hook keeps running only Vitest — if `bun run test` grows into the
+   end-to-end walk, every commit will start a browser.
+4. **`husky init` writes `bun test` into the hook** — bun's own runner, not Vitest. I fixed it,
+   but anyone re-running `husky init` gets it back. It is the exact trap the assignment warned
+   about, and a tool generates it.
+5. **The Astro scaffold ships its own `AGENTS.md` and `CLAUDE.md`.** I brought neither into the
+   repo, since the repo's `CLAUDE.md` is authoritative and the pipeline owns the agent files.
+   If anyone wants Astro's framework notes for agents, that is a choice to make deliberately,
+   not an oversight to correct.
+6. **A malformed file currently shows one line of text** in the status region and clears the
+   drawing. That is an error boundary, not the validation feature — leaving the exception
+   uncaught would have meant a bad file silently doing nothing at all. Task 04 should replace
+   that line wholesale; please do not read it as validation already half-built.
+7. **`.env.example` was deliberately not edited.** Nothing in `src/`, `astro.config.mjs` or
+   `vitest.config.ts` reads `import.meta.env` or `process.env` — verified by grep — so there is
+   no variable to list. A pattern scan for keys and private keys over the working tree found
+   nothing.
