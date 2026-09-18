@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Design } from './design.types';
-import { DRAWING_MARGIN, MAX_TEXT_WIDTH, MIN_NODE_WIDTH, layoutDesign } from './layout';
+import {
+  DRAWING_MARGIN,
+  MAX_TEXT_WIDTH,
+  MIN_NODE_WIDTH,
+  SELF_LOOP_EXTENT,
+  layoutDesign,
+} from './layout';
 import type { LayoutBox, LayoutNode } from './layout';
 import { DEFAULT_SHAPE } from './shapes';
 
@@ -216,7 +222,7 @@ describe('layoutDesign', () => {
     expect(layout.edges.map((edge) => edge.label)).toEqual(['asks', 'tells']);
   });
 
-  it('routes an edge that points a node at itself', () => {
+  it('loops a self-edge against the node it points at, not out in empty space', () => {
     const layout = layoutDesign({
       title: 'Self reference',
       nodes: [{ id: 'a', label: 'Retry loop', type: 'service' }],
@@ -224,7 +230,64 @@ describe('layoutDesign', () => {
     });
 
     expect(layout.edges).toHaveLength(1);
-    expect(layout.edges[0]?.points.length).toBeGreaterThanOrEqual(2);
+
+    const node = nodeById(layout.nodes, 'a');
+    const route = layout.edges[0];
+    const first = route?.points[0];
+    const last = route?.points.at(-1);
+
+    // Both ends sit on the node's own border, so the loop is attached at both
+    // ends rather than floating beside the box.
+    expect(first?.x).toBe(node.x + node.width);
+    expect(last?.x).toBe(node.x + node.width);
+    expect(first?.y).toBeGreaterThan(node.y);
+    expect(first?.y).toBeLessThan(node.y + node.height);
+    expect(last?.y).toBeGreaterThan(node.y);
+    expect(last?.y).toBeLessThan(node.y + node.height);
+    expect(last?.y).not.toBe(first?.y);
+
+    // And it leaves the box in between, so it reads as a loop, not a dot.
+    const reach = Math.max(...(route?.points ?? []).map((point) => point.x));
+
+    expect(reach).toBe(node.x + node.width + SELF_LOOP_EXTENT);
+  });
+
+  it('keeps every part of a self-edge beside the node it loops on', () => {
+    // The design the detached route was found on: dagre keeps self-edges out of
+    // its routing and parks a stub beside the node for the consumer to replace,
+    // and the stub landed clear of the box with its arrowhead pointing at
+    // nothing. Every point of the loop belongs to its node's own neighbourhood.
+    const layout = layoutDesign({
+      title: 'Retries',
+      nodes: [
+        { id: 'a', label: 'Alpha', type: 'service' },
+        { id: 'b', label: 'Beta', type: 'service' },
+      ],
+      edges: [
+        { from: 'a', to: 'b', label: 'asks' },
+        { from: 'a', to: 'b', label: 'tells' },
+        { from: 'a', to: 'a', label: 'loops to itself' },
+      ],
+    });
+
+    const a = nodeById(layout.nodes, 'a');
+    const self = layout.edges[2];
+
+    expect(self?.from).toBe('a');
+    expect(self?.to).toBe('a');
+
+    for (const point of self?.points ?? []) {
+      expect(point.x).toBeGreaterThanOrEqual(a.x + a.width);
+      expect(point.x).toBeLessThanOrEqual(a.x + a.width + SELF_LOOP_EXTENT);
+      expect(point.y).toBeGreaterThanOrEqual(a.y);
+      expect(point.y).toBeLessThanOrEqual(a.y + a.height);
+    }
+
+    // The label belongs to the loop too: clear of it, level with the node.
+    const labelBox = self?.labelBox;
+
+    expect(labelBox?.x).toBeGreaterThanOrEqual(a.x + a.width + SELF_LOOP_EXTENT);
+    expect((labelBox?.y ?? 0) + (labelBox?.height ?? 0) / 2).toBe(a.y + a.height / 2);
   });
 
   it('gives every edge a label box wide enough for its label', () => {

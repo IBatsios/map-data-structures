@@ -30,7 +30,7 @@
 import dagre, { Graph } from '@dagrejs/dagre';
 import type { EdgeLabel, GraphLabel, NodeLabel, Point } from '@dagrejs/dagre';
 
-import type { Design, DesignNode } from './design.types';
+import type { Design, DesignEdge, DesignNode } from './design.types';
 import type { NodeShape } from './shapes';
 import { shapeForType } from './shapes';
 import { estimateTextWidth, wrapText } from './text';
@@ -64,6 +64,18 @@ const NODE_SEPARATION = 48;
 
 /** Clear space between two rows, in pixels. */
 const RANK_SEPARATION = 72;
+
+/**
+ * How far a self-edge's loop reaches out past the node it loops on, in pixels.
+ *
+ * It plus SELF_LOOP_LABEL_GAP stays inside NODE_SEPARATION, so the loop and its
+ * label sit in the lane dagre already reserves beside a node that loops on
+ * itself rather than reaching into a neighbour's.
+ */
+export const SELF_LOOP_EXTENT = 34;
+
+/** Clear space between a self-edge's loop and its label plate, in pixels. */
+const SELF_LOOP_LABEL_GAP = 8;
 
 /** Padding inside an edge label's plate, in pixels. */
 const EDGE_LABEL_PADDING = { x: 7, y: 4 } as const;
@@ -149,7 +161,7 @@ export function layoutDesign(design: Design): DesignLayout {
   dagre.layout(graph);
 
   const placed = readPlacedNodes(sized, graph);
-  const routed = readRoutedEdges(design, graph);
+  const routed = readRoutedEdges(design, graph, placed);
   const offset = offsetToMargin(placed, routed);
 
   const nodes = placed.map((node) => shiftBox(node, offset));
@@ -267,11 +279,23 @@ function readPlacedNodes(
  * would draw nothing; falling back to a straight line between the two centres
  * keeps the edge visible. An edge that is not drawn is a dropped edge.
  */
-function readRoutedEdges(design: Design, graph: LayoutGraph): readonly LayoutEdge[] {
+function readRoutedEdges(
+  design: Design,
+  graph: LayoutGraph,
+  placed: readonly LayoutNode[],
+): readonly LayoutEdge[] {
+  const boxes = new Map(placed.map((node) => [node.id, node] as const));
+
   return design.edges.map((edge, index) => {
+    const size = edgeLabelSize(edge.label);
+    const loopsOn = edge.from === edge.to ? boxes.get(edge.from) : undefined;
+
+    if (loopsOn) {
+      return selfLoop(edge, loopsOn, size);
+    }
+
     const routed = graph.edge({ v: edge.from, w: edge.to, name: String(index) });
     const points = routed?.points ?? [];
-    const size = edgeLabelSize(edge.label);
     const centre = labelCentre(routed, points);
 
     return {
@@ -286,6 +310,45 @@ function readRoutedEdges(design: Design, graph: LayoutGraph): readonly LayoutEdg
       },
     };
   });
+}
+
+/**
+ * A loop from a node back to itself, drawn against that node's own box.
+ *
+ * Dagre keeps self-edges out of edge routing: it parks a stub in a lane beside
+ * the node and leaves the loop itself to the consumer. Passing that stub
+ * through drew a line and an arrowhead in empty space, touching neither end of
+ * anything — a route that means nothing where it sits. So this one route is
+ * ours: out of the node's right border, around, and back into it, which is what
+ * lets a reader see which box the arrow loops on. The label sits clear of the
+ * loop and level with the node, where it cannot cover either.
+ */
+function selfLoop(
+  edge: DesignEdge,
+  node: LayoutBox,
+  size: { readonly width: number; readonly height: number },
+): LayoutEdge {
+  const border = node.x + node.width;
+  const reach = border + SELF_LOOP_EXTENT;
+  const upper = node.y + node.height / 3;
+  const lower = node.y + (node.height * 2) / 3;
+
+  return {
+    from: edge.from,
+    to: edge.to,
+    label: edge.label,
+    points: [
+      { x: border, y: upper },
+      { x: reach, y: upper },
+      { x: reach, y: lower },
+      { x: border, y: lower },
+    ],
+    labelBox: {
+      x: reach + SELF_LOOP_LABEL_GAP,
+      y: node.y + node.height / 2 - size.height / 2,
+      ...size,
+    },
+  };
 }
 
 /** Where dagre put the label, or the middle of the route if it put it nowhere. */
