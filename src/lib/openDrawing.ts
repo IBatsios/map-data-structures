@@ -34,6 +34,7 @@
  */
 
 import drawingStyles from '../styles/drawing.module.css';
+import type { DrawingRegion } from './drawingSheets';
 import type { DesignLayout } from './layout';
 import { renderDrawing } from './renderDrawing';
 
@@ -126,6 +127,74 @@ export function openDrawing(
   resolveStyles(svg, view, overrides);
 
   return { svg, close: () => holder.remove() };
+}
+
+/**
+ * Shows one piece of an open drawing for as long as something is reading it.
+ *
+ * Both exports need the same thing and neither can get it by cropping
+ * afterwards: a sheet of a tiled drawing is a rectangle of the canvas, and the
+ * only way to draw that rectangle *at the size the sheet gives it* is to say so
+ * before it is drawn. An SVG's `viewBox` is exactly that — the piece of its own
+ * coordinate space it shows — and both readers honour it. svg2pdf clips the
+ * outer `<svg>` to its viewport unless `overflow` says otherwise, so the vector
+ * ink outside the piece does not spill onto the page; the browser does the same
+ * when it parses the serialised markup back as an image, and it re-rasterises
+ * the vector at whatever size the canvas asks for rather than scaling a picture
+ * of the whole drawing, which is what keeps a sheet sharp.
+ *
+ * The `width` and `height` attributes move with it, because they are what gives
+ * the element its shape when there is no viewport telling it otherwise, and a
+ * piece that is a different shape from the whole would otherwise be letterboxed
+ * inside it.
+ *
+ * Both are put back afterwards, whatever happened while they were changed. The
+ * element is the export's own and is thrown away when `close` is called, but an
+ * export that leaves it in a state the next sheet does not expect is a bug that
+ * only shows up on the second sheet.
+ *
+ * @param svg - the drawing, from `openDrawing`
+ * @param region - the piece to show, in the drawing's own pixels
+ * @param read - what to do while that piece is the one on show
+ * @returns whatever `read` returned
+ *
+ * @example
+ * ```typescript
+ * const png = await withDrawingRegion(drawing.svg, sheet.region, () =>
+ *   rasteriseDrawing(drawing.svg, doc, size),
+ * );
+ * ```
+ */
+export async function withDrawingRegion<T>(
+  svg: SVGSVGElement,
+  region: DrawingRegion,
+  read: () => T | Promise<T>,
+): Promise<T> {
+  const viewBox = svg.getAttribute('viewBox');
+  const width = svg.getAttribute('width');
+  const height = svg.getAttribute('height');
+
+  svg.setAttribute('viewBox', `${region.x} ${region.y} ${region.width} ${region.height}`);
+  svg.setAttribute('width', String(region.width));
+  svg.setAttribute('height', String(region.height));
+
+  try {
+    return await read();
+  } finally {
+    restore(svg, 'viewBox', viewBox);
+    restore(svg, 'width', width);
+    restore(svg, 'height', height);
+  }
+}
+
+/** One attribute put back the way it was, including not having been there. */
+function restore(svg: SVGSVGElement, name: string, value: string | null): void {
+  if (value === null) {
+    svg.removeAttribute(name);
+    return;
+  }
+
+  svg.setAttribute(name, value);
 }
 
 /**

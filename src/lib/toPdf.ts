@@ -52,7 +52,7 @@
 import { drawableLayout } from './drawableText';
 import { readFontCoverage } from './fontCoverage';
 import type { DesignLayout } from './layout';
-import { openDrawing } from './openDrawing';
+import { openDrawing, withDrawingRegion } from './openDrawing';
 import type { PdfDocumentPlan, PdfItem } from './pdfPlan';
 import { PAGE_HEIGHT, PAGE_WIDTH, pdfPlan } from './pdfPlan';
 
@@ -227,12 +227,18 @@ async function writeItem(
     throw new Error('The PDF plan asked for a drawing that was never rendered.');
   }
 
-  await draw(svg, pdf, {
-    x: item.x,
-    y: item.y,
-    width: item.width,
-    height: item.height,
-  });
+  // One drawing, rendered once, shown a piece at a time. A design small enough
+  // for one page asks for the whole canvas here, which is what it always did;
+  // a larger one asks for this sheet's piece of it, and the ink stays vector
+  // either way (D62) because svg2pdf is reading the same elements.
+  await withDrawingRegion(svg, item.region, () =>
+    draw(svg, pdf, {
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    }),
+  );
 }
 
 /** Just enough of jsPDF to write this document, so nothing here says `any`. */
