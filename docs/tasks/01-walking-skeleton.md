@@ -6,7 +6,7 @@
 
 **Blocked by:** None. Phase 0 of the runbook must be complete first: remote created, secrets scanned, first push done. There is no database, and `.env` has no variables.
 
-**Status:** in progress
+**Status:** done
 
 ## Steps, in order
 
