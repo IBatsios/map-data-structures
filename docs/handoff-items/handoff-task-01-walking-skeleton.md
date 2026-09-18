@@ -311,3 +311,34 @@ None. Nothing needed correcting.
 
 https://github.com/IBatsios/map-data-structures/pull/1 — open as a **draft**, both CI
 runs green. Sam marks it ready and merges; I do not.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/01-walking-skeleton.md` | All five acceptance boxes were already checked, but `**Status:**` still read `in progress` | Set `**Status:** done`. Left the steps, acceptance criteria wording, and notes untouched — body of a generated task file. |
+| `README.md` | Run/test/build commands present, correct, match `package.json` and `CLAUDE.md`; layout section matches the real `src/` tree; states plainly no variables are read | No change needed. |
+| `CLAUDE.md` | "Run and test" still said "confirm them once Task 01 has created `package.json`," which it now has; no status snapshot existed | Added a short `## Status` line and the `bun run build` command; removed the stale hedge. Kept it to a few lines, per "snapshot, not changelog." |
+| `docs/DECISIONS.md` | D9–D17 present, matching Amon's report and Jahmyr's verification with no gaps | No change needed. |
+| `.env.example` | Placeholder-only, matches the codebase (grep for `import.meta.env`/`process.env`/`PUBLIC_` across `src/`, `astro.config.mjs`, `vitest.config.ts` returns nothing) | No change needed. |
+| Handoff doc (this file) | Jared's assignment, Amon's work, and Jahmyr's round 1 report all present and legible | Appended this section. |
+
+`docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md`, and the body of the task file were left untouched, as generated documents — nothing found wrong in them this round.
+
+### Gates
+
+`bun run test`: pass — 1 file, 4 tests, ~190-195ms. Re-run after the doc-fix commit and again on `main` post-merge; same result both times.
+CI: green on both the push run and the pull request run, before and after the doc-fix commit (runs 35318246340/35318249162 pre-fix, 35318476832/35318481413 post-fix).
+Secret scan: `gitleaks detect --source . --no-banner` — "no leaks found" (13 commits, ~213 KB scanned).
+
+### Merge
+
+Doc fixes (Status field, CLAUDE.md) committed to `feature/walking-skeleton` as `c99502a`, pushed, both CI runs re-confirmed green before merging. PR marked ready, then squashed as `e8ac5f1` into `main`. Branch `feature/walking-skeleton` deleted on GitHub (confirmed via `gh api` 404 and `git fetch --prune`). PR https://github.com/IBatsios/map-data-structures/pull/1.
+
+### Left for a person
+
+Nothing blocking. Two standing gaps carried into `docs/handoff-items/handoff-next-phase.md` for whoever picks up Task 02: the missing typecheck gate (D17) and duplicate-node-id collapsing, which Task 02's Zod schema should reject. Neither is a defect in Task 01 — both are pre-named scope for later tasks.
