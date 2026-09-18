@@ -1,4 +1,6 @@
 ---
+import styles from '../styles/upload.module.css';
+
 const pageTitle = 'MapDataStructures';
 ---
 
@@ -20,10 +22,20 @@ const pageTitle = 'MapDataStructures';
         is read in your browser and is never sent anywhere.
       </p>
 
-      <p>
-        <label for="design-file">Design JSON file</label>
-        <input id="design-file" type="file" accept="application/json,.json" />
-      </p>
+      <div id="drop-zone" class={styles.dropZone} data-dragging="false">
+        <p class={styles.field}>
+          <label for="design-file">Design JSON file</label>
+          <input
+            id="design-file"
+            type="file"
+            accept="application/json,.json"
+            aria-describedby="drop-hint"
+          />
+        </p>
+        <p id="drop-hint" class={styles.hint}>
+          Or drag a JSON file onto this page from anywhere on your desktop.
+        </p>
+      </div>
 
       <p id="upload-status" role="status"></p>
 
@@ -31,8 +43,9 @@ const pageTitle = 'MapDataStructures';
     </main>
 
     <script>
+      import { describeUpload } from '../lib/describeUpload';
       import type { Design, DesignEdge, DesignNode } from '../lib/design.types';
-      import { parseDesign } from '../lib/parseDesign';
+      import { loadDesign } from '../lib/loadDesign';
 
       const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
       const BOX_WIDTH = 160;
@@ -47,55 +60,107 @@ const pageTitle = 'MapDataStructures';
 
       interface PageElements {
         readonly fileInput: HTMLInputElement;
+        readonly dropZone: HTMLElement;
         readonly status: HTMLElement;
         readonly drawing: HTMLElement;
       }
 
       /**
-       * The whole of the walking skeleton: choose a file, read it here in the
-       * browser, and draw a box per node and a line per edge. Placement is a
-       * single row; Task 03 replaces it with a real layout.
+       * Choose a file or drop one on the page, read it here in the browser, say
+       * what it holds, and draw a box per node and a line per edge. Placement is
+       * a single row; Task 03 replaces it with a real layout.
+       *
+       * Nothing with logic in it lives in this script: no test and, until D17
+       * closes, no type-checker can see in here. Validating is `loadDesign`'s
+       * and counting is `describeUpload`'s, both in `src/lib`, both tested.
        */
       function startUploadPage(): void {
         const elements = findPageElements();
 
         elements.fileInput.addEventListener('change', () => {
-          void drawChosenFile(elements);
+          void showFile(elements.fileInput.files?.[0], elements);
         });
+
+        watchForDroppedFiles(elements);
       }
 
       function findPageElements(): PageElements {
         const fileInput = document.querySelector('#design-file');
+        const dropZone = document.querySelector('#drop-zone');
         const status = document.querySelector('#upload-status');
         const drawing = document.querySelector('#drawing');
 
         if (
           !(fileInput instanceof HTMLInputElement) ||
+          !(dropZone instanceof HTMLElement) ||
           !(status instanceof HTMLElement) ||
           !(drawing instanceof HTMLElement)
         ) {
           throw new Error('The upload page is missing one of its elements.');
         }
 
-        return { fileInput, status, drawing };
+        return { fileInput, dropZone, status, drawing };
       }
 
-      async function drawChosenFile(elements: PageElements): Promise<void> {
-        const file = elements.fileInput.files?.[0];
+      /**
+       * Drag-and-drop, as an addition to the file input and never as a
+       * replacement for it: the input stays the keyboard's way in.
+       *
+       * Both `dragover` and `drop` must have their default prevented. A browser
+       * whose default runs navigates away to the dropped file, which throws the
+       * page away and, with it, the promise that the file never leaves here.
+       */
+      function watchForDroppedFiles(elements: PageElements): void {
+        document.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'copy';
+          }
+          setDragging(elements, true);
+        });
 
+        // A `dragleave` with nothing behind it is the pointer leaving the
+        // window; every other one is it crossing between elements inside it.
+        document.addEventListener('dragleave', (event) => {
+          if (event.relatedTarget === null) {
+            setDragging(elements, false);
+          }
+        });
+
+        document.addEventListener('drop', (event) => {
+          event.preventDefault();
+          setDragging(elements, false);
+          void showFile(event.dataTransfer?.files?.[0], elements);
+        });
+      }
+
+      /** Marks the drop zone, and only when the state actually changed. */
+      function setDragging(elements: PageElements, isDragging: boolean): void {
+        const value = String(isDragging);
+
+        if (elements.dropZone.dataset.dragging !== value) {
+          elements.dropZone.dataset.dragging = value;
+        }
+      }
+
+      async function showFile(
+        file: File | undefined,
+        elements: PageElements,
+      ): Promise<void> {
         if (!file) {
           return;
         }
 
         try {
-          const design = parseDesign(JSON.parse(await file.text()));
+          const design = loadDesign(await file.text());
           elements.drawing.replaceChildren(renderDesign(design));
-          elements.status.textContent = '';
+          elements.status.textContent = describeUpload(file.name, design);
         } catch (error) {
           // Never leave a failure silent. Task 04 replaces this one line with
-          // messages that name the line or the field at fault.
+          // messages that name the line or the field at fault, out of the
+          // position and issue paths the error still carries.
           elements.drawing.replaceChildren();
-          elements.status.textContent = `That file could not be drawn: ${describe(error)}`;
+          elements.status.textContent = `That file could not be drawn: ${describeError(error)}`;
         }
       }
 
@@ -152,8 +217,14 @@ const pageTitle = 'MapDataStructures';
         const from = origins.get(edge.from);
         const to = origins.get(edge.to);
 
+        // The schema rejects an edge naming a node the file does not define, so
+        // reaching this means the app broke its own guarantee, not that the
+        // user's file is wrong. It stays because a map lookup is still a
+        // maybe-miss, and a silent one would draw a line from nowhere.
         if (!from || !to) {
-          throw new Error('an edge names a node the file does not define');
+          throw new Error(
+            `No box was placed for the node "${edge.from}" or "${edge.to}".`,
+          );
         }
 
         return createSvgElement('line', {
@@ -191,7 +262,7 @@ const pageTitle = 'MapDataStructures';
         return element;
       }
 
-      function describe(error: unknown): string {
+      function describeError(error: unknown): string {
         return error instanceof Error ? error.message : String(error);
       }
 

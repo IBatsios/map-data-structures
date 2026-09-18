@@ -17,9 +17,13 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Task 01 (walking skeleton) is done: choose a JSON file, see a box per node and a
-line per edge. No validation, no styling beyond defaults, no export yet. See
-`docs/RUNBOOK.md` for the frontier.
+Tasks 01 and 02 are done. Choose a JSON file, with the picker or by dropping it
+on the page, and it is validated against the Zod schema in
+`src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
+edge naming an unknown node is refused, not silently drawn wrong. A loaded
+design shows its file name and node/edge counts, then a box per node and a
+line per edge. No layout beyond a single row, no styling beyond defaults, no
+export yet. See `docs/RUNBOOK.md` for the frontier.
 
 ## Run and test
 

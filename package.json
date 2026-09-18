@@ -15,7 +15,8 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "astro": "^7.3.3"
+    "astro": "^7.3.3",
+    "zod": "^4.6.5"
   },
   "allowScripts": {
     "esbuild": true

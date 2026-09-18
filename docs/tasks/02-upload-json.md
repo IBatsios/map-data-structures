@@ -6,7 +6,7 @@
 
 **Blocked by:** 01.
 
-**Status:** ready
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -18,11 +18,11 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can upload a JSON file describing a system: demonstrated end to end.
-- [ ] Tests cover the behavior, as a user would observe it, and pass.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Best-effort accessibility: the file input is reachable by keyboard and labeled, and drag-and-drop is an addition to it, not a replacement.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] As a user, I can upload a JSON file describing a system: demonstrated end to end.
+- [x] Tests cover the behavior, as a user would observe it, and pass.
+- [x] Every earlier test still passes; CI is green.
+- [x] Best-effort accessibility: the file input is reachable by keyboard and labeled, and drag-and-drop is an addition to it, not a replacement.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 

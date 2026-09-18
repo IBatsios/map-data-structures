@@ -29,13 +29,13 @@ Astro 7 runs `bun run dev` as a background server. `bunx astro dev status`,
 
 ## What works today
 
-The walking skeleton only: one page with a file input that reads a JSON design
-and draws a box per node and a line per edge. Layout is a single row, there is
-no validation yet, and there are no exports yet. The task list in
-`docs/RUNBOOK.md` says what comes next.
+One page. Choose a JSON design with the file input or drag one onto the page,
+and it is validated, its name and its node and edge counts appear, and a box
+per node and a line per edge is drawn. Layout is still a single row, the
+validation messages are still one blunt line, and there are no exports yet. The
+task list in `docs/RUNBOOK.md` says what comes next.
 
-The JSON it reads looks like this. The shape is provisional until Task 02
-publishes the schema:
+The JSON it reads looks like this:
 
 ```json
 {
@@ -48,11 +48,18 @@ publishes the schema:
 }
 ```
 
+Every field is required and no string may be empty. Node ids have to be unique,
+and an edge's `from` and `to` have to name nodes the file defines. A key the
+schema does not name is ignored, and a design with no nodes and no edges is
+valid. `src/lib/design.schema.ts` is the definition; Task 09 publishes it as a
+page with a sample file.
+
 ## Layout
 
 ```
-src/lib/      the design core: types and the parser
+src/lib/      the design core: types, the schema, and the loader
 src/pages/    the Astro pages
+src/styles/   CSS Modules
 docs/         PRD, architecture, decisions, runbook, and one file per task
 ```
 

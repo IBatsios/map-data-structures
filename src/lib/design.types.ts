@@ -5,8 +5,11 @@
  *
  * These types are the contract between the parts of the app that never see
  * each other: the loader that reads a file, the layout that places the boxes,
- * and the four exporters that have to show what the preview shows. Task 02
- * adds the Zod schema that guarantees an uploaded file really has this shape.
+ * and the four exporters that have to show what the preview shows. They are
+ * written by hand rather than inferred from `design.schema.ts`, so that the
+ * contract stays readable, stays read-only, and costs a reader nothing to
+ * understand; `design.schema.ts` is what guarantees an uploaded file really has
+ * this shape, and `loadDesign` is the one place the two meet.
  *
  * `Node` and `Edge` are prefixed because `Node` is already a DOM global, and a
  * page module that imported both would silently get the wrong one.
