@@ -115,9 +115,13 @@ disabled the moment a file fails, so none of them ever saves the design before
 last.
 
 One thing to know before sending a large design: the drawing in the PDF and in
-the Word file is scaled to fit one page, and past about fifteen nodes its labels
-get too small to read. The two tables under it still carry every label at full
-size, and the Markdown and HTML exports do not shrink anything.
+the Word file is never printed smaller than 6 pt for its smallest text, so a
+design too large to fit one page at that size is spread over as many sheets as
+it needs — three for a fifteen-node design, twelve or fourteen for a forty-node
+one — each captioned with its place in the whole. Sixteen sheets is the limit; a
+design larger than that prints smaller than 6 pt and the document says so. The
+two tables under the drawing carry every label at full size whatever it does,
+and the Markdown and HTML exports do not shrink anything.
 
 Still to come: a page that publishes the JSON schema with a sample file, and
 deployment. The task list in `docs/RUNBOOK.md` says what comes next.

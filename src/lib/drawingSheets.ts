@@ -109,6 +109,15 @@ const ELEMENT_INK_MARGIN = 12;
  */
 const SCALE_STEPS = 30;
 
+/**
+ * The fewest sheets along one axis that can be spaced better than found.
+ *
+ * One sheet has nowhere to go, and two always start at the two ends whichever
+ * pass placed them, so only a third sheet can sit somewhere a reader would
+ * call wrong.
+ */
+const SHEETS_WORTH_SPACING = 3;
+
 /** How much room the drawing has to draw in, in points. */
 export interface SheetRoom {
   readonly width: number;
@@ -280,11 +289,13 @@ function nodeElement(node: LayoutNode): DrawingRegion {
 function edgeElements(edge: LayoutEdge): readonly DrawingRegion[] {
   const xs = edge.points.map((point) => point.x);
   const ys = edge.points.map((point) => point.y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
   const route: DrawingRegion = {
-    x: Math.min(...xs),
-    y: Math.min(...ys),
-    width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys),
+    x: left,
+    y: top,
+    width: Math.max(...xs) - left,
+    height: Math.max(...ys) - top,
   };
 
   return edge.labelBox.width > 0 ? [route, edge.labelBox] : [route];
@@ -436,7 +447,7 @@ function sheetCount(
 function cutsAlong(length: number, sheet: number, spans: readonly Span[]): number[] {
   const greedy = greedyCuts(length, sheet, spans);
 
-  if (greedy.length < 3) {
+  if (greedy.length < SHEETS_WORTH_SPACING) {
     return greedy;
   }
 
@@ -504,6 +515,13 @@ function wholeUnder(
   ).length;
 }
 
+/** The shape the drawing was cut into, which every caption is written from. */
+interface SheetGrid {
+  readonly columns: number;
+  readonly rows: number;
+  readonly total: number;
+}
+
 /** The drawing cut into its sheets at a settled scale, with its sentences. */
 function laidOut(
   size: SheetRoom,
@@ -511,56 +529,66 @@ function laidOut(
   room: SheetRoom,
   scale: number,
 ): DrawingSheetPlan {
-  const sheetWidth = room.width / scale;
-  const sheetHeight = room.height / scale;
-  const columnStarts = cutsAlong(size.width, sheetWidth, spans.x);
-  const rowStarts = cutsAlong(size.height, sheetHeight, spans.y);
-  const columns = columnStarts.length;
-  const rows = rowStarts.length;
-  const total = columns * rows;
+  const sheet = { width: room.width / scale, height: room.height / scale };
+  const columnStarts = cutsAlong(size.width, sheet.width, spans.x);
+  const rowStarts = cutsAlong(size.height, sheet.height, spans.y);
+  const grid: SheetGrid = {
+    columns: columnStarts.length,
+    rows: rowStarts.length,
+    total: columnStarts.length * rowStarts.length,
+  };
 
-  if (total === 1) {
+  if (grid.total === 1) {
     return onePiece(size, scale, false);
   }
 
   const sheets = rowStarts.flatMap((top, rowIndex) =>
-    columnStarts.map((left, columnIndex) => {
-      const region: DrawingRegion = {
-        x: left,
-        y: top,
-        width: Math.min(sheetWidth, size.width - left),
-        height: Math.min(sheetHeight, size.height - top),
-      };
-
-      return {
-        region,
-        number: rowIndex * columns + columnIndex + 1,
+    columnStarts.map((left, columnIndex) =>
+      sheetAt({ x: left, y: top }, { size, sheet, scale }, grid, {
+        number: rowIndex * grid.columns + columnIndex + 1,
         column: columnIndex + 1,
         row: rowIndex + 1,
-        width: region.width * scale,
-        height: region.height * scale,
-        caption: describeSheet(
-          rowIndex * columns + columnIndex + 1,
-          total,
-          columnIndex + 1,
-          columns,
-          rowIndex + 1,
-          rows,
-        ),
-      };
-    }),
+      }),
+    ),
   );
 
   return {
     scale,
     sheets,
-    columns,
-    rows,
+    columns: grid.columns,
+    rows: grid.rows,
     inline: false,
     tiled: true,
     smallestTextPoints: textPoints(scale),
-    spread: describeSpread(total, columns, rows),
+    spread: describeSpread(grid),
     tooSmall: textPoints(scale) < MIN_TEXT_POINTS ? describeTooSmall(scale) : null,
+  };
+}
+
+/** One sheet: the piece of the drawing at a corner, and what it is called. */
+function sheetAt(
+  corner: { x: number; y: number },
+  cut: { size: SheetRoom; sheet: SheetRoom; scale: number },
+  grid: SheetGrid,
+  place: { number: number; column: number; row: number },
+): DrawingSheet {
+  const region: DrawingRegion = {
+    x: corner.x,
+    y: corner.y,
+    // A sheet never runs past the drawing, and never needs to: the cuts along
+    // each axis stop at a whole sheet's width from the end.
+    width: Math.min(cut.sheet.width, cut.size.width - corner.x),
+    height: Math.min(cut.sheet.height, cut.size.height - corner.y),
+  };
+
+  return {
+    region,
+    number: place.number,
+    column: place.column,
+    row: place.row,
+    width: region.width * cut.scale,
+    height: region.height * cut.scale,
+    caption: describeSheet(place, grid),
   };
 }
 
@@ -576,29 +604,25 @@ const ONE_SHEET_OF_ITS_OWN = 'The drawing follows on a sheet of its own.';
  * knowing the number does not tell you where to hold the paper.
  */
 function describeSheet(
-  number: number,
-  total: number,
-  column: number,
-  columns: number,
-  row: number,
-  rows: number,
+  place: { number: number; column: number; row: number },
+  grid: SheetGrid,
 ): string {
-  const place = `Drawing, sheet ${number} of ${total}`;
+  const named = `Drawing, sheet ${place.number} of ${grid.total}`;
 
-  return columns > 1 && rows > 1
-    ? `${place} — column ${column} of ${columns}, row ${row} of ${rows}.`
-    : `${place}.`;
+  return grid.columns > 1 && grid.rows > 1
+    ? `${named} — column ${place.column} of ${grid.columns}, row ${place.row} of ${grid.rows}.`
+    : `${named}.`;
 }
 
 /** What the document says before a tiled drawing starts, so nobody hunts. */
-function describeSpread(total: number, columns: number, rows: number): string {
-  if (columns > 1 && rows > 1) {
-    return `The drawing follows on ${total} sheets — ${columns} across and ${rows} down, left to right and then top to bottom.`;
+function describeSpread(grid: SheetGrid): string {
+  if (grid.columns > 1 && grid.rows > 1) {
+    return `The drawing follows on ${grid.total} sheets — ${grid.columns} across and ${grid.rows} down, left to right and then top to bottom.`;
   }
 
-  const order = columns > 1 ? 'left to right' : 'top to bottom';
+  const order = grid.columns > 1 ? 'left to right' : 'top to bottom';
 
-  return `The drawing follows on ${total} sheets, ${order}.`;
+  return `The drawing follows on ${grid.total} sheets, ${order}.`;
 }
 
 /**

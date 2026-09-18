@@ -331,3 +331,256 @@ them here.
 Every acceptance criterion above is checked in this document, `bun run test`
 passes, `bun run test:e2e` passes, `bun run check` is clean, and CI is green on
 the pull request.
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+A stated floor under the on-page size of the drawing's smallest text, applied in
+both paginated exports from one shared module, and sheets enough to honour it.
+
+- **`src/lib/drawingSheets.ts`** is the seam. It takes a `DesignLayout` and the
+  room one format has, both in points, and returns the scale, every sheet with
+  the piece of the drawing on it, and the sentences the document says about
+  them. Both planners read it; neither decides any of it any more.
+- **The floor is 6 pt, judged against `TYPE_FONT_SIZE` (11 px)**, which is the
+  smallest of the three sizes `layout.ts` draws at. `SMALLEST_TEXT_PX` is
+  imported from `layout.ts` rather than written down again, so the drawing's
+  typography and the floor cannot drift apart.
+- **A drawing that already printed at 6 pt or better is untouched.** Same place
+  in the document, same size, no caption, nothing said. `markup-labels.json` and
+  `order-intake.json` land here.
+- **A larger one takes a page per sheet**, captioned with its place in the whole,
+  with the count said before the sheets start. The PDF's sheets are a `viewBox`
+  on one rendered drawing, so the ink stays vector (D62); the Word file's are one
+  `ImageRun` each, painted, encoded and released one at a time.
+- **The Word raster has a floor of its own**, 200 px on the short side, raised on
+  both sides together so nothing is stretched. The 1000-node chain that produced
+  a 3 × 2304 PNG now produces 200 × 10,549.
+- **Both bounds D74 said the other route would need are built**: 16 sheets, one
+  content area at `RASTER_SCALE` per sheet, and their product as the total.
+- **Past the cap the document says so**, in its own words, rather than printing a
+  picture nobody can read and leaving the reader to work it out.
+
+### Files added or changed
+
+| File | What changed |
+|---|---|
+| `src/lib/drawingSheets.ts` | new — the floor, the sheet arithmetic, the cuts, and the three sentences |
+| `src/lib/drawingSheets.test.ts` | new — 20 test blocks over the floor, the cuts, the cap, the spacing and the coverage |
+| `src/lib/pdfPlan.ts` | `addDrawing` reads the seam; `PdfDrawingItem` gains `region`; `PdfTextItem` gains `quiet`; `Sheet.turn` is `reserve`'s page break named and made callable |
+| `src/lib/pdfPlan.test.ts` | the tiling block; the column-heading test narrowed to the pages a table runs onto |
+| `src/lib/toPdf.ts` | draws each item's region through `withDrawingRegion`; sets a quiet caption in the rules' grey |
+| `src/lib/docxPlan.ts` | `planDrawing` reads the seam and converts into DXA and image pixels; `MIN_RASTER_SIDE`, `MAX_SHEET_RASTER_PIXELS`, `MAX_RASTER_PIXELS`; a pointer comment on D51's sentence |
+| `src/lib/docxPlan.test.ts` | the drawing block rewritten around `sheets`; the hairline and budget tests |
+| `src/lib/toDocx.ts` | one `ImageRun` per sheet with a page break and a caption, painted sequentially |
+| `src/lib/openDrawing.ts` | `withDrawingRegion`, which both exports use to show one piece of the drawing |
+| `src/lib/rasteriseDrawing.ts` | comment only — says why the region moves the `viewBox` rather than cropping with a source rectangle |
+| `e2e/pdfText.ts` | `pdfDrawnText` (effective font sizes, through `q`/`Q`/`cm`/`Tm`) and `pdfPageCount` |
+| `e2e/docxText.ts` | `docxPictures` (PNG dimensions beside placed extent), `docxImageAltTexts`, `docxPageBreaks` |
+| `e2e/exportPdf.spec.ts` | the measurement block; the local page counter replaced by `pdfText.ts`'s |
+| `e2e/exportWord.spec.ts` | the measurement block |
+| `e2e/pages/uploadPage.ts` | `chooseMade`, so a 400- or 1000-node design needs no generated fixture |
+| `README.md` | the "past about fifteen nodes its labels get too small to read" paragraph corrected |
+| `docs/DECISIONS.md` | D81–D88 appended |
+
+`src/lib/layout.ts` and the preview's renderer are unchanged, as the assignment
+asked.
+
+### Tests written
+
+**`src/lib/drawingSheets.test.ts`** — the arithmetic, all of it pure:
+
+- the floor is judged against `TYPE_FONT_SIZE` and is at least 6 pt;
+- it holds for a design too wide for a sheet, and for one too tall;
+- a drawing that already fits keeps one sheet, the whole canvas, no caption and
+  nothing said, and is never scaled up — at 1 for a PDF and 0.75 for a `.docx`;
+- a tiled drawing leaves no part of itself off every sheet (sampled on a grid);
+- it cuts no node box, plate or route in half without leaving a whole copy
+  somewhere, checked against `drawingElements` itself rather than a second list;
+- its sheets are evenly spaced rather than two stacked on one strip;
+- every sheet is captioned, numbered left to right then top to bottom, inside
+  the room it was given and inside the drawing;
+- past the cap it never exceeds 16 sheets, prints below the floor, says so with
+  the floor and the cap in the sentence, and still covers the whole drawing;
+- the cap holds for 40, 200 and 600 nodes, both formats, both aspect ratios.
+
+**`src/lib/pdfPlan.test.ts`** — a drawing too large for one page is tiled, never
+prints its type line below 6 pt, shows a different piece on each sheet, covers
+the whole drawing, gets a page per sheet, says the count on the title page,
+captions each sheet, sets those captions quieter than the document's own words
+and nothing else quiet, still prints both tables after the drawing, and keeps
+every tile inside the margins and in the shape it was cut. Plus: the cap is
+never exceeded and the document says when it bound, and a drawing that already
+printed large enough is left exactly where it was.
+
+**`src/lib/docxPlan.test.ts`** — one sheet for a small design with the whole
+region, no caption and no page break; proportions kept on every sheet; the floor
+held; the raster a fixed multiple of the placed size; **no hairline** at 600
+nodes with no distortion; the raster work bounded per sheet and over the file
+for three shapes of design; the first sheet described and later sheets named;
+every sheet on a page of its own.
+
+**`e2e/exportPdf.spec.ts`** — the four reference designs measured off the bytes
+and held above the floor while their labels stay in the tables; a 400-node chain
+printing below the floor with the document saying so; every sheet named.
+
+**`e2e/exportWord.spec.ts`** — the same four measured off the bytes with no
+hairline on any sheet; the 1000-node chain that produced the hairline; each
+sheet named and page-broken with the first described and the rest not; every
+label still in the tables for `estate-sweep.json`.
+
+### The measurement that opened this cycle, reproduced
+
+Read off the produced bytes, not computed from the plan. Smallest text is the
+11 px type line — the opening table's PDF column was in fact the 12 px edge
+label, see "Out-of-scope notes" below.
+
+| design | canvas | PDF before | PDF now | sheets | Word before | Word now | sheets |
+|---|---|---|---|---|---|---|---|
+| `markup-labels.json` | 423 × 660 | 10.85 pt | **10.85 pt** | 1 | 8.25 pt | **8.25 pt** | 1 |
+| `order-intake.json` | 570 × 766 | 9.35 pt | **9.35 pt** | 1 | 8.25 pt | **8.25 pt** | 1 |
+| `platform-overview.json` | 1541 × 1082 | 3.68 pt | **6.00 pt** | 3 | 3.34 pt | **6.00 pt** | 3 |
+| `estate-sweep.json` | 1060 × 6480 | 1.11 pt | **6.00 pt** | 12 | 0.98 pt | **6.00 pt** | 14 |
+| 400-node chain | 188 × 63,160 | — | 1.87 pt, said | 16 | — | said | 16 |
+| 1000-node chain | 188 × 157,960 | — | 0.75 pt, said | 16 | — | said | 16 |
+
+The Word figure for `estate-sweep.json` reads back as "at least 4.86 pt" rather
+than 6.00, because it is the one design cut along both axes and a raster carries
+no font size — see "Known gaps". The PDF measures the same design at 6.00 pt
+exactly, and the unit tests hold the arithmetic for both.
+
+Embedded PNGs, the criterion-5 figures:
+
+| design | before | now |
+|---|---|---|
+| `order-intake` | 1710 × 2298 | 1710 × 2298 |
+| `platform-overview` | 1872 × 1314 | 1872 × 2361 ×3 |
+| `estate-sweep` | 377 × 2304 | 1872 × 2496 ×14 |
+| 200-node chain | 530 × 2304 | 233 × 2496 ×16 |
+| **1000-node chain** | **3 × 2304** | **200 × 10,549 ×16** |
+
+### Local results
+
+`bun run test`: **pass, 382 tests in 22 files** (343 before this cycle).
+`bun run test:e2e`: **pass, 110 steps** (97 before).
+`bun run check`: **clean — 0 errors, 0 warnings, 0 hints** over 67 files.
+`bun run build`: **pass**, 1 page in ~700 ms.
+
+Timing (criterion 11.1), on the build machine — Windows 11, bun 1.4.2, Chromium
+via Playwright, `dist/` served from localhost, first click including the library
+and font fetch:
+
+| design | PDF | Word |
+|---|---|---|
+| `platform-overview.json` (15 nodes, 16 edges) | **412 ms** | **593 ms** |
+| `estate-sweep.json` (40 nodes, 46 edges) | **998 ms** | **1,684 ms** |
+
+Against D67's 15-second guard, which stays loose. The two extreme cases are
+slower and still inside it: the 400-node chain's PDF takes 8.8 s and the
+1000-node chain's Word file 9.4 s, both dominated by dagre laying the design out
+rather than by the export.
+
+### Decisions recorded
+
+Eight rows appended to `docs/DECISIONS.md`, none of them edits to an existing
+row:
+
+- **D81** — overturns the first half of D66, on the record, naming it, in D61's
+  style. D66's second half (vector, and the tables at full size) stands.
+- **D82** — the floor is 6 pt against `TYPE_FONT_SIZE`, with the measured cost of
+  6.5 and 7 that rules them out.
+- **D83** — one shared module, working in points, with `naturalScale` per format.
+- **D84** — how the cuts are chosen: greedy pull-back, then even spacing.
+- **D85** — amends D74: its bounded-canvas argument, both replacement bounds, and
+  the raster's own floor.
+- **D86** — amends D75: landscape re-read rather than repeated, and why the two
+  formats now differ in sheet count.
+- **D87** — what a sheet is called to a screen reader, and the quiet caption.
+- **D88** — how the measurement is taken off the bytes, and its one limit.
+
+### Known gaps
+
+1. **`estate-sweep.json`'s Word figure is a bound, not the number.** A `.docx`
+   drawing is a raster and carries no font size, so the size on the page has to
+   be recovered from the placed size against the piece of the drawing the
+   picture holds — and the file does not name that piece. It is recoverable
+   exactly along any axis the drawing was *not* cut along, because a cut axis
+   always fills the sheet; `estate-sweep.json` is the one reference design cut
+   both ways, so it reads back as "at least 4.86 pt" against a true 6.00. The
+   PDF measures the same design at 6.00 pt exactly and `docxPlan.test.ts` holds
+   the arithmetic, so the fact is covered twice — but it is covered in two
+   places rather than one, and you should know that before you read the
+   annotation. Making it exact would mean writing the region into the file,
+   which I did not think worth changing a document for.
+
+2. **An edge whose route is longer than a sheet is drawn across the sheets it
+   crosses.** `estate-sweep.json` has one 3,532 px tall against a 1,241 px
+   sheet. Nothing is dropped — its ink appears on every sheet it runs through,
+   and both its ends are whole on the sheets that hold their nodes — but it is
+   not "whole on at least one sheet" in the literal sense criterion 3 uses for a
+   node box or a plate, because no sheet could hold it. Four of `estate-sweep.json`'s 132 shapes are in this
+   class in the PDF and five in the Word file, every one of them a route, none
+   of them a box or a plate; `platform-overview.json` has none at all. `pdfPlan.writeRow` has the same shape of answer for a table row too
+   tall for any page, so there is precedent in the module next door, but it is a
+   judgement you should make rather than inherit from me.
+
+3. **`CLAUDE.md` still carries the "known limit, now in two formats" note.**
+   Criterion 14 asks for it to be corrected and I have not touched it: my own
+   operating instructions say no agent message can authorise me to change
+   `CLAUDE.md`, and that rule outranks this doc. `README.md`'s paragraph *is*
+   corrected. The `CLAUDE.md` line needs whoever is authorised to make it — most
+   naturally Sam's documentation refresh, which process note 2 already routes
+   through its own `chore/…` branch.
+
+4. **The two formats take different numbers of sheets for the same design** —
+   twelve against fourteen for `estate-sweep.json` — because each is cut against
+   its own content box, and D66 and D75 chose two different margins on purpose.
+   They agree on `platform-overview.json` (three each, 6.00 pt each). Recorded in
+   D86 as honest rather than hidden, but flagging it because it will look like a
+   bug in a side-by-side read.
+
+5. **Two spec files are near the ceiling.** `e2e/exportWord.spec.ts` is 731 lines
+   and `e2e/exportPdf.spec.ts` 682, against `CLAUDE.md`'s 800. Neither passed it,
+   so I did not split them, but the next thing added to either will. `pdfPlan.ts`
+   (633) and `docxPlan.ts` (585) are comfortable.
+
+6. **`front-comments` was used for its substance, not its form.** Its house style
+   is emoji section dividers and a JSDoc block per import, which would read as a
+   different project beside `pdfPlan.ts` and `openDrawing.ts`. I took what it
+   asks for — a file header that says what and why, JSDoc on every exported
+   symbol with `@param`, `@returns` and an `@example`, and an inline comment at
+   every non-obvious rule — and wrote it in this repository's own voice.
+
+### Out-of-scope notes for Jared
+
+1. **The opening table's PDF column is the 12 px edge label, not the 14 px node
+   label.** Your handoff says "every measurement in both handoffs reports the
+   14 px node label", and that is true of the Word column — your own arithmetic
+   for `platform-overview.json` reproduces 4.25 pt exactly. The PDF column does
+   not: 12 × the fit scale reproduces all four of its figures to two decimals
+   (11.84, 10.20, 4.02, 1.21) and 14 × reproduces none of them. It does not
+   change the fix — you were right that the floor binds on the 11 px type line,
+   and it was *smaller* than the table said in both formats — but the PDF's true
+   "before" numbers for the type line are 10.85, 9.35, 3.68 and 1.11 pt, and the
+   200-node row should be read the same way. Worth correcting wherever that table is quoted.
+
+2. **`playwright.config.ts` reuses a running server, so `bun run test:e2e`
+   silently tests a stale `dist/` when one is already up.** `reuseExistingServer:
+   !process.env.CI` means the `bun run build` in the `webServer` command is
+   skipped, and I spent a confused ten minutes reading an export that did not
+   have my change in it. CI is unaffected. A `bun run build` before the walk, or
+   dropping the reuse locally, would close it. Not touched — it is config, not
+   this cycle's scope.
+
+3. **`describeDrawing` is called twice per Word export**: once by `docxPlan` for
+   the metadata and once inside `renderDrawing` for the SVG's own `<desc>`. It
+   was true before this cycle too. Harmless at any size we have measured, and it
+   belongs with the small-fixes cycle rather than here.
+
+4. **The exported HTML has a cousin of this problem when printed**, as you
+   guessed it might. `toHtml` embeds the drawing as vector sized to the page, so
+   a browser printing it scales it onto one sheet exactly the way the PDF used
+   to. Noted, not fixed — you ruled it out of scope and I agree it should not
+   ride along.

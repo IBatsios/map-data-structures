@@ -258,6 +258,24 @@ describe('pdfPlan', () => {
       );
     });
 
+    it('sets each caption quieter than the document’s own words', () => {
+      const captions = allItems(plan.pages).filter(
+        (item) => item.kind === 'text' && item.text.startsWith('Drawing, sheet'),
+      );
+
+      expect(captions.length).toBe(drawings.length);
+      for (const caption of captions) {
+        expect(caption.kind === 'text' && caption.quiet).toBe(true);
+      }
+      // And nothing else is: a table row set in the same grey as its caption
+      // would read as furniture too.
+      expect(
+        allItems(plan.pages).filter(
+          (item) => item.kind === 'text' && item.quiet === true,
+        ),
+      ).toHaveLength(drawings.length);
+    });
+
     it('captions each sheet with its place in the whole', () => {
       const captions = allText(plan.pages).filter((text) =>
         text.startsWith('Drawing, sheet'),

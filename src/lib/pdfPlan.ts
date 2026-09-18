@@ -97,6 +97,16 @@ export interface PdfTextItem {
   readonly x: number;
   readonly y: number;
   readonly size: number;
+  /**
+   * True for text that labels the document rather than saying what is in it.
+   *
+   * Only a sheet's caption, so far. It is set in the same grey as the rules
+   * under the headings rather than in the near-black everything else uses,
+   * because a line naming the picture above it is furniture: in the document's
+   * own ink it competes with the table rows further down the page for a
+   * reader's attention, and it should lose.
+   */
+  readonly quiet?: true;
 }
 
 /** One horizontal rule, drawn along `y`. */
@@ -303,6 +313,7 @@ function addCaption(sheet: Sheet, caption: string | null, measure: MeasureText):
     x: PAGE_MARGIN + (sheet.contentWidth - measure(caption, BODY_SIZE)) / 2,
     y: sheet.top + BODY_SIZE,
     size: BODY_SIZE,
+    quiet: true,
   });
   sheet.skip(lineHeight(BODY_SIZE));
 }

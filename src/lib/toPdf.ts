@@ -207,7 +207,7 @@ async function writeItem(
   // not inherit whatever the last thing in the picture happened to be.
   if (item.kind === 'text') {
     pdf.setFont(FONT_FAMILY, 'normal');
-    pdf.setTextColor(INK);
+    pdf.setTextColor(item.quiet === true ? RULE : INK);
     pdf.setFontSize(item.size);
     pdf.text(item.text, item.x, item.y);
     return;
