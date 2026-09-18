@@ -718,3 +718,162 @@ Eight rows appended to `docs/DECISIONS.md`:
    profile** before `--convert-to` would return; without it the command hangs
    indefinitely. Worth knowing if the Word half of criterion 1 is ever
    automated.
+
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** All six acceptance criteria verified by exercising them, and CI is
+green on the pull request. No defects to hand back.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as a Word document: demonstrated end to end | pass | Drove the built site in a real browser through its own controls — file picker, then the `Export Word` button — for 16 inputs. Eleven produced a `.docx`; five malformed inputs correctly produced none. Every one of the eleven **opened in LibreOffice Writer** and converted both to PDF and back to `.docx` with no warning. Microsoft Word is not installed on this machine either (no `App Paths\winword.exe`, no `Word.Application` class, no `WINWORD.EXE` under either Program Files), so I validated the package against what Word refuses a file for — see *What I did instead of opening Word* below |
+| The document shows the same nodes and edges as the preview, and the tables are editable text (5.2) | pass | Read the node labels, node types and edge labels straight off the preview SVG's `data-part` elements, then read the table cells out of the produced `.docx`, and compared: **identical, label for label**, for `order-intake` (7/6), `platform-overview` (15/16) and `undrawable-labels` (5/4). Editable text proven twice: structurally, every one of the 603+783 cells in the 200-node file holds a `w:t` run, with no `w:documentProtection` and no `w:permStart`; and behaviourally, I edited a cell to "Edited by a human", rebuilt the package, and LibreOffice reopened it with the edit in place and the table intact |
+| The download finishes within a few seconds for a design the size of the owner's use cases (11.1) | pass | My own click-to-file measurements: `markup-labels` 99 ms, `order-intake` 169 ms, `platform-overview` (the owner's scale) **153 ms**, `estate-sweep` 141 ms, 200 nodes/260 edges 436 ms, 1000 nodes/999 edges 1311 ms, `empty-design` 47 ms |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright walk now clicks all four export buttons and checks all four downloads (14.1) | pass | `bun run test` 343 tests / 21 files and `bun run test:e2e` 97 steps, both green. Read the four-download step at `e2e/export.spec.ts:218` rather than trusting its name: it clicks all four buttons in turn on one design, asserts the four file names, checks each file by its own first bytes (`# Order intake`, `<!doctype html>`, `%PDF-`, `PK`), and asserts all four are still enabled afterwards |
+| Every earlier test still passes; CI is green | pass | Whole suite green locally; `bun run check` 0 errors / 0 warnings / 0 hints over 65 files; `bun run build` passes. CI green on PR #17, on both the push run and the pull-request run. The two extractions were checked for regression as well: every `exportPdf.spec.ts` step passes, and I re-exported PDF, HTML and Markdown by hand afterwards — the PDF is a valid 3-page file with an xref and `%%EOF` |
+| Any new environment variable is in `.env.example` with a placeholder | pass | Grepped the source for `import.meta.env`, `process.env`, `getenv` and `PUBLIC_`: the only hit anywhere is `process.env.CI` in `playwright.config.ts`, which CI supplies. `.env.example` correctly states there are none. `gitleaks detect --source .` over 23 commits: **no leaks found** |
+
+### Command results
+
+- `bun run test`: **pass** — 343 tests, 21 files, 883 ms
+- `bun run test:e2e`: **pass** — 97 steps, 11.2 s
+- `bun run check`: **pass** — 0 errors, 0 warnings, 0 hints, 65 files
+- `bun run build`: **pass** — 1 page in 692 ms
+- `bun run dev`: **pass** — serves, HTTP 200, no errors, stopped cleanly
+- Secret scan: **clean** — `gitleaks`, 23 commits, 1.62 MB, no leaks found
+- CI: **green** — PR #17, the `test` job passed on both runs
+
+### What I did instead of opening Word, and what it does and does not prove
+
+The criterion as written says "demonstrated end to end", and the task file's own
+body says the file "opens in Word **or** LibreOffice". That is demonstrated.
+Jared's stricter "both Word and LibreOffice" could not be exercised by either
+agent, so here is exactly what stands behind the box.
+
+I validated all sixteen produced packages against the things Word refuses a file
+for, rather than assuming:
+
+- **zip integrity** — `testzip()` clean on every file
+- **every XML part well-formed** — parsed each `.xml` and `.rels` with expat; all
+  parse, all are valid UTF-8, none carries a DTD or entity declaration
+- **no XML-illegal character anywhere in any part** — scanned every part for
+  U+0000–U+0008, U+000B, U+000C, U+000E–U+001F, unpaired surrogates, U+FFFE and
+  U+FFFF. **Zero hits across all sixteen**, including the two fixtures built to
+  carry them
+- **`[Content_Types].xml` covers every part** — by Default extension or Override
+- **every relationship resolves** — walked every `.rels` and confirmed each
+  target part exists; and every `r:embed`/`r:id` used in `document.xml` is
+  declared in `document.xml.rels`
+- **the picture is a real PNG** — signature, chunk structure and the **CRC32 of
+  every chunk** verified, IHDR read
+- **nothing locks the document** — no `documentProtection`, no `permStart`
+
+Then a second, independent OOXML implementation read them: LibreOffice Writer
+opened all eleven, rendered them to PDF, and re-serialised them to `.docx`. I
+compared the round trip: same two tables, same row and cell counts, same cell
+text, same single drawing. A reader that had merely tolerated the file would not
+have reproduced its tables.
+
+**What remains unproven:** Microsoft Word's own renderer. Nothing in the package
+violates the spec and a second full implementation reads it correctly, so the
+risk is low, but it is not zero and nobody in this cycle has seen Word open one.
+If the owner has Word anywhere, opening `order-intake.docx` once closes it.
+
+### What I saw in the file, with my own eyes
+
+- Extracted the drawing from `order-intake.docx` and looked at it: all seven
+  silhouettes (hexagon, rounded box, stadium, note, cylinder, dashed box), every
+  colour band, every arrowhead, every edge label. D64's inlining carries through
+  the canvas path.
+- Extracted the one from `undrawable-labels.docx`: `Gateway → Queue`,
+  `API gateway (東京)`, `Cache (القاهرة)`, `check ✓ cross ✗`, `keeps ≥ ± € … •`,
+  `double arrow ⇒ element ∈`. Every one intact. **D77 confirmed: no `■` anywhere
+  in that file** — zero marks in the drawing and zero in the tables.
+- Rendered page 1 of `order-intake.docx` and `empty-design.docx` through Writer:
+  the title as a heading with the drawing below it; and for the empty design,
+  D51's sentence verbatim, both `Nodes` and `Edges` headings, and both
+  header-only tables with no empty frame.
+- `control-labels.docx`: exactly **one** mark, `Soh■Charlie`, the file opens,
+  three literal tabs survive and two `w:br` carry the line endings. Writer's
+  round trip turned our literal tab into `<w:tab/>` — it read it as a tab, which
+  confirms that row of D76's table from the other side.
+
+### Adversarial pass
+
+Everything I could think of to break "upload JSON, get a drawing back":
+
+| input | result |
+|---|---|
+| zero-byte file | refused, "That file is empty…", button stays disabled |
+| trailing comma | refused, line and column named |
+| JSON object missing `nodes`/`edges` | refused, both problems named |
+| JSON that is an array | refused, "…but it is a list" |
+| JSON that is a bare number | refused, "…but it is a number" |
+| a `.png` chosen from the picker | refused without reading a byte |
+| U+0000, U+000B, U+FFFE, U+FFFF and a lone surrogate in one file | 7 marked, package valid, opens |
+| a 4,000-character label | carried whole, package valid |
+| a title of nothing but control characters | 3 marked, name falls back to `design.docx`, package valid |
+| a title of nothing but punctuation | name falls back to `design.docx`, package valid |
+| five parallel duplicate edges between two nodes | drawn and exported, package valid |
+| 200 nodes / 260 edges | 436 ms, package valid |
+| 1000 nodes / 999 edges | 1311 ms, package valid |
+
+No crash, no hang, no silently broken file, and no case where the export
+reported success over a file a reader would refuse.
+
+### Accessibility, best effort
+
+Audited `src/pages/index.astro` against the project's checklist and found
+**nothing** — no image, link, button, form, ARIA, keyboard, semantic or contrast
+rule violated. Then checked the live page rather than only the source:
+
+- the row is `role="group"` named "Export the design" through `aria-labelledby`,
+  pointing at words that are actually on the page
+- all four buttons carry a visible accessible name and `type="button"`, with no
+  `tabindex` override and no `aria-hidden`
+- the injected drawing has `role="img"` and `aria-label="Order intake"`
+- two polite `role="status"` regions, present from first paint
+- one `prefers-reduced-motion` block in the delivered stylesheet
+- Tab from the file input reaches all four buttons in order, and **Enter on the
+  focused Export Word button downloads `Order-intake.docx`**
+
+### Defects for Amon
+
+None. Nothing was handed back this round.
+
+### Fixed in place
+
+Nothing. No typo, wrong import path, misnamed variable, bad assertion or flaky
+wait needed correcting.
+
+### One measurement to carry into the scheduled fix cycle
+
+Not a defect, and not this task's — recorded because it sharpens the shape of the
+problem Jared already scheduled. The drawing is placed against the page's content
+box and the raster is measured from the *placed* size, so at an extreme aspect
+ratio the raster itself collapses, not merely the labels on it:
+
+| design | embedded PNG | placed at |
+|---|---|---|
+| `order-intake` (7) | 1710 × 2298 | 5.94 in × 7.98 in |
+| `platform-overview` (15) | 1872 × 1314 | 6.50 in × 4.56 in |
+| `estate-sweep` (40) | 377 × 2304 | 1.31 in × 8.00 in |
+| 200-node chain | 530 × 2304 | 1.84 in × 8.00 in |
+| **1000-node chain** | **3 × 2304** | **0.01 in × 8.00 in** |
+
+At a thousand nodes the picture is a three-pixel hairline. So a per-node size
+floor alone will not be enough: whatever the fix cycle does has to stop the
+*placed* size from driving the raster, or tile the drawing across sheets. The
+tables underneath stay full-size and correct at every one of these, which is what
+keeps the export honest in the meantime.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/17 — opened as a draft
+against `main`, per D54 and the process note. CI green. **Sam marks it ready and
+merges; I did not.**
