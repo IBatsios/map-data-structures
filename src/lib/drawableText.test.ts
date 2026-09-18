@@ -97,13 +97,81 @@ describe('marking the characters a font cannot draw', () => {
     expect(marked.undrawable).toBe(1);
   });
 
-  it('leaves a tab or a line break alone, because neither is a glyph', () => {
-    // No font maps them, but they are the document's own layout rather than
-    // text: `pdfPlan` breaks a label's lines on them, and marking them would
-    // put a black square in the middle of a label that wrapped correctly.
-    const marked = markUndrawable('two\nlines\tapart', ASCII);
+  it('marks a tab, because jsPDF ends the line it is in', () => {
+    // The round-two defect. A tab used to be spared on the premise that
+    // `pdfPlan` breaks a label's lines on it. It does not: `wrap` splits a
+    // cell on a newline and on nothing else, and `splitWords` breaks on a
+    // space rather than on whitespace. So the tab reached `pdf.text`, which
+    // writes the text up to the first control character and drops the rest of
+    // the line — `Alpha\tBravo` arrived in the Nodes table as `Alpha`.
+    const marked = markUndrawable('lines\tapart', ASCII);
 
-    expect(marked.text).toBe('two\nlines\tapart');
+    expect(marked.text).toBe(`lines${UNDRAWABLE_MARK}apart`);
+    expect(marked.undrawable).toBe(1);
+  });
+
+  it('marks every other control character, which ends a line the same way', () => {
+    // Measured against jsPDF 4.2.1 with the embedded face: `AAA<c>ZZZ` wrote
+    // `AAA` for every one of these. Strict JSON forbids a raw control
+    // character inside a string, so each arrives as an escape — rarer than the
+    // arrow was, and not a reason to lose the rest of the label.
+    const controls = [
+      '\u0001',
+      '\u000b',
+      '\u000c',
+      '\r',
+      '\u001f',
+      '\u007f',
+      '\u0085',
+      '\u009f',
+    ];
+
+    for (const control of controls) {
+      expect(markUndrawable(`Soh${control}Charlie`, ASCII)).toEqual({
+        text: `Soh${UNDRAWABLE_MARK}Charlie`,
+        undrawable: 1,
+      });
+    }
+  });
+
+  it('marks a control character the font does map, because jsPDF ends the line anyway', () => {
+    // Asking the cmap is not enough on its own here, and the real face proves
+    // it: Roboto Regular maps U+0000, U+0002 and U+000D, as many faces do. A
+    // glyph existing changes nothing, because jsPDF ends the string at a
+    // control character whichever way the font answers — a lone `\r` inside a
+    // label would have arrived as everything before it and no more.
+    const coverage = coverageOf('Alpha Bravo\r\u0000\u0002');
+
+    expect(markUndrawable('Alpha\rBravo', coverage)).toEqual({
+      text: `Alpha${UNDRAWABLE_MARK}Bravo`,
+      undrawable: 1,
+    });
+  });
+
+  it('marks the control characters the real embedded face does map', () => {
+    // The second place this file reads the real font rather than a stand-in,
+    // for the same reason as the last test in it: a fact about Roboto that the
+    // fix depends on, pinned so regenerating the font cannot quietly undo it.
+    const coverage = readFontCoverage(ROBOTO_REGULAR_BASE64);
+
+    for (const control of ['\u0000', '\u0002', '\r']) {
+      expect(coverage.has(control.codePointAt(0) ?? 0)).toBe(true);
+      expect(markUndrawable(`a${control}b`, coverage)).toEqual({
+        text: `a${UNDRAWABLE_MARK}b`,
+        undrawable: 1,
+      });
+    }
+  });
+
+  it('leaves a line break alone, because nothing is ever asked to draw one', () => {
+    // The one control character that is the document's own layout rather than
+    // a loss, and the reason is checked rather than assumed: `pdfPlan`'s
+    // `wrap` splits a cell on it before any line is measured, and svg2pdf
+    // removes newlines from a text element before jsPDF sees it. Marking it
+    // would put a black square in a label that broke exactly as it asked to.
+    const marked = markUndrawable('two\nlines', ASCII);
+
+    expect(marked.text).toBe('two\nlines');
     expect(marked.undrawable).toBe(0);
   });
 
@@ -148,6 +216,23 @@ describe('marking a whole laid-out design', () => {
     for (const marked of drawable.layout.edges) {
       expect(marked.labelLines.join(' ')).toBe(marked.label);
     }
+  });
+
+  it('marks a tab in a label, in the picture and in the table alike', () => {
+    // The whole design, not one string: a label short enough to sit on one
+    // line keeps its tab in the lines the drawing is drawn from (`wrapText`
+    // returns text that fits exactly as it came in), so both halves of the
+    // file would have lost everything after it. A label long enough to wrap is
+    // rebuilt from its words, and there the tab has already become the line
+    // break — which is why this asserts the two halves agree rather than
+    // asserting a particular number of lines.
+    const tabbed = designOf('Tabs', [node('alpha', 'Alpha\tBravo')]);
+    const drawable = drawableLayout(layoutDesign(tabbed), ASCII);
+    const [marked] = drawable.layout.nodes;
+
+    expect(marked?.label).toBe(`Alpha${UNDRAWABLE_MARK}Bravo`);
+    expect(marked?.labelLines.join(' ')).toBe(marked?.label);
+    expect(drawable.undrawable).toBe(1);
   });
 
   it('counts each piece of the design once, not once per line it is drawn on', () => {

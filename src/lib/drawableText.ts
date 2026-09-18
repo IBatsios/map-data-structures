@@ -55,7 +55,10 @@ export interface DrawableLayout {
   readonly undrawable: number;
 }
 
-/** The last C0 control character, and the C1 range that follows Latin-1. */
+/** The one control character nothing is ever asked to draw: a line break. */
+const LINE_BREAK = 0x0a;
+
+/** The C0 range, then DEL and the C1 range that follows Latin-1. */
 const LAST_C0 = 0x1f;
 const FIRST_C1 = 0x7f;
 const LAST_C1 = 0x9f;
@@ -150,15 +153,33 @@ export function describeUndrawable(undrawable: number): string | null {
 }
 
 /**
- * Whether the font draws this code point, with the control characters spared.
+ * Whether the font draws this code point, with only the line break spared.
  *
- * No font maps a tab or a line break, but neither is a glyph: they are the
- * document's own layout, and `pdfPlan` breaks a label's lines on them. Marking
- * them would put a black square in the middle of a label that wrapped exactly
- * as it was asked to.
+ * Every control character used to be spared, on the premise that `pdfPlan`
+ * breaks a label's lines on them. It does not — `wrap` splits a cell on a
+ * newline and on nothing else, and `splitWords` breaks on a space rather than
+ * on whitespace — so a tab reached `pdf.text`, and jsPDF does not skip a
+ * control character, it ends the string at one. `Alpha\tBravo` was written
+ * into the Nodes table as `Alpha`, unmarked and uncounted, with the export
+ * still reporting success. So a control character is marked like any other
+ * character the face cannot draw: a mark in a rare label is the honest price
+ * of never losing the rest of one.
+ *
+ * The font is not asked about one, because its answer would be misleading:
+ * Roboto Regular maps U+0000, U+0002 and U+000D, as many faces do, and jsPDF
+ * ends the string at them all the same. A glyph existing is not the question.
+ *
+ * The line break is the exception because nothing is ever asked to draw one.
+ * `pdfPlan`'s `wrap` splits a cell on it before a line is measured, and
+ * svg2pdf removes newlines from a text element before jsPDF sees it, so a
+ * label written on two lines stays on two lines rather than gaining a square.
  */
 function isDrawable(point: number, coverage: FontCoverage): boolean {
-  return coverage.has(point) || isControl(point);
+  if (isControl(point)) {
+    return point === LINE_BREAK;
+  }
+
+  return coverage.has(point);
 }
 
 function isControl(point: number): boolean {

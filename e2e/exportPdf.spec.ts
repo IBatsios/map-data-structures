@@ -247,6 +247,74 @@ test.describe('Exporting the design as PDF', () => {
     expect(written).toContain('keeps ≥ and —');
   });
 
+  test('keeps what a control character used to cut the line off at', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('control-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const written = await pdfRuns(file);
+
+    // The round-two defect, as the user meets it. jsPDF does not skip a
+    // control character, it ends the string at one, so `Alpha\tBravo` was
+    // written into the Nodes table as `Alpha` — unmarked, uncounted, and with
+    // the export still reporting success.
+    expect(written.join('\n')).toContain(`Alpha${MARK}Bravo`);
+    expect(written.join('\n')).toContain(`Soh${MARK}Charlie`);
+    expect(written.join('\n')).toContain(`Del${MARK}Delta`);
+    expect(written.join('\n')).toContain(`edge${MARK}with${MARK}tabs`);
+
+    // A cut-off cell is exactly this run and nothing else, which is what the
+    // table held before: `Alpha`, with `Bravo` nowhere in the file at all.
+    expect(written).not.toContain('Alpha');
+    expect(written).not.toContain('Soh');
+    expect(written).not.toContain('edge');
+
+    // And the mark stands in both halves of the file, the picture and the
+    // table, the same way an uncovered glyph's does.
+    expect(written.filter((run) => run === `Alpha${MARK}Bravo`)).toHaveLength(2);
+  });
+
+  test('leaves a label’s own line break as a line break, not as a mark', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('control-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const written = await pdfRuns(file);
+
+    // The one control character that is the document's own layout: the table
+    // breaks the cell on it before anything is drawn, so both halves of the
+    // label are there and neither carries a square.
+    expect(written).toContain('Newline');
+    expect(written).toContain('Echo');
+    expect(written.join('\n')).not.toContain(`Newline${MARK}`);
+  });
+
+  test('counts the characters it marked in a design full of control characters', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('control-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.downloadPdf();
+
+    // One tab, one SOH, one DEL, two more tabs in an edge label and the
+    // carriage return of a `\r\n`: six, counted once per piece of the design's
+    // own text, and the line break counted as nothing because nothing was lost
+    // to it.
+    await expect(upload.status).toContainText('cannot draw 6 characters');
+  });
+
   test('says how many characters it could not draw, in the app’s own words', async ({
     page,
   }) => {
