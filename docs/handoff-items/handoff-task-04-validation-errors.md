@@ -948,3 +948,94 @@ what pins `preventDefault` rather than the page's URL.
 ### Round
 
 Round 2 of 3. Back to Jahmyr. Nothing is pushed; the branch has two new commits.
+
+---
+
+## Test report from Jahmyr — round 2
+
+### Verdict
+
+**Pass.** Both round 1 defects are closed and independently verified, not
+accepted on report. Criteria 2 and 3 are now checked; all six hold.
+
+The two departures from my round 1 suggestion were both correct, and one of them
+corrects me: the `in`-only regex I proposed would have introduced a regression.
+Swapping the shared constant for it fails
+`still names the line when the engine puts its position after the JSON` and
+nothing else, turning
+`That file is not valid JSON. Line 2, column 1: Unexpected non-whitespace character.`
+back into `… did not say where in it`. Fuzzing shows
+`Unexpected non-whitespace character after JSON at position N` is one of V8's
+commonest forms, not a corner. The end anchor over the phrase is likewise right,
+for the reason given: the short-file case defeats a phrase-only fix.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| Validation errors visible end to end | pass | `reads the message, fixes the file, and gets the drawing` walks a broken file to a drawing in Chromium. 31/31 Playwright green. |
+| Malformed JSON shows the line; a missing field shows the field | pass | Line: 200,000 mutated-JSON inputs through V8, 41 distinct message shapes, 14 position-bearing forms — every one still yields its line, **0 lost, 0 invented, 0 value mismatches**. Then the real module over 368 stored V8 messages: 51 with an engine clause, **all 51 agreed with V8's own `(line L column C)` exactly**; 309 without, all answered honestly. Field: `nodes[0].label is missing. It has to be text.`, `nodes has to be a list, but it is an object.`, `edges[0].to: This edge's "to" is "ghost", which no node defines.` |
+| Tests cover the behavior as a user would observe it, and pass | pass | 179 unit + 31 e2e green. Verified load-bearing by mutating the source myself, not by reading the tests: round 1's unanchored regex fails 5 including both new regression tests; `in`-only fails exactly 1; removing `preventDefault` fails only the cancellation test; removing the `dataTransfer` read fails exactly 3; removing the drag cue fails exactly 1. Tree restored clean after each. |
+| Every earlier test still passes; CI is green | pass | No previously passing test regressed. CI green on the pushed branch. |
+| Best-effort accessibility | pass | Both live regions present in the served HTML before any file is chosen. `role="status"` on both (valid role, polite, they take turns per D41). Label bound to the input by `for`/`id`, drop hint via `aria-describedby`. Panel text `#5c1116` on `#fdf3f3` = **12.47:1**, border `#b4262c` = **5.93:1**; both clear AA. Not colour-alone — a rule plus sentences. `front-a11y` audit: 0 critical, 0 major, 0 minor. |
+| Any new environment variable is in `.env.example` | pass | The only `process.env` reads in the repo are `CI` in `playwright.config.ts`; no app variable exists. `gitleaks detect`: 24 commits, ~659 KB, **no leaks found**. |
+
+### Command results
+
+`bun run test`: **179 passed**, 11 files.
+`bun run test:e2e`: **31 passed**, Chromium.
+`bun run build`: **pass**, 1 page in 474 ms.
+`bun run check`: **pass**, 0 errors / 0 warnings / 0 hints over 33 files.
+`bun run dev`: serves 200 at `localhost:4321` with both live regions in the
+initial HTML; no errors in the log; stopped cleanly.
+Secret scan: **clean**.
+
+### Adversarial pass beyond the checklist
+
+Eleven hostile files through the real browser, then removed; the tree is clean.
+No uncaught error, no console error, and the page always said something.
+
+| Input | Outcome |
+|---|---|
+| `nodes: []` | Draws. `0 nodes, 0 edges.` |
+| 800 nodes / 799 edges | Draws in **268 ms**. |
+| Top-level `[]`, `null`, `42` | Named: "… but it is a list / null / a number." |
+| `nodes` as an object | `nodes has to be a list, but it is an object.` |
+| Label `<script>window.__pwned=1</script>`, title `<img onerror>` | Drawn as text. `window.__pwned` undefined. |
+| `__proto__` at both levels | `Object.prototype` unpolluted. |
+| 4,000-char label, 3,000-char title | Draws; wraps per D26/D35. |
+| BOM, self-edge, duplicate edge `id` keys | All draw. Edges have no `id` in the schema, so duplicates are ignored extra keys (rule 2) — the runbook's "duplicate edge ids" case is a non-issue here by design. |
+| Numeric `id`/`label` | Three field messages, each naming its path. |
+
+### Defects for Amon
+
+None blocking. One carried forward, sharpened:
+
+1. **`src/lib/describeLoadError.ts:191` (`withoutPosition`)** — on Firefox the
+   panel does not merely under-deliver, it **states something false**. For
+   `JSON.parse: unexpected character at line 3 column 3 of the JSON data` it
+   renders: *"That file is not valid JSON, and this browser did not say where in
+   it. It reported: JSON.parse: unexpected character at line 3 column 3 of the
+   JSON data."* The clause "did not say where" is contradicted by the clause
+   after it. Cause: `positionIn` can only yield a character index, and
+   SpiderMonkey gives a line and column and no index, so `atPosition` cannot be
+   reached — the gap is the shape of the return type, not the pattern.
+   **Not a regression** (round 1's regex had no `position` word to match either),
+   never a wrong pointer, and D32 puts non-V8 browsers in scope. I am passing the
+   task rather than spending round 3 on a pre-existing wording fault that Amon
+   disclosed and routed to its own cycle — but the checkbox is mine and Sam can
+   overrule. It wants a second clause yielding a `LineAndColumn` directly.
+
+2. **`src/lib/describeLoadError.ts:193`** — "not valid JSON" twice in one
+   message, my round 1 minor, now the common case since every snippet-form
+   message takes this path. Still defensible: the second is the engine's own
+   words behind `It reported:`. Both of these live in the same four lines and
+   should ride the same cycle.
+
+### Fixed in place
+
+None. Nothing needed correcting.
+
+### Round
+
+Round 2 of 3, closed. To Sam.

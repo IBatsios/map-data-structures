@@ -19,8 +19,8 @@
 ## Acceptance criteria
 
 - [x] As a user, I can see validation errors when the JSON is malformed or missing required fields: demonstrated end to end.
-- [ ] Malformed JSON shows the line; a missing required field shows the field (14.1).
-- [ ] Tests cover the behavior, as a user would observe it, and pass.
+- [x] Malformed JSON shows the line; a missing required field shows the field (14.1).
+- [x] Tests cover the behavior, as a user would observe it, and pass.
 - [x] Every earlier test still passes; CI is green.
 - [x] Best-effort accessibility: the error panel is a live region and its text is readable.
 - [x] Any new environment variable is in `.env.example` with a placeholder.
