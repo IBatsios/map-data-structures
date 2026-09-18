@@ -3,7 +3,7 @@
 **Date:** 2026-09-18
 **Branch:** feature/export-pdf
 **Task file:** docs/tasks/07-export-pdf.md
-**Round:** 1
+**Round:** 3
 
 ## Assignment from Jared
 
@@ -1000,3 +1000,273 @@ Three rows appended to `docs/DECISIONS.md`:
 - Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts`,
   `pdfPlan.ts`, `download.ts` or `empty.json`, and the `intersectRect` crash was
   not touched. All still carried.
+
+## Test report from Jahmyr — round 2
+
+### Verdict
+
+**Changes requested, on one defect, and it is a small one.** Both round-one
+defects are genuinely closed, and I confirmed every claim Amon asked me to check,
+each against an oracle that is not his: the mark travels with the file, the
+sentence reaches the exporter, the coverage reader reproduces my round-one table
+exactly, the hollow-square reasoning holds, the metadata is right, and 11.1
+reproduces. Five of the six criteria pass.
+
+Criterion 2 still does not hold, for a different trigger and a much narrower one.
+**Every character `drawableText.ts` deliberately spares as "a control character"
+truncates the rest of the line it is in**, silently, unmarked and uncounted — a
+label written `Alpha\tBravo` in the design is written into the Nodes table as
+`Alpha`. The premise the sparing rests on is stated in the code and is not true
+of `pdfPlan`. It is one line to fix and a test to correct, and round three should
+be short.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as PDF: demonstrated end to end | **pass** | Drove `dist/` in Chromium outside the suite and exported eighteen designs — six repo fixtures plus twelve I wrote. Every one produced a `%PDF-` file that opens and whose text `pdftotext` (xpdf 4.06) reads back. No console errors and no page errors on any of them |
+| The PDF shows the same nodes and edges as the preview, with every label readable (5.2) | **fail** | Defect 1 below. The round-one trigger is fixed and I verified it hard; a tab, or any other spared control character, is a new trigger for the same silent loss. `Alpha\tBravo` arrives in the table as `Alpha`, an edge label of `edge\twith\ttabs` as `edge`, and the page says nothing at all |
+| The download finishes within a few seconds for a design the size of the owner's use cases (11.1) | **pass** | Re-measured independently, click to file-in-hand, four clicks each: `platform-overview` (15/16) **135 / 111 / 117 / 113 ms**, `estate-sweep` (40/46) **182 / 168 / 163 / 149 ms**, `undrawable-labels` 123 / 99 / 93 / 103 ms, `order-intake` 129 / 99 / 96 / 105 ms, `empty-design` 182 / 85 / 101 / 110 ms, and my own 200-node/259-edge design 494 / 434 / 408 / 440 ms at 13 pages and 570 KB. Amon's table reproduces within noise. The font decode has not moved the number |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download | **pass** | 314 Vitest in 20 files and 73 Playwright, all passing, locally and on CI. I am checking this box this round where I did not last round, and the difference is real: last round the *whole* of the loss behaviour was untested, which is why nobody saw it; this round the mark, the count, the sentence, the clean-export silence and the metadata are each asserted from both oracles, with the walk writing the mark as a literal rather than importing it. The behaviour in defect 1 is untested, but it is one input class inside a covered behaviour rather than an uncovered behaviour |
+| Every earlier test still passes; CI is green | **pass** | Nothing regressed. CI green on [PR #15](https://github.com/IBatsios/map-data-structures/pull/15) after pushing `2a08a21`: typecheck 0 errors, 314 Vitest in 20 files, 73 Playwright in 17.2 s, job 54 s |
+| Any new environment variable is in `.env.example` with a placeholder | **pass** | Grepped `process.env`, `import.meta.env`, `Deno.env` and `getenv` across the tree again: the only hit outside `docs/` is `process.env.CI` in `playwright.config.ts`, which the runner sets. `.env.example` still lists none. `gitleaks detect --source . --no-banner`: 26 commits, 1.39 MB, **no leaks found** |
+
+### Command results
+
+`bun run test`: **314 passed, 20 files**, 802 ms.
+`bun run test:e2e`: **73 passed**, 8.8 s.
+`bun run check`: **0 errors, 0 warnings, 0 hints** across 57 files.
+`bun run build`: **pass**, 1 page in 665 ms.
+Secret scan: `gitleaks` — **no leaks found**.
+CI: **green** on PR #15 — typecheck 0 errors, 314 Vitest, 73 Playwright in 17.2 s.
+
+### What I confirmed, each against an oracle that is not Amon's
+
+**The coverage reader reproduces my round-one table exactly, and
+independently.** I did not read `fontCoverage.ts` for the answer. I built a
+64-node design with one character per node label, exported it, and read the file
+back with `pdftotext`. A character that arrives as itself is one jsPDF drew; one
+that arrives as a mark is one the export replaced. Every character of my
+round-one table lands on the side Amon claims:
+
+| Claim | Characters | What the file says |
+|---|---|---|
+| covered | `≥ ± § ° € £ ¥ ™ © … • ½ † ‰` | all fourteen arrive as themselves |
+| not covered | `→ ← ↔ ⇒ ✓ ✗ ∈` | all seven arrive as the mark |
+
+Forty-three more characters I added to widen it: `— – “ ” ‘ ’ « » ≤ ≠ ∞ µ ¶ × ÷
+¡ ¿ ª º ● ○ Ω π Σ ∆ √ ≈ ∑ ₹ ₽ ⁄ ‹ › ‡ ′ ″` all arrive as themselves, and
+`★ ☆ ⚠ ⌘ ฿` arrive as the mark. The status sentence for that design said **13**
+characters, which is exactly the number of marks I counted in the file. The
+reader and the file agree.
+
+**The hollow-square reasoning holds, and the test that guards it is the right
+test.** In the same run, index 40 of my probe was U+25A0 and index 41 was U+25A1.
+U+25A0 arrived as itself and was **not** counted, so the face draws it. U+25A1
+arrived as a mark and **was** counted, so the face does not draw it, and a hollow
+square would have been dropped in its turn exactly as Amon says. His reasoning is
+correct, and it is now verified from the file rather than from the font reader.
+
+**The mark travels with the file.** `e2e/fixtures/undrawable-labels.json`, read
+back with `pdftotext`: the title is `Regions ■ ■■`; `Gateway ■ Queue`,
+`API gateway (■■)`, `Cache (■■■■■■■)` and `check ■ cross ■` each appear
+**twice**, once in the drawing and once in the Nodes table; `keeps ≥ ± € … •` is
+untouched; the edge labels are `double arrow ■ element ■`, `replicates ■■`,
+`left ■ updown ■` and `keeps ≥ and —`. There is no `API gateway ()`, no
+`Cache ()`, and no label emptied of what it named.
+
+**The sentence is right, and it is right about when to say nothing.** Counted by
+hand from the fixture — 3 in the title, 1 + 2 + 7 + 2 + 0 across the nodes,
+2 + 2 + 2 + 0 across the edges — the answer is 21, and the page says 21. A design
+with exactly one lost character says "1 character". `platform-overview`,
+`markup-labels`, `empty-design`, my Greek and Cyrillic design, and a title full
+of markup all leave the status line describing the upload and say nothing about
+the font, so D41 does stay parked.
+
+**Nothing regressed in the Greek or Cyrillic path.** `Παραγγελία εισόδου`,
+`Привет мир`, `Ωμέγα Ж Щ ß æ ø å`, `στέλνει сообщение` and `ответ` are all
+correct in the drawing **and** in the tables, read out with `pdftotext` rather
+than with `pdfText.ts`. The `550normal` fallback is still fixed.
+
+**The metadata is right, decoded from the raw bytes by my own reader.** I walked
+the Info dictionary by hand, unescaped the literal string, and decoded the
+UTF-16BE:
+
+| File | `/Title` first bytes | `/Title` decoded | `/Lang` |
+|---|---|---|---|
+| `undrawable-labels` | `fe ff 00 52` | `Regions → 東京` | `(en)` |
+| `greek-cyrillic` (mine) | `fe ff 03 a0` | `Παραγγελία и Привет` | `(en)` |
+| `astral` (mine) | `fe ff 00 41` | `Astral 😀 plane` | `(en)` |
+| `platform-overview` | `50 6c 61 74` | `Platform overview` | `(en)` |
+| `empty-design` | `4e 6f 74 68` | `Nothing yet` | `(en)` |
+
+The byte-order mark appears exactly where the title is not ASCII, the real
+`→ 東京` survives in the dictionary while page 1 correctly holds `Regions ■ ■■`,
+and a character from beyond the basic plane survives there too. Defect 2 is
+closed.
+
+**11.1 reproduces.** Table above. The coverage read has not moved the number;
+`platform-overview` is 135 ms on the first click against Amon's 137, and the
+15-second guard still has two orders of magnitude of room. I agree with leaving
+it loose and with not caching the coverage.
+
+### Defects for Amon
+
+**1. `src/lib/drawableText.ts:160-166` — every character `isDrawable` spares as a
+control character truncates the rest of the line in the PDF's tables, silently.
+The premise the sparing rests on is not true of `pdfPlan`.**
+
+Expected, from intake 5.2 and from this module's own header: *"every character
+the font cannot draw is replaced, one for one, with a mark the reader can see"*,
+and *"the picture and the table cannot disagree"*. Actual, driven end to end
+through the built site and read back with `pdftotext`:
+
+| Label in the design | Drawing in the PDF | Table cell in the PDF |
+|---|---|---|
+| `Alpha\tBravo` | `Alpha Bravo` | **`Alpha`** |
+| `SohCharlie` | `Soh` | **`Soh`** |
+| `DelDelta` | `Del` | **`Del`** |
+| `edge\twith\ttabs` (edge label) | `edge with tabs` | **`edge`** |
+| `Newline\nEcho` | `Newline` / `Echo` | `Newline` / `Echo` — correct |
+| `Carriage\r\nReturn` | `Carriage` / `Return` | `Carriage` / `Return` — correct |
+
+The status region for that design said nothing at all: `undrawable` was **0**, so
+no mark was drawn, nothing was counted, and the sentence never fired. The export
+reported success. That is the same silent wrongness round one was about, reached
+by a different door.
+
+**The cause, in two parts.**
+
+*Part one, the premise.* `src/lib/drawableText.ts:156` says, and
+`src/lib/drawableText.test.ts:102` repeats: *"`pdfPlan` breaks a label's lines on
+them."* It does not. `pdfPlan.ts:350` splits a cell on a newline and on nothing
+else, and `splitWords` at `pdfPlan.ts:388` matches a **space** class rather than
+`\s`. So a tab is never a break and never a word boundary: it stays inside a
+word, and `Alpha\tBravo` reaches `pdf.text` whole. That holds for every code
+point `isControl` spares except the newline. The drawing escapes it because
+`src/lib/text.ts:116` splits on `/\s+/`, which is exactly why the two halves of
+the file disagree — `Alpha Bravo` in the picture, `Alpha` in the table.
+
+*Part two, what jsPDF does with it.* I isolated this from the app: jsPDF 4.2.1
+with this embedded face **truncates the string at the first control character**.
+`pdf.text('A:Line\tbreak', …)` writes `A:Line`. I ran `AAA<c>ZZZ` for U+0009,
+U+000B, U+000C, U+000D, U+0001, U+001F, U+007F, U+0085 and U+009F, and every one
+wrote `AAA`. It is not the drop round one found — an uncovered glyph writes the
+empty string and the rest of the line survives, which is why `Gateway → Queue`
+became `Gateway  Queue`. A control character ends the line. Worse,
+`getTextWidth` still counts it — `Line\tbreak` measures 57.47 against `Linebreak`
+at 52.15 — so the plan reserves column width for text that is never drawn.
+
+**Reachability.** It needs `\t` or a `\uXXXX` escape inside a label, since strict
+JSON forbids a raw control character in a string, so it is much rarer than the
+arrow was. It is not unreachable: a label pasted out of a terminal or generated
+from a tab-separated source carries a tab, the loader accepts it, the preview
+shows it, and Markdown and HTML both carry it. A Windows `\r\n` is harmless,
+because `wrap` splits on the newline first and leaves the carriage return at the
+end of a line, where it truncates nothing.
+
+**The fix is yours, and both shapes are one line.** Either stop sparing anything
+but the newline — `Alpha■Bravo` is ugly, but nothing is lost and the count is
+honest — or make `pdfPlan` break on a tab the way `text.ts` does, and spare only
+what it then breaks on. `drawableText.test.ts:100` asserts the current behaviour
+and will need to change with it; the comment at `:102` and the one at
+`drawableText.ts:156` state the false premise and want correcting in the same
+pass. Whichever you take, the test to write is the one I ran: a design with a tab
+in a label, exported, and the table cell read back whole.
+
+### Known gaps, judged
+
+- **Gap 2, the count is of the design's text rather than of the marks in the
+  file.** Confirmed, and I agree with the choice. My 200-node design counted 20
+  and the file carries 40 marks, because each label is written twice. A number
+  the user can reconcile with their own file is the right one.
+- **Gap 3, two ids differing only in uncovered characters.** Confirmed exactly as
+  disclosed: ids `東` and `京` give a Nodes table reading `Id ■ ■ ok`, and edge
+  rows that cannot be told apart. It does not fail a criterion — nothing is
+  *dropped*, and the preview, Markdown and HTML all distinguish them — but it is
+  worth a line in the README beside the mark, since a reader of the file has no
+  way to know the two rows were ever different.
+- **Gap 4, the same sentence twice.** Reproduced: the second export sets an
+  identical string, and a live region announces changes rather than content. Same
+  family as D41; agreed, park it there.
+- **Gap 1, the preview shows the real characters and only the PDF marks them.**
+  Correct and deliberate. The sentence is what connects them, and it does.
+- **Gap 6, `exportStyles.ts` still carries D57's stale `?raw` comment.** Still
+  carried, still not a criterion. Worth folding into whichever cycle next opens
+  that file.
+
+### Adversarial pass, beyond the checklist
+
+All clean unless noted.
+
+- A zero-byte file, `{}`, `[1,2,3]`, truncated JSON, a real `.png`, a `.png`
+  renamed `.json`, trailing-comma JSON, and duplicate node ids: each leaves
+  Export PDF **disabled** and names the problem in the validation panel. There is
+  no way to reach the exporter from a failed load, and no console errors on any
+  of them.
+- Valid JSON that parses with an empty `nodes` list: one page, D51's sentence,
+  both table headings, and no sentence about the font.
+- 200 nodes and 259 edges with an uncovered character in every tenth label: 13
+  pages, 570 KB, 477 ms, `Node 199` present in both the drawing and the table,
+  40 marks in the file against a count of 20. Nothing lost off the end.
+- Two identical edges between the same pair, a 400-character unbroken word, a
+  300-character edge label, leading and trailing spaces, and a title full of
+  markup: all export, all wrap, the file name is sanitised, no throw, and the
+  status line stays the upload sentence.
+- A character from beyond the basic plane becomes **one** mark, not two: an
+  emoji, a rare ideograph and a second emoji each count 1, which is four for that
+  design, and four is what the sentence says.
+- The file name keeps the real characters — `Regions-→-東京.pdf` — which is right,
+  since the name is not drawn with the font.
+- Control characters in a label: **defect 1**.
+
+### Second oracle
+
+Same discipline as round one. `e2e/pdfText.ts` is hand-written, so nothing above
+takes its word: every content claim was re-read out of the files with `pdftotext`
+(xpdf 4.06), the metadata was decoded by a reader I wrote for this round that
+walks the Info dictionary and the UTF-16BE string itself, and the coverage table
+was derived from what the exported files actually contain rather than from
+`fontCoverage.ts`. The three agree everywhere I checked. `e2e/pdfText.ts` and
+`src/lib/fontCoverage.ts` can both be trusted going into Task 08.
+
+### Accessibility, best effort
+
+No new issue, and one round-one item closed.
+
+- The markup did not change this round; the whole diff is inside the `<script>`.
+  `<html lang="en">`, one `<main>`, one `<h1>`, the file input labelled and
+  described by its hint, the two `role="status"` regions, and the `role="group"`
+  named "Export the design" are all as they were.
+- Keyboard path, driven: Tab from the file input reaches Export Markdown, Export
+  HTML and Export PDF in that order; Enter on Export PDF downloads; focus stays
+  on the button afterwards.
+- The new sentence lands in `<p id="upload-status" role="status">`, an implicit
+  polite live region, so it is announced. The off-screen drawing holder is gone
+  after the export — I counted zero left behind.
+- **`/Lang (en)` and `/Title` close round one's defect 2**, which was the one
+  accessibility finding on the produced file: a viewer now has a name for its
+  window bar, and a screen reader has a document title and a language.
+- Noted, not a defect: after a lossy export the status region no longer describes
+  the upload. That is the same region D43 already reuses for `EXPORT_FAILED`, and
+  the drawing carries its own title and description, so nothing is lost.
+
+### Fixed in place
+
+Nothing. There was no trivium to correct this round — the two wrong doc
+references I fixed in round one are still right, and everything else I found
+changes behaviour and belongs to Amon.
+
+### Pull request
+
+[PR #15](https://github.com/IBatsios/map-data-structures/pull/15), still a draft,
+now carrying `2a08a21`. CI green: typecheck 0 errors, 314 Vitest in 20 files, 73
+Playwright in 17.2 s, job 54 s. Not marked ready — that is Sam's, and criterion 2
+is not met yet.
+
+### Checkboxes
+
+Checked 1, 3, **4**, 5 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 unchecked
+for defect 1. `**Status:**` stays `in progress`, which is Amon's to change once
+defect 1 is settled and I have re-verified it. The header's `**Round:**` is now
+3.
