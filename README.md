@@ -49,8 +49,19 @@ Six kinds of node have a silhouette of their own — `service`, `database`,
 as a plain grey dashed rectangle rather than disappearing, and every node prints
 its own type under its label.
 
-Still to come: the validation messages are one blunt line, and there are no
-exports yet. The task list in `docs/RUNBOOK.md` says what comes next.
+A file that is not a design says why, in a panel beside the upload control.
+Before anything is read, its name and browser-reported type are checked
+against JSON — a name ending in `.json`, or a JSON media type — and a file
+that is neither, whether picked or dropped, is refused unread with a message
+asking you to rename it if it really holds JSON. A syntax error names the line
+and column when the browser gives a position to count from and says plainly
+that it does not know when it gives none — it never guesses one. A schema
+error gets one message per problem, each naming the field at fault, such as
+`nodes[0].label is missing. It has to be text.` The panel clears when a good
+file loads, and no drawing is left behind that nothing is describing.
+
+Still to come: there are no exports yet. The task list in `docs/RUNBOOK.md` says
+what comes next.
 
 The JSON it reads looks like this:
 
@@ -65,7 +76,9 @@ The JSON it reads looks like this:
 }
 ```
 
-Every field is required and no string may be empty. Node ids have to be unique,
+Every field is required and no string may be blank — a label of three spaces is
+refused, because it draws the same empty box a missing one would, though a label
+with spaces around it keeps them. Node ids have to be unique,
 and an edge's `from` and `to` have to name nodes the file defines. A key the
 schema does not name is ignored, and a design with no nodes and no edges is
 valid. `src/lib/design.schema.ts` is the definition; Task 09 publishes it as a
@@ -75,9 +88,10 @@ page with a sample file.
 
 ```
 src/lib/      the design core: types, the schema, the loader, the layout,
-              the shape vocabulary, and the SVG renderer
+              the shape vocabulary, the SVG renderer, and the modules that
+              turn a failed load into messages
 src/pages/    the Astro pages
-src/styles/   CSS Modules
+src/styles/   CSS Modules, and the tests that measure their contrast
 e2e/          the Playwright walk, its fixtures, and the server it runs against
 docs/         PRD, architecture, decisions, runbook, and one file per task
 ```

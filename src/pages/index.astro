@@ -38,21 +38,49 @@ const pageTitle = 'MapDataStructures';
         </p>
       </div>
 
+      {/*
+       * Both regions are in the page from the first paint and both start
+       * empty, because a live region announces changes to itself and not its
+       * own arrival: a panel created on failure may say nothing at all.
+       *
+       * They take turns rather than talk over each other. A good file fills
+       * the status line and empties the panel; a bad one fills the panel and
+       * empties the status line, so a success sentence is never left sitting
+       * above a list of errors. Both are polite `role="status"`, not
+       * `role="alert"`: the user asked for this by choosing a file, and the
+       * answer is worth waiting a beat for rather than interrupting whatever
+       * they were being told.
+       */}
+      <div
+        id="upload-problems"
+        class={styles.problems}
+        role="status"
+        data-state="empty"
+      ></div>
+
       <p id="upload-status" role="status"></p>
 
       <div id="drawing" class={drawingStyles.drawing}></div>
     </main>
 
     <script>
+      import type { LoadErrorReport } from '../lib/describeLoadError';
+      import {
+        describeLoadError,
+        describeUnsupportedFile,
+      } from '../lib/describeLoadError';
       import { describeUpload } from '../lib/describeUpload';
+      import { looksLikeJsonFile } from '../lib/jsonFile';
       import { layoutDesign } from '../lib/layout';
       import { loadDesign } from '../lib/loadDesign';
       import { renderDrawing } from '../lib/renderDrawing';
+      import { renderProblems } from '../lib/renderProblems';
 
       interface PageElements {
         readonly fileInput: HTMLInputElement;
         readonly dropZone: HTMLElement;
         readonly status: HTMLElement;
+        readonly problems: HTMLElement;
         readonly drawing: HTMLElement;
       }
 
@@ -62,9 +90,10 @@ const pageTitle = 'MapDataStructures';
        *
        * Nothing with logic in it lives in this script. Validating is
        * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
-       * `renderDrawing`'s and counting is `describeUpload`'s — all in
-       * `src/lib`, all tested. What is left here is wiring: find the elements,
-       * listen, and put the result in the right place.
+       * `renderDrawing`'s, counting is `describeUpload`'s and every sentence
+       * about a file that failed is `describeLoadError`'s — all in `src/lib`,
+       * all tested. What is left here is wiring: find the elements, listen, and
+       * put the result in the right place.
        */
       function startUploadPage(): void {
         const elements = findPageElements();
@@ -80,18 +109,20 @@ const pageTitle = 'MapDataStructures';
         const fileInput = document.querySelector('#design-file');
         const dropZone = document.querySelector('#drop-zone');
         const status = document.querySelector('#upload-status');
+        const problems = document.querySelector('#upload-problems');
         const drawing = document.querySelector('#drawing');
 
         if (
           !(fileInput instanceof HTMLInputElement) ||
           !(dropZone instanceof HTMLElement) ||
           !(status instanceof HTMLElement) ||
+          !(problems instanceof HTMLElement) ||
           !(drawing instanceof HTMLElement)
         ) {
           throw new Error('The upload page is missing one of its elements.');
         }
 
-        return { fileInput, dropZone, status, drawing };
+        return { fileInput, dropZone, status, problems, drawing };
       }
 
       /**
@@ -144,18 +175,74 @@ const pageTitle = 'MapDataStructures';
         }
 
         try {
-          const design = loadDesign(await file.text());
-          elements.drawing.replaceChildren(renderDrawing(layoutDesign(design), document));
-          elements.status.textContent = describeUpload(file.name, design);
-        } catch (error) {
-          // Never leave a failure silent. Task 04 replaces this one line with
-          // messages that name the line or the field at fault, out of the
-          // position and issue paths the error still carries.
-          elements.drawing.replaceChildren();
-          elements.status.textContent = `That file could not be drawn: ${describeError(error)}`;
+          await drawOrExplain(file, elements);
         } finally {
           forgetChosenFile(elements);
         }
+      }
+
+      /**
+       * One file, one outcome: the drawing, or the reason there isn't one.
+       *
+       * The kind check comes before the read so a file that is plainly not JSON
+       * — a picture dropped on the page, which the input's `accept` never sees
+       * — is answered without its bytes ever going near `JSON.parse`. The text
+       * is kept because a syntax error's position points into it, and it is
+       * read inside the `try` so that a file that vanished between the pick and
+       * the read is explained rather than swallowed.
+       */
+      async function drawOrExplain(file: File, elements: PageElements): Promise<void> {
+        if (!looksLikeJsonFile(file.name, file.type)) {
+          showProblems(elements, describeUnsupportedFile(file.name));
+          return;
+        }
+
+        let fileText = '';
+
+        try {
+          fileText = await file.text();
+          showDrawing(elements, file.name, fileText);
+        } catch (error) {
+          showProblems(
+            elements,
+            describeLoadError({ error, fileName: file.name, fileText }),
+          );
+        }
+      }
+
+      /**
+       * A good file: the drawing, the count, and the panel emptied.
+       *
+       * Everything that can throw is done before anything on the page changes,
+       * so a file that fails halfway never leaves the page half-updated — the
+       * caller catches it and the panel explains it instead.
+       */
+      function showDrawing(
+        elements: PageElements,
+        fileName: string,
+        fileText: string,
+      ): void {
+        const design = loadDesign(fileText);
+        const drawing = renderDrawing(layoutDesign(design), document);
+        const description = describeUpload(fileName, design);
+
+        elements.problems.dataset.state = 'empty';
+        elements.problems.replaceChildren();
+        elements.drawing.replaceChildren(drawing);
+        elements.status.textContent = description;
+      }
+
+      /**
+       * A bad file: the messages, and nothing left behind that described the
+       * last one. The status line is cleared rather than left saying a drawing
+       * is below, because there is no longer a drawing and because two live
+       * regions changing at once talk over each other.
+       */
+      function showProblems(elements: PageElements, report: LoadErrorReport): void {
+        elements.status.textContent = '';
+        elements.drawing.replaceChildren();
+        elements.problems.dataset.state = 'problems';
+        elements.problems.replaceChildren(...renderProblems(report, document));
       }
 
       /**
@@ -171,10 +258,6 @@ const pageTitle = 'MapDataStructures';
        */
       function forgetChosenFile(elements: PageElements): void {
         elements.fileInput.value = '';
-      }
-
-      function describeError(error: unknown): string {
-        return error instanceof Error ? error.message : String(error);
       }
 
       startUploadPage();

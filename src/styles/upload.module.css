@@ -1,12 +1,19 @@
 /*
- * The upload area: the file input, and the border that tells a user the page
- * will take a dropped file.
+ * The upload area: the file input, the border that tells a user the page will
+ * take a dropped file, and the panel that says why a file did not draw.
  *
  * Deliberately plain. Task 03 styles the drawing and Task 09 the schema page;
  * all this needs to do is make a drop target look like one. A dashed edge is
  * the convention for "you may drop here", and the dragging state changes the
  * border's *style* as well as its colour, so the cue does not depend on being
  * able to tell the two colours apart.
+ *
+ * The panel follows the drawing's direction (see `drawing.module.css`): a
+ * technical page, quiet, where colour means something rather than decorates.
+ * It is one red, used for one thing — this file did not draw — carried by a
+ * rule down its left edge that ties the list back to the control above it.
+ * `upload.module.test.ts` measures its text against both its own surface and
+ * the bare page, because a message nobody can read is not a message.
  */
 
 .dropZone {
@@ -31,5 +38,63 @@
 
 .hint {
   margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+}
+
+/*
+ * The panel is in the page from the first paint and empty, because a live
+ * region announces changes to itself and not its own arrival. Empty, it has no
+ * padding, no border and no margin, so it takes up no room and draws nothing;
+ * everything visible hangs off the state the script sets.
+ */
+.problems {
+  --problems-surface: #fdf3f3;
+  --problems-text: #5c1116;
+  --problems-rule: #b4262c;
+
+  max-width: 44rem;
+}
+
+.problems[data-state='problems'] {
+  margin-top: 1rem;
+  padding: 0.875rem 1.125rem;
+  border-left: 4px solid var(--problems-rule);
+  border-radius: 0 6px 6px 0;
+  background-color: var(--problems-surface);
+  color: var(--problems-text);
+}
+
+.problems p,
+.problems ul {
+  margin: 0;
+}
+
+.problems [data-part='summary'] {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.problems ul {
+  margin-top: 0.5rem;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+}
+
+.problems li + li {
+  margin-top: 0.375rem;
+}
+
+/*
+ * A message can quote a long id or a path from the file, and the same instinct
+ * the drawing follows applies to text on the page: wrap it, never cut it off
+ * mid-word and never let it run out of its box.
+ */
+.problems li,
+.problems [data-part='summary'] {
+  overflow-wrap: anywhere;
+}
+
+.problems [data-part='more'] {
+  margin-top: 0.5rem;
   font-size: 0.9375rem;
 }

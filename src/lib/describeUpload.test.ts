@@ -28,7 +28,7 @@ describe('describeUpload', () => {
     const description = describeUpload('order-intake.json', design);
 
     // Assert
-    expect(description).toBe('Loaded order-intake.json: 2 nodes, 1 edge.');
+    expect(description).toBe('order-intake.json is drawn below: 2 nodes, 1 edge.');
   });
 
   it('counts one node and one edge in the singular', () => {
@@ -39,7 +39,7 @@ describe('describeUpload', () => {
     const description = describeUpload('one.json', design);
 
     // Assert
-    expect(description).toBe('Loaded one.json: 1 node, 1 edge.');
+    expect(description).toBe('one.json is drawn below: 1 node, 1 edge.');
   });
 
   it('counts an empty design as no nodes and no edges', () => {
@@ -50,7 +50,7 @@ describe('describeUpload', () => {
     const description = describeUpload('empty.json', design);
 
     // Assert
-    expect(description).toBe('Loaded empty.json: 0 nodes, 0 edges.');
+    expect(description).toBe('empty.json is drawn below: 0 nodes, 0 edges.');
   });
 
   it('counts every node and every edge the design holds', () => {

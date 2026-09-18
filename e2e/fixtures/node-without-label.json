@@ -1,0 +1,8 @@
+{
+  "title": "Order intake",
+  "nodes": [
+    { "id": "api", "type": "service" },
+    { "id": "queue", "label": "Order queue", "type": "queue" }
+  ],
+  "edges": [{ "from": "api", "to": "queue", "label": "publishes order" }]
+}
