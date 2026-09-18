@@ -2,6 +2,18 @@ import { fileURLToPath } from 'node:url';
 
 import type { Locator, Page } from '@playwright/test';
 
+/** One position in the drawing, as the browser reports it. */
+export interface DrawnPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** One rectangle in the drawing, as the browser reports it. */
+export interface DrawnBox extends DrawnPoint {
+  readonly width: number;
+  readonly height: number;
+}
+
 /**
  * The upload page, as the end-to-end tests talk to it.
  *
@@ -56,6 +68,32 @@ export class UploadPage {
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-kind')));
   }
 
+  /**
+   * The box one node was drawn in, in the drawing's own coordinates.
+   *
+   * `getBBox` is the browser's own answer rather than the layout's, so a test
+   * using it is comparing what was drawn against what the reader sees.
+   */
+  async nodeBox(index: number): Promise<DrawnBox> {
+    return this.nodes()
+      .nth(index)
+      .evaluate((node) => {
+        const { x, y, width, height } = (node as SVGGElement).getBBox();
+
+        return { x, y, width, height };
+      });
+  }
+
+  /** The corners of one edge's route, read back off the path it was drawn as. */
+  async routePoints(index: number): Promise<readonly DrawnPoint[]> {
+    const path = await this.edges()
+      .nth(index)
+      .locator('[data-part="route"]')
+      .getAttribute('d');
+
+    return pointsOf(path ?? '');
+  }
+
   /** How many edges were routed. */
   edges(): Locator {
     return this.svg.locator('[data-part="edge"]');
@@ -65,6 +103,23 @@ export class UploadPage {
   nodes(): Locator {
     return this.svg.locator('[data-part="node"]');
   }
+}
+
+/**
+ * The points of a route's `d`, which the renderer writes as `M x y L x y …`.
+ *
+ * Reading the numbers back is enough here and keeps the page object free of a
+ * path parser: the drawing only ever emits straight segments.
+ */
+function pointsOf(path: string): readonly DrawnPoint[] {
+  const numbers = (path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  const points: DrawnPoint[] = [];
+
+  for (let index = 0; index + 1 < numbers.length; index += 2) {
+    points.push({ x: numbers[index] ?? 0, y: numbers[index + 1] ?? 0 });
+  }
+
+  return points;
 }
 
 function fixturePath(fixture: string): string {

@@ -114,6 +114,47 @@ test.describe('Previewing the generated drawing', () => {
     ]);
   });
 
+  test('loops a self-edge against the node it points at', async ({ page }) => {
+    // An edge from a node to itself is a file the schema accepts, and the one
+    // input that used to draw wrong: dagre parks a stub beside the node rather
+    // than routing a loop, and the stub reached the page as a line and an
+    // arrowhead in empty space, touching neither end.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('retry-loop.json');
+    await expect(upload.svg).toBeVisible();
+
+    const drawn = await upload.drawnText();
+
+    for (const label of ['Delivery worker', 'Outbox', 'retries on failure']) {
+      expect(drawn, `"${label}" is missing from the drawing`).toContain(label);
+    }
+
+    await expect(upload.edges()).toHaveCount(3);
+
+    // The third edge in the file is the loop. Both of its ends have to land on
+    // the box the browser actually drew for the node it loops on.
+    const worker = await upload.nodeBox(0);
+    const loop = await upload.routePoints(2);
+    const first = loop[0];
+    const last = loop.at(-1);
+
+    expect(loop.length).toBeGreaterThanOrEqual(2);
+    expect(first?.x).toBeCloseTo(worker.x + worker.width, 0);
+    expect(last?.x).toBeCloseTo(worker.x + worker.width, 0);
+
+    for (const point of [first, last]) {
+      expect(point?.y).toBeGreaterThanOrEqual(worker.y);
+      expect(point?.y).toBeLessThanOrEqual(worker.y + worker.height);
+    }
+
+    // And it reaches out past the box in between, so it reads as a loop.
+    expect(Math.max(...loop.map((point) => point.x))).toBeGreaterThan(
+      worker.x + worker.width,
+    );
+  });
+
   test('says what loaded in the status region', async ({ page }) => {
     const upload = new UploadPage(page);
     await upload.goto();
