@@ -1468,3 +1468,209 @@ One row appended to `docs/DECISIONS.md`:
 - Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts`,
   `pdfPlan.ts`, `download.ts` or `empty.json`, and the `intersectRect` crash was
   not touched. All still carried.
+
+## Test report from Jahmyr — round 3
+
+### Verdict
+
+**Pass.** Defect 1 is closed, and closed at the class rather than at the one
+spelling of it. I drove the built site outside the project's own suite over
+fifteen designs — Amon's fixture, five adversarial ones of my own, the repo's
+regression fixtures and a 200-node design — and read every file back with
+`pdftotext -enc UTF-8` (xpdf 4.06), an oracle that is neither `pdfText.ts` nor
+anything Amon wrote. **No control character truncates a label any more, in
+either half of the file, in a label, in a type or in an id.** All six criteria
+hold; criterion 2 is checked for the first time and the task file's `**Status:**`
+is now `done`, which per D54 means verified rather than merged.
+
+The second half of the fix is the half that mattered, and I confirmed it
+independently rather than taking it from the handoff: a lone `\r` in a label is
+marked, and the unit test that pins U+0000, U+0002 and U+000D against the real
+embedded face does go red if the coverage check is put back in front — I moved
+the check to confirm it, watched the suite fail, and put it back.
+
+Both gaps Amon disclosed are real and neither fails criterion 2. Details below,
+with a third of my own that is smaller than either.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as PDF: demonstrated end to end | **pass** | Fifteen designs driven through `dist/` in Chromium outside the suite. Every one produced a `%PDF-1.3` file ending in `%%EOF` that `pdftotext` reads, with `/Lang (en)` and the design's own `/Title`. Zero console errors and zero page errors across all of them. Also exported by keyboard alone: Tab reaches Export PDF third in the row, Enter downloads `Control-characters.pdf` |
+| The PDF shows the same nodes and edges as the preview, with every label readable (5.2) | **pass** | The tables below, read out of the bytes. Nothing truncates: there is no bare `Alpha`, `Soh`, `edge`, `Lone`, `Nul`, `id` or `Aa` run anywhere in any file I produced. Ids carry marks identically in the Nodes table and in the Edges table, so an edge still names its node. The count is right in every design I hand-counted: 6, 8, 10, 5, 13, 21 |
+| The download finishes within a few seconds for a design the size of the owner's use cases (11.1) | **pass** | Re-measured independently, click to file-in-hand, four clicks each: `platform-overview` (15/16) **236 / 119 / 113 / 115 ms**, `estate-sweep` (40/46) **221 / 148 / 148 / 151 ms**, `control-labels` 168 / 96 / 98 / 101 ms, `order-intake` 154 / 103 / 101 / 98 ms, my `labels-with-controls` 152 / 87 / 100 / 102 ms. A 200-node / 259-edge design of my own: **681 ms**, 14 pages, 813 KB, complete through its last edge. Amon's table reproduces within noise; the extra comparison per character has not moved it |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download | **pass** | 319 Vitest in 20 files, 76 Playwright, locally and on CI. The three new walk tests assert the round-three behaviour from the file's bytes, including that `Alpha■Bravo` appears **twice**, so a fix that marked one half only would fail. I checked the pinning test does its job by putting the coverage check back in front of the control check: two tests fail, one of them `expected { text: 'a\u0000b', undrawable: +0 } to deeply equal { text: 'a■b', undrawable: 1 }` |
+| Every earlier test still passes; CI is green | **pass** | Nothing regressed. CI **green** on [PR #15](https://github.com/IBatsios/map-data-structures/pull/15) after pushing `7a3cf1a`: typecheck 0 errors / 0 warnings / 0 hints, 319 Vitest in 20 files, 76 Playwright in 21.0 s, job 58 s |
+| Any new environment variable is in `.env.example` with a placeholder | **pass** | Grepped `process.env`, `import.meta.env` and `Deno.env` across `src/`, `e2e/` and the root: the only hit is `process.env.CI` in `playwright.config.ts`, which the runner sets. `.env.example` still lists none, and the only `.env*` file git tracks is `.env.example`. `gitleaks detect --source . --no-banner`: 29 commits, 1.43 MB, **no leaks found** |
+
+### Command results
+
+`bun run test`: **319 passed, 20 files**, 780 ms.
+`bun run test:e2e`: **76 passed**, 9.2 s.
+`bun run check`: **0 errors, 0 warnings, 0 hints** across 57 files.
+`bun run build`: **pass**, 1 page in 669 ms.
+Secret scan: `gitleaks` — **no leaks found**, 29 commits scanned.
+CI: **green** — typecheck 0 errors, 319 Vitest, 76 Playwright in 21.0 s.
+
+### What I confirmed, each read out of the file rather than out of the handoff
+
+**Amon's table reproduces exactly**, from `control-labels.json` exported through
+the built site and read back with `pdftotext -raw`:
+
+| Label in the design | Drawing | Table cell |
+|---|---|---|
+| `Alpha\tBravo` | `Alpha■Bravo` | `Alpha■Bravo` |
+| `Soh\u0001Charlie` | `Soh■Charlie` | `Soh■Charlie` |
+| `Del\u007fDelta` | `Del■Delta` | `Del■Delta` |
+| `edge\twith\ttabs` | `edge■with■tabs` | `edge■with■tabs` |
+| `Newline\nEcho` | `NewlineEcho` | `Newline` / `Echo` |
+| `carriage\r\nreturn` | `carriage■return` | `carriage■` / `return` |
+
+**Ids carry controls too, and the two tables agree about them** — the case you
+asked for by name, and the one the fixture does not hold. `ids-with-controls.json`,
+mine, with a tab, a lone `\r` and a `\r\n` **in node ids** and every edge naming
+them:
+
+| Id in the design | Nodes table, Id column | Edges table, From and To |
+|---|---|---|
+| `id\talpha` | `id■alpha` | `id■alpha` |
+| `id\rbravo` | `id■bravo` | `id■bravo` |
+| `id\r\ncharlie` | `id■` / `charlie` | `id■` / `charlie` |
+| `plain` | `plain` | `plain` |
+
+Before this round the Id column would have read `id` three times over and the
+edges would have named a node that appeared not to exist. The page says **8**,
+which is what I count by hand: three ids and five edge ends.
+
+**The label cases the fixture does not carry.** `labels-with-controls.json`,
+mine — a lone `\r`, a control at each end of a label, a label that is nothing but
+a control, a literal NUL, and a tab inside a label long enough to wrap:
+
+| Label in the design | Drawing | Table cell |
+|---|---|---|
+| `Lone\rReturn` | `Lone■Return` | `Lone■Return` |
+| `\u0001Edged\u0001` | `■Edged■` | `■Edged■` |
+| `\u0001` alone | `■` | `■` |
+| `Nul\u0000Inside` | `Nul■Inside` | `Nul■Inside` |
+| title `Lone\rreturn title` | `Lone■return title` | — |
+
+Its edge labels come out `lone■cr edge`, `crlf■` / `edge` and `tab■edge`. The
+page says **10**, which is what I count by hand. The NUL deserves its own line:
+the recorded known limit is that a literal NUL is *dropped* when an exported file
+is reopened, and this format now marks it rather than losing it.
+
+**Nothing outside the control ranges truncates either, which is the question the
+fix could have left half-answered.** Twelve separator and format characters, each
+in a label `Aa<c>Zz`, exported and read back. **All twelve labels survive whole** —
+there is no `Aa` run anywhere in that file:
+
+- Marked: `U+2028`, `U+2029`, `U+0085`, `U+200F`, `U+2066`, `U+FE0F`, `U+1F600`.
+- Drawn as themselves: `U+00A0`, `U+00AD`, `U+200B`, `U+FEFF`, `e` + `U+0301`.
+
+The count for that design is **13**, which is what I count by hand. `U+2028` and
+`U+2029` are the interesting pair: they sit outside the C0 and C1 ranges, so the
+cmap answers for them, and this time the answer happens to be right.
+
+**The pinning test is the test you say it is.** I replaced `isDrawable`'s body
+with `coverage.has(point) || point === LINE_BREAK` and ran the suite: *marks the
+control characters the real embedded face does map* fails on U+0000 and *marks a
+control character the font does map* fails with it — 2 failed, 317 passed.
+Restored, 319 passed. Regenerating the font cannot undo this quietly.
+
+**No regression in what round two verified.** `undrawable-labels` still says
+**21** and still reads `Gateway ■ Queue`, `API gateway (■■)` and
+`Cache (■■■■■■■)` in both halves; `platform-overview`, `order-intake` and
+`empty-design` still say nothing at all about the font, so D41 stays parked;
+Greek is still correct in the drawing and in the tables, so the `550normal`
+fallback is still fixed. Metadata re-read by walking the Info dictionary by hand:
+`/Title` is `Regions → 東京` unmarked, `Lone\rreturn title` with its carriage
+return intact, `Big design`, `Nothing yet`; `/Lang (en)` on every file; every file
+ends in `%%EOF`.
+
+### The two gaps you disclosed, judged against criterion 2 as written
+
+**1. A `\r\n` shows a mark at the end of its first line, and is counted. Does not
+fail criterion 2.** The criterion asks that the labels be readable and that the
+picture show what the preview shows. `carriage■` / `return` is readable, nothing
+is lost, and the alternative — sparing a `\r` that happens to be followed by
+`\n` — means `isDrawable` answering on position rather than on the code point,
+which is a second kind of answer to one question. The count stays honest about
+what the font could not draw. I agree with the trade.
+
+**2. The drawing writes `Newline\nEcho` as `NewlineEcho`. Does not fail criterion
+2, and the reason is precise rather than lenient.** The criterion asks that the
+PDF show *the same nodes and edges as the preview*. It does: the preview's own
+SVG holds `Newline\nEcho` in a single `<text>` run, so the browser renders it as
+`NewlineEcho` on screen too. The PDF and the preview agree; it is the PDF's
+*table* that is more faithful than either. Pre-existing, no characters lost, and
+it belongs with the drawing's other on-screen limits rather than with this round.
+
+### One more gap of my own, smaller than either, and not a failure
+
+**A tab inside a label long enough to wrap becomes a space in the picture and a
+mark in the table.** `src/lib/text.ts:116`, inside `splitIntoFittingWords`,
+splits on `/\s+/` and rejoins with a single space, so by the time `markLines`
+sees the lines the tab is already gone. My wrapping label reads
+`several lines before the` in the drawing and `several lines before■the` in the
+table.
+
+This does not fail criterion 2, for the same reason gap 2 does not: the preview
+does exactly the same thing, so the picture still shows what the preview shows,
+and the label is readable in both halves. It is worth writing down because it is
+the one case where the two halves disagree about a character that was neither
+lost nor marked in the picture, and because the count includes it. **Not a defect
+for this task**; it belongs with the drawing's own wrapping, beside the label-size
+item already listed for Jared.
+
+To be clear about what it is not: `pdfPlan`'s `wrap` and `splitWords` behave
+exactly as D72 and the comment at `drawableText.ts:156` say — `wrap` splits on
+`'\n'` and `splitWords` matches `/[^ ]*[ ]*/gu`, a space and not whitespace. I
+checked, because round two's defect came from a comment that was wrong. This one
+is right.
+
+### Adversarial pass, beyond the checklist
+
+Every failure fixture, with the export row watched: `empty.json` (zero bytes),
+`trailing-comma.json`, `not-a-design.json`, `cut-short.json`, `blank-label.json`,
+`many-problems.json`, `duplicate-ids.json` and `renamed-image.json` each left no
+drawing and all three export buttons disabled. A good file and then a bad one:
+the PDF button goes from enabled back to disabled and the drawing is gone, which
+is D53 holding with three buttons. A 200-node / 259-edge design: 681 ms, 14
+pages, complete through `n59 n26 cross 59`. Fifteen designs in all, and not one
+console error or page error.
+
+### Accessibility, best effort
+
+No page code changed this round — the diff is `drawableText.ts`, its test, the
+walk, one fixture and three documents — so this is a confirmation rather than a
+fresh audit. The export row's tree reads `group "Export the design"` with
+`button "Export Markdown"`, `button "Export HTML"` and `button "Export PDF"`; tab
+order is the file input and then the three buttons in that order; Enter on the
+focused PDF button downloads the file; and the sentence lands in a `status` live
+region. D59 holds with three buttons, and the fuller revisit still belongs to
+Task 08.
+
+### Fixed in place
+
+None. The only thing I changed under `src/` was putting the coverage check back
+in front of the control check to watch the pinning test fail, and I reverted it.
+
+### Pull request
+
+[PR #15](https://github.com/IBatsios/map-data-structures/pull/15), still a draft.
+CI green on `7a3cf1a`. Sam marks it ready and merges; I do not.
+
+### Checkboxes
+
+All six are now checked in `docs/tasks/07-export-pdf.md`, and `**Status:**` reads
+`done` — D54's meaning of done, the criteria verified in this cycle, not merged.
+
+### One note for Jared
+
+The five adversarial designs I drove this round stayed in my scratch space rather
+than in `e2e/fixtures/`: `control-labels.json` already covers the class in the
+walk, and adding fixtures at the gate is Amon's remit rather than mine. If any
+one of them is worth keeping, it is the id case — a tab, a lone `\r` and a `\r\n`
+**in node ids**, with edges naming them — because it is the only one where a
+regression would make an edge point at a node that appears not to exist. It is
+one fixture and one assertion if someone wants it in a later cycle.
