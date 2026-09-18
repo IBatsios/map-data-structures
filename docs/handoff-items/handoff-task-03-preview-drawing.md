@@ -1122,3 +1122,156 @@ None. The one defect changes routing behaviour, so it is Amon's.
 https://github.com/IBatsios/map-data-structures/pull/5 — pushed
 `fccde52..dd8ba05`, CI green on the pull-request run. Still a draft, for Sam. I
 did not mark it ready and did not merge.
+
+---
+
+## Work completed by Amon — round 3
+
+### What was built
+
+The one defect from Jahmyr's round 2 report, and nothing else.
+
+- **Two self-edges on one node are now two loops with two readable labels.**
+  Each self-edge knows which loop on its node it is: the n-th reaches
+  `SELF_LOOP_EXTENT` further out than the one inside it *and* meets the border
+  further from its middle, so an outer loop wraps around an inner one rather
+  than tracing over its arms and landing its arrowhead on the same pixel. On
+  Jahmyr's own fixture the two routes are now
+
+  ```
+  route[0] "M 195 48.67 L 229 48.67 L 229 69.33 L 195 69.33"
+  route[1] "M 195 38.33 L 263 38.33 L 263 79.67 L 195 79.67"
+  plate[0] x 271 y 32  148x24   ("retries on failure")
+  plate[1] x 271 y 62  163x24   ("escalates after five")
+  ```
+
+  against a node box of x 28..195, y 28..90 — both loops still anchored on the
+  border at both ends, both inside the node's vertical span, and the plates 6px
+  clear of each other instead of on the same spot. The file says three edges and
+  the drawing shows three.
+
+- **A node's label plates are stacked in one column past its widest loop.**
+  Stepping each plate out with its own loop was my first cut, and it was wrong
+  for a reason worth recording: an opaque plate that steps out sits across the
+  loops outside it and cuts their lines. I saw it in a screenshot before I
+  believed the numbers. One column past the widest loop is clear of every
+  stroke, and the vertical stack is what keeps the plates off each other.
+
+- **A node with one self-edge is drawn exactly where it was.** It is the first
+  loop in a stack of one, so every constant falls back to its round 2 value:
+  reach 229, ends at 48.67 and 69.33, plate at x 237..385 y 47..71 — the numbers
+  Jahmyr verified in Chromium, unmoved. I checked the `retry-loop.json`
+  screenshot against his description as well as the arithmetic.
+
+Nothing else moved. No `.css`, no `.astro`, no CI, no hook, no dependency, no
+colour — `git diff fccde52..HEAD` over `*.css`, `*.astro`, `.github/`,
+`.husky/`, `package.json`, `bun.lock`, `e2e/staticServer.ts` and
+`playwright.config.ts` is still **zero lines**, so `database`'s 4.54:1 is still
+4.54:1.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/layout.ts` | `selfLoopSlots` works out which loop on its node each self-edge is and where its plate sits in the stack; `selfLoop` takes that slot and steps its reach, its band and its plate by it. `SELF_LOOP_PLATE_GAP`, `SELF_LOOP_BAND` and `SELF_LOOP_BAND_INSET` are the new geometry, all module-private. |
+| `src/lib/layout.test.ts` | The two-loop test, plus `edgeAt` and `reachOf` helpers so it reads as prose rather than optional chaining. |
+| `e2e/drawing.spec.ts` | The same case in a real browser, against the `d` the renderer wrote and the plates the browser laid out. |
+| `e2e/pages/uploadPage.ts` | `routePath` reads an edge's `d` verbatim (`routePoints` now parses that); `plateBox` reads a label plate's own box back with `getBBox`. |
+| `e2e/fixtures/two-loops.json` | New. Jahmyr's repro fixture, committed with the test that needed it. |
+| `src/lib/text.ts` | Doc comment only, per his note: wrapping rebuilds a line from its words, so 80 consecutive spaces come back as `['']`. No behaviour change. |
+| `docs/DECISIONS.md` | D37. |
+| `README.md`, `CLAUDE.md` | **No change.** No command changed this round; both are still true. |
+| `docs/tasks/03-preview-drawing.md` | **No change.** Criterion 2 stays unchecked and the status line stays `in progress`. |
+| `.env.example` | **No change.** Still nothing in the tree reads `import.meta.env` or `process.env` but `playwright.config.ts`'s `CI`. |
+
+### Tests written
+
+125 Vitest tests (up from 124) and 11 Playwright tests (up from 10). Nothing was
+removed, weakened or renamed.
+
+**`layout.test.ts` — *draws two self-edges on one node as two loops, neither
+hiding the other***. Jahmyr's design, three edges. It pins all three labels in
+file order; both loops anchored on the node's right border at both ends with
+every point inside the node's vertical span; the two routes *not* deeply equal;
+the second loop reaching further than the first; the two loops meeting the
+border at different heights; and — the assertion the defect needed — the two
+label plates not overlapping, and neither overlapping the node.
+
+**`drawing.spec.ts` — *draws two self-edges on one node as two loops a reader
+can tell apart***. The same file through the real file input in Chromium: every
+node and edge label present, three edge groups drawn, the two `d` attributes not
+byte-identical, both loops' ends on the box `getBBox` reports, and the two
+plates' own boxes not overlapping. It measures the drawing, not the layout's
+opinion of the drawing.
+
+### Local results
+
+- `bun run test`: **pass**, 125 tests in 8 files, 394ms.
+- `bun run test:e2e`: **pass**, 11 tests, 5.0s including the build.
+- `bun run check`: **pass**, 0 errors, 0 warnings, 0 hints over 25 files.
+- `bun run build`: **pass**, 1 page in 450ms.
+- `bunx prettier --check .`: clean.
+
+**Both tests were watched failing first, on the unfixed code.** The unit test
+failed with `expected [ …(4) ] to not deeply equal [ …(4) ] — Compared values
+have no visual difference`, which is the defect stated in one line. The walk
+failed with `expect(received).not.toBe(expected)`, the expected value being the
+`d` Jahmyr quoted, and Playwright's failure screenshot shows one loop, one label
+reading "escalates after five", and no trace of "retries on failure" — his
+report as a picture. Both went green on the fix, and I looked at the result in a
+browser afterwards: two nested loops, two arrowheads landing at different points
+on the border, both labels legible, no line cut by a plate.
+
+**Collision swept programmatically, not assumed**, over four designs: the two
+loops above; two loops (one with a 56-character label) on the middle node of a
+four-sibling rank; five loops on one node; and the single-loop `retry-loop`
+shape. Every label plate against every other, every plate against every node
+box, and every route point against every node box it does not belong to. **No
+collisions in any of them.** On the crowded rank the widest plate ends at x 826
+with the next node starting at 1006, which is the lane dagre reserved doing its
+job.
+
+### Decisions recorded
+
+**D37** in `docs/DECISIONS.md`: the per-self-edge lane — why the ordinal was the
+missing piece, why the band steps as well as the reach, why the plates share one
+column instead of stepping out with their loops, and the correction to D34's
+account of the room (dagre reserves one lane *per self-edge*, each sized to that
+edge's label, not the single `NODE_SEPARATION` gap D34 named). D34 is left
+untouched; the table is newest-at-the-bottom.
+
+### Known gaps
+
+**Past the third loop on one node, the ends stop moving.** The band is clamped
+2px inside the node's top and bottom, so on a 62px box loops four and five meet
+the border where loop three does. They still reach further out, so their routes
+are still distinct and their labels still stacked and readable — swept above, no
+collisions — but the nesting stops being the cue past three. A node with four
+self-edges is not a design I expect to see; the clamp is there so no end ever
+lands outside the box it is supposed to be attached to.
+
+**The loop is still anchored to the node's bounding box, not its silhouette.**
+Unchanged from rounds 1 and 2, and the same as every other edge end in the
+drawing. Fixing it means clipping routes against each silhouette, which is one
+piece of work for all of them rather than something to do for self-edges alone.
+
+**Which label belongs to which loop is positional, not drawn.** The plates are
+stacked in file order — the first loop's label on top — beside loops nested in
+the same order. With two loops it reads; with five it is a column of labels
+beside a set of nested rectangles and nothing joins them but the order. A leader
+line would fix it, and is more drawing than this defect asked for.
+
+### Out-of-scope notes for Jared
+
+**`src/lib/layout.ts` is now 625 lines.** Inside the 800-line ceiling, past the
+200–400 that is meant to be typical, and the self-edge routing is the obvious
+seam — `selfLoop`, its slots and its four constants are about 130 lines that
+answer to one idea and are consumed through one call. I did not split it on the
+round that has to land. Worth doing before Tasks 05 to 08 start reading this
+module in earnest.
+
+**Everything I left alone in earlier rounds is still true and still out of
+scope**: the page outside the drawing has no styling, `role="status"` announces
+the count but nothing announces that the drawing changed, `astro check` has no
+incremental mode, edge labels sit beside their route rather than on it by
+dagre's default, and a very wide design still scales down to fit.
