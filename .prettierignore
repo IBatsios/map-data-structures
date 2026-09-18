@@ -17,3 +17,6 @@ docs/
 # including the broken ones. Formatting them would repair the trailing comma
 # the validation walk exists to test, and Prettier cannot parse them anyway.
 e2e/fixtures/
+
+# The embedded PDF font is generated: base64 on one line, nothing to format.
+src/lib/fonts/

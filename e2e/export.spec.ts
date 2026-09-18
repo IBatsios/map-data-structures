@@ -9,8 +9,11 @@ import { UploadPage } from './pages/uploadPage';
  *
  * This lives in a spec of its own rather than inside `drawing.spec.ts` for two
  * reasons. It is a different story — that one ends when the drawing appears,
- * this one starts there — and it is the file Tasks 06, 07 and 08 add to, since
- * HTML, PDF and Word are the same walk with a different button. `drawing.spec.ts`
+ * this one starts there — and Task 06 added the HTML half to it, since HTML is
+ * the same walk with a different button. The PDF went into `exportPdf.spec.ts`
+ * instead, because a third format took this file past the 800-line ceiling
+ * `CLAUDE.md` sets and because reading a PDF back needs a page object's worth
+ * of its own machinery; Word should follow that pattern rather than this one. `drawing.spec.ts`
  * keeps one export step of its own, which is the end-to-end walk the acceptance
  * criterion asks for; what is pinned here is the behaviour around it: the name
  * of the file, what is in it, and when the button is offered at all.
@@ -487,9 +490,12 @@ test.describe('Exporting the design as HTML', () => {
     await upload.choose('order-intake.json');
     await expect(upload.exportHtml).toBeEnabled();
 
-    // Two buttons that do one job in two formats, named as the set they are.
+    // The buttons that do one job in several formats, named as the set they
+    // are. The count is deliberate rather than incidental: a format added
+    // without joining this group would leave a control outside the name a
+    // screen reader reads on the way in, and this is what notices.
     await expect(upload.exports).toBeVisible();
-    await expect(upload.exports.getByRole('button')).toHaveCount(2);
+    await expect(upload.exports.getByRole('button')).toHaveCount(3);
 
     await upload.exportMarkdown.focus();
     await page.keyboard.press('Tab');
