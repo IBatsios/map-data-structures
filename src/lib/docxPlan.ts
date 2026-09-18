@@ -29,6 +29,8 @@
 
 import { describeDrawing } from './describeDrawing';
 import { UNDRAWABLE_MARK } from './drawableText';
+import type { DrawingRegion, DrawingSheet } from './drawingSheets';
+import { MAX_DRAWING_SHEETS, planDrawingSheets } from './drawingSheets';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 import type { MarkedText } from './markLayout';
 import { markLayout } from './markLayout';
@@ -68,7 +70,7 @@ const CONTENT_HEIGHT_PX = CONTENT_HEIGHT_DXA / DXA_PER_PIXEL;
 const TITLE_HEIGHT_PX = 96;
 
 /**
- * How tall the drawing may be, in image pixels.
+ * How tall the drawing may be where it sits under the title, in image pixels.
  *
  * The content area is 864 pixels tall and the title above the picture takes
  * the first inch of it. An image taller than the page is not pushed onto the
@@ -77,21 +79,84 @@ const TITLE_HEIGHT_PX = 96;
  */
 export const DRAWING_MAX_HEIGHT_PX = CONTENT_HEIGHT_PX - TITLE_HEIGHT_PX;
 
+/** The room a caption under a sheet of the drawing takes, in image pixels. */
+const CAPTION_HEIGHT_PX = 32;
+
+/**
+ * How tall one sheet of a tiled drawing may be, in image pixels.
+ *
+ * A tiled drawing starts on a page of its own, so it has the whole content
+ * area rather than the content area less the title. That page is worth what it
+ * costs: a sheet sharing the first page with the title would be an inch
+ * shorter on *every* sheet, and measured on `platform-overview.json` that
+ * doubles the Word document from three sheets to six.
+ */
+const DRAWING_SHEET_HEIGHT_PX = CONTENT_HEIGHT_PX - CAPTION_HEIGHT_PX;
+
+/** How many points one image pixel is: 72 to the inch over 96 to the inch. */
+const POINTS_PER_PIXEL = 0.75;
+
 /**
  * How many raster pixels are painted per pixel the image is placed at.
  *
  * The drawing goes into a `.docx` as a picture rather than as vector, because
  * `docx` requires a raster fallback for an SVG whatever Word does with one, so
  * sharpness is bought here and nowhere else. Three gives 288 DPI at the placed
- * size, which is a print resolution, and the canvas stays small: the placed
- * size is capped at one page, so the largest canvas this can ever ask for is
- * 624 × 768 × 3, about 4.3 megapixels, whether the design has seven nodes or
- * two hundred. Scaling the *drawing's* own size instead is what would have
- * needed a pixel budget and a cap.
+ * size, which is a print resolution (D74), and that has not changed.
  */
 export const RASTER_SCALE = 3;
 
-/** What stands in for the drawing when the design holds nothing to draw (D51). */
+/**
+ * The shortest side any painted sheet may have, in raster pixels.
+ *
+ * **This is what stops the placed size from driving the raster.** D74 measured
+ * the canvas straight off the placed size and nothing else, and a thousand-node
+ * chain — 188 pixels wide against 157,960 tall — was placed a hundredth of an
+ * inch wide and came out of the file as a 3 × 2304 PNG: a three-pixel hairline
+ * where a picture should be, reported as a successful export. Tiling does not
+ * fix that by itself, because a drawing that thin is still thin on every sheet
+ * of it. So the raster has a floor of its own, and when it binds the *whole*
+ * canvas is painted larger in the same proportion rather than one side of it,
+ * because a picture stretched back into its placed shape is worse than a small
+ * one.
+ */
+export const MIN_RASTER_SIDE = 200;
+
+/**
+ * The most raster pixels one sheet may be painted into.
+ *
+ * A sheet is placed at no more than a whole content area, so three times that
+ * each way is the largest canvas `RASTER_SCALE` alone can ever ask for, and
+ * this is exactly that number. It is written down rather than left implied
+ * because it is also what `MIN_RASTER_SIDE` is trimmed against: a very thin
+ * sheet would otherwise be painted arbitrarily large to lift its short side to
+ * the floor.
+ */
+export const MAX_SHEET_RASTER_PIXELS =
+  CONTENT_WIDTH_PX * CONTENT_HEIGHT_PX * RASTER_SCALE ** 2;
+
+/**
+ * The most raster pixels one export may paint, over every sheet of it.
+ *
+ * **D74's bound does not survive this cycle, and this is what replaces it.** It
+ * held that the canvas was bounded because the placed size was capped at one
+ * page, and that cap is exactly what the floor removes; D74 itself named "a
+ * pixel budget and a canvas-dimension cap" as what the other route would have
+ * needed, so both are now here. The two halves are the per-sheet ceiling above
+ * and `MAX_DRAWING_SHEETS`, and this is their product. `toDocx` paints, encodes
+ * and releases one sheet at a time, so what is held at once is one canvas
+ * rather than sixteen.
+ */
+export const MAX_RASTER_PIXELS = MAX_SHEET_RASTER_PIXELS * MAX_DRAWING_SHEETS;
+
+/**
+ * What stands in for the drawing when the design holds nothing to draw (D51).
+ *
+ * The same sentence is written out in `pdfPlan.ts` (exported), `toHtml.ts`
+ * (private) and `toMarkdown.ts`, with nothing holding the four together the way
+ * `exportStyles.test.ts` holds the palette. Unifying them is its own cycle;
+ * this pointer is here so whoever does it can find all four.
+ */
 const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
 
 /**
@@ -115,18 +180,38 @@ export interface DocxTablePlan {
   readonly rows: readonly (readonly DocxCell[])[];
 }
 
-/** Where the picture goes, how big, and what to paint it from. */
-export interface DocxDrawingPlan {
-  /** The layout to render, with every unwritable character already marked. */
-  readonly layout: DesignLayout;
+/** One sheet of the picture: which piece, how big, and what to paint it from. */
+export interface DocxDrawingSheet {
+  /** The piece of the drawing this sheet shows, in the drawing's own pixels. */
+  readonly region: DrawingRegion;
   /** The size on the page, in image pixels at 96 DPI. */
   readonly width: number;
   readonly height: number;
-  /** The canvas to paint into, which is that size times `RASTER_SCALE`. */
+  /** The canvas to paint into, at least `RASTER_SCALE` times the placed size. */
   readonly rasterWidth: number;
   readonly rasterHeight: number;
   /** What the picture says, for a reader who cannot see it (D28). */
   readonly altText: string;
+  /** What the sheet says under itself, or `null` when the drawing is one sheet. */
+  readonly caption: string | null;
+  /** Whether a page break goes in front of it. */
+  readonly onItsOwnPage: boolean;
+}
+
+/** Where the picture goes, how big, and what to paint it from. */
+export interface DocxDrawingPlan {
+  /** The layout to render, with every unwritable character already marked. */
+  readonly layout: DesignLayout;
+  /** Every sheet of the picture, in the order a reader meets them. */
+  readonly sheets: readonly DocxDrawingSheet[];
+  /** What the document says before the sheets start, or `null` for just one. */
+  readonly spread: string | null;
+  /**
+   * What the document says when the sheet cap forced the drawing under the
+   * floor, or `null` when it did not. The drawing never prints smaller than
+   * the floor without the file saying so in its own words.
+   */
+  readonly tooSmall: string | null;
 }
 
 /** What the file says about itself, rather than what it draws. */
@@ -356,31 +441,102 @@ function isWritable(point: number): boolean {
 /**
  * The picture: how big it sits on the page, and what to paint it from.
  *
- * Scaled to fit and never scaled up, the way the PDF's is (D66), so a small
- * design is not blown up into a blurry picture of itself. A design with no
- * nodes gets no picture at all — the sentence stands in for it (D51, D60).
+ * Never scaled up, the way the PDF's is not (D66), so a small design is not
+ * blown up into a blurry picture of itself — and, since this cycle, never
+ * scaled down so far that its own smallest text stops being writing. How far
+ * that is and how many sheets it costs is `drawingSheets.ts`, which the PDF
+ * reads too (D78); what is left here is the conversion into the two units a
+ * `.docx` measures in and the decision about what to paint each sheet into.
+ *
+ * A design with no nodes gets no picture at all — the sentence stands in for it
+ * (D51, D60).
  */
 function planDrawing(layout: DesignLayout, description: string): DocxDrawingPlan | null {
   if (layout.nodes.length === 0) {
     return null;
   }
 
-  const scale = Math.min(
-    1,
-    CONTENT_WIDTH_PX / layout.width,
-    DRAWING_MAX_HEIGHT_PX / layout.height,
-  );
-  const width = layout.width * scale;
-  const height = layout.height * scale;
+  const plan = planDrawingSheets(layout, {
+    inline: {
+      width: CONTENT_WIDTH_PX * POINTS_PER_PIXEL,
+      height: DRAWING_MAX_HEIGHT_PX * POINTS_PER_PIXEL,
+    },
+    sheet: {
+      width: CONTENT_WIDTH_PX * POINTS_PER_PIXEL,
+      height: DRAWING_SHEET_HEIGHT_PX * POINTS_PER_PIXEL,
+    },
+    // One drawing pixel is one image pixel at natural size, and an image pixel
+    // is three quarters of a point — a `.docx` places pictures at 96 DPI.
+    naturalScale: POINTS_PER_PIXEL,
+  });
 
   return {
     layout,
+    sheets: plan.sheets.map((sheet) => paintedSheet(sheet, description, plan.inline)),
+    spread: plan.spread,
+    tooSmall: plan.tooSmall,
+  };
+}
+
+/**
+ * One sheet, in the pixels a `.docx` places an image in and paints one at.
+ *
+ * **What a sheet is called to a screen reader.** The first one carries the
+ * whole description, because a reader who cannot see the picture still needs
+ * what it says; every sheet after it carries its own caption and nothing more.
+ * Reading the same description out sixteen times would bury the one difference
+ * between the sixteen pictures, which is which piece of the drawing each is.
+ */
+function paintedSheet(
+  sheet: DrawingSheet,
+  description: string,
+  inline: boolean,
+): DocxDrawingSheet {
+  const width = sheet.width / POINTS_PER_PIXEL;
+  const height = sheet.height / POINTS_PER_PIXEL;
+  const raster = rasterScaleFor(width, height);
+  const altText =
+    sheet.caption === null ? description : `${sheet.caption} ${description}`;
+
+  return {
+    region: sheet.region,
     width,
     height,
-    rasterWidth: Math.round(width * RASTER_SCALE),
-    rasterHeight: Math.round(height * RASTER_SCALE),
-    altText: description,
+    rasterWidth: Math.round(width * raster),
+    rasterHeight: Math.round(height * raster),
+    altText: sheet.number === 1 ? altText : (sheet.caption ?? description),
+    caption: sheet.caption,
+    onItsOwnPage: !inline,
   };
+}
+
+/**
+ * How many raster pixels to paint per placed pixel, for one sheet.
+ *
+ * Three rules, in this order, and the order is what makes it a rule rather
+ * than a preference:
+ *
+ * 1. Never below `RASTER_SCALE`, which is the print resolution D74 bought and
+ *    this cycle does not give back.
+ * 2. Never so few that the short side of the picture falls under
+ *    `MIN_RASTER_SIDE` — the hairline that constant exists to stop.
+ * 3. Never so many that one sheet passes `MAX_SHEET_RASTER_PIXELS`.
+ *
+ * The second and third can pull against each other on a sheet thin enough, and
+ * the budget wins: a canvas larger than the budget is memory this export has
+ * said it will not take. They cannot pull against the first, because a sheet is
+ * placed at no more than one content area and three times that each way is
+ * exactly the budget.
+ */
+function rasterScaleFor(width: number, height: number): number {
+  if (width <= 0 || height <= 0) {
+    return RASTER_SCALE;
+  }
+
+  const wanted = Math.max(RASTER_SCALE, MIN_RASTER_SIDE / Math.min(width, height));
+  const affordable = Math.sqrt(MAX_SHEET_RASTER_PIXELS / (width * height));
+
+  return Math.max(RASTER_SCALE, Math.min(wanted, affordable));
 }
 
 /** One table: its heading, its columns, their widths in DXA, and its rows. */

@@ -34,10 +34,14 @@ const PDF_ROOM: DrawingRoom = {
   sheet: { width: 516, height: 677 },
 };
 
-/** The Word export's room, in points, which is a different page (D75). */
+/**
+ * The Word export's room, in points, which is a different page (D75) measured
+ * in a different unit: an image pixel is three quarters of a point.
+ */
 const WORD_ROOM: DrawingRoom = {
   inline: { width: 468, height: 576 },
   sheet: { width: 468, height: 624 },
+  naturalScale: 0.75,
 };
 
 function node(id: string, label: string, type = 'service'): DesignNode {
@@ -166,12 +170,15 @@ describe('planDrawingSheets', () => {
     });
 
     it('is never scaled up, however much room it is given', () => {
-      const plan = planDrawingSheets(SMALL, {
+      const roomy = {
         inline: { width: 5000, height: 5000 },
         sheet: { width: 5000, height: 5000 },
-      });
+      };
 
-      expect(plan.scale).toBe(1);
+      expect(planDrawingSheets(SMALL, roomy).scale).toBe(1);
+      // And natural size is the format's own, not one for both: a `.docx`
+      // places a drawing pixel at an image pixel, which is 0.75 pt.
+      expect(planDrawingSheets(SMALL, { ...roomy, naturalScale: 0.75 }).scale).toBe(0.75);
     });
 
     it('covers the whole drawing in its one region', () => {

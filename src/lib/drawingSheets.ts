@@ -125,6 +125,20 @@ export interface DrawingRoom {
   readonly inline: SheetRoom;
   /** A whole sheet of its own, which is what it gets once it has to be tiled. */
   readonly sheet: SheetRoom;
+  /**
+   * What one pixel of the drawing is worth at the format's own natural size, in
+   * points. The drawing is never printed larger than this (D66).
+   *
+   * It is not the same number in both formats and that is not an oversight. A
+   * PDF is written in points and places a drawing pixel at one point, so its
+   * natural size is 1. A `.docx` measures an image in pixels at 96 DPI and
+   * places a drawing pixel at one of those, which is three quarters of a point.
+   * The same drawing at natural size is therefore a third larger on paper in
+   * the PDF than in the Word file, which is exactly what the opening
+   * measurements of this cycle showed: 11.8 pt against 10.5 pt for the same
+   * label in `markup-labels.json`.
+   */
+  readonly naturalScale?: number;
 }
 
 /** One rectangle of the drawing, in the drawing's own pixels. */
@@ -152,7 +166,10 @@ export interface DrawingSheet {
 
 /** The whole drawing, sheet by sheet, and what the document says about it. */
 export interface DrawingSheetPlan {
-  /** Points on the page per pixel of the drawing. Never above one (D66). */
+  /**
+   * Points on the page per pixel of the drawing. Never past the format's own
+   * natural size, so a small drawing is not blown up into a blurry one (D66).
+   */
   readonly scale: number;
   readonly sheets: readonly DrawingSheet[];
   readonly columns: number;
@@ -205,7 +222,8 @@ export function planDrawingSheets(
   room: DrawingRoom,
 ): DrawingSheetPlan {
   const size = { width: layout.width, height: layout.height };
-  const inlineScale = fitScale(size, room.inline);
+  const natural = room.naturalScale ?? 1;
+  const inlineScale = fitScale(size, room.inline, natural);
 
   // The drawing that already printed large enough keeps exactly what it had:
   // the same place in the document, the same size, no caption and nothing said
@@ -216,8 +234,8 @@ export function planDrawingSheets(
   }
 
   const spans = elementSpans(layout);
-  const floorScale = Math.min(1, MIN_TEXT_POINTS / SMALLEST_TEXT_PX);
-  const sheetFit = fitScale(size, room.sheet);
+  const floorScale = Math.min(natural, MIN_TEXT_POINTS / SMALLEST_TEXT_PX);
+  const sheetFit = fitScale(size, room.sheet, natural);
 
   // Never below what would have fitted a whole sheet anyway: a drawing that is
   // small enough for one sheet is printed on one, not blown up and cut in four.
@@ -301,13 +319,13 @@ function elementSpans(layout: DesignLayout): { x: readonly Span[]; y: readonly S
   };
 }
 
-/** The largest scale that fits the whole drawing in a room, never above one. */
-function fitScale(size: SheetRoom, room: SheetRoom): number {
+/** The largest scale that fits a drawing in a room, never past natural size. */
+function fitScale(size: SheetRoom, room: SheetRoom, natural: number): number {
   if (size.width <= 0 || size.height <= 0) {
-    return 1;
+    return natural;
   }
 
-  return Math.min(1, room.width / size.width, room.height / size.height);
+  return Math.min(natural, room.width / size.width, room.height / size.height);
 }
 
 /** The whole drawing on one sheet, with nothing to say about it. */

@@ -5,6 +5,9 @@ import type { DocxTablePlan } from './docxPlan';
 import {
   CONTENT_WIDTH_PX,
   DRAWING_MAX_HEIGHT_PX,
+  MAX_RASTER_PIXELS,
+  MAX_SHEET_RASTER_PIXELS,
+  MIN_RASTER_SIDE,
   PAGE_HEIGHT_DXA,
   PAGE_MARGIN_DXA,
   PAGE_WIDTH_DXA,
@@ -14,6 +17,7 @@ import {
   safeDocxText,
 } from './docxPlan';
 import { UNDRAWABLE_MARK } from './drawableText';
+import { MAX_DRAWING_SHEETS, MIN_TEXT_POINTS, SMALLEST_TEXT_PX } from './drawingSheets';
 import { layoutDesign } from './layout';
 
 /**
@@ -159,54 +163,159 @@ describe('docxPlan', () => {
   describe('the drawing', () => {
     it('is planned at a size that fits the page, and is never scaled up', () => {
       const plan = planOf(SMALL);
+      const only = plan.drawing?.sheets[0];
 
       expect(plan.drawing).not.toBeNull();
-      expect(plan.drawing?.width).toBeLessThanOrEqual(CONTENT_WIDTH_PX);
-      expect(plan.drawing?.height).toBeLessThanOrEqual(DRAWING_MAX_HEIGHT_PX);
-      expect(plan.drawing?.width).toBeLessThanOrEqual(plan.drawing?.layout.width ?? 0);
+      expect(plan.drawing?.sheets).toHaveLength(1);
+      expect(only?.width).toBeLessThanOrEqual(CONTENT_WIDTH_PX);
+      expect(only?.height).toBeLessThanOrEqual(DRAWING_MAX_HEIGHT_PX);
+      expect(only?.width).toBeLessThanOrEqual(plan.drawing?.layout.width ?? 0);
+      // The whole canvas, on the one sheet, with nothing said about it: this is
+      // what every design this size did before the floor existed and still does.
+      expect(only?.region).toEqual({
+        x: 0,
+        y: 0,
+        width: plan.drawing?.layout.width,
+        height: plan.drawing?.layout.height,
+      });
+      expect(only?.caption).toBeNull();
+      expect(only?.onItsOwnPage).toBe(false);
+      expect(plan.drawing?.spread).toBeNull();
+      expect(plan.drawing?.tooSmall).toBeNull();
     });
 
-    it('keeps the drawing’s own proportions when it has to shrink it', () => {
+    it('keeps the drawing’s own proportions on every sheet it takes', () => {
       const wide = designOf(
         'Wide one',
         Array.from({ length: 24 }, (_, index) => node(`n${index}`, `Node ${index}`)),
       );
       const plan = planOf(wide);
-      const layout = plan.drawing?.layout;
 
-      expect(layout).toBeDefined();
-      const scale = (plan.drawing?.width ?? 0) / (layout?.width ?? 1);
+      expect(plan.drawing?.sheets.length).toBeGreaterThan(1);
+      for (const sheet of plan.drawing?.sheets ?? []) {
+        expect(sheet.width / sheet.height).toBeCloseTo(
+          sheet.region.width / sheet.region.height,
+          5,
+        );
+        expect(sheet.width).toBeLessThanOrEqual(CONTENT_WIDTH_PX + 0.001);
+      }
+    });
 
-      expect(plan.drawing?.height).toBeCloseTo((layout?.height ?? 0) * scale, 5);
-      expect(scale).toBeLessThan(1);
+    it('never prints the drawing’s smallest text below the floor', () => {
+      const wide = designOf(
+        'Wide one',
+        Array.from({ length: 24 }, (_, index) => node(`n${index}`, `Node ${index}`)),
+      );
+
+      for (const sheet of planOf(wide).drawing?.sheets ?? []) {
+        const points = SMALLEST_TEXT_PX * (sheet.width / sheet.region.width) * 0.75;
+
+        expect(points).toBeCloseTo(MIN_TEXT_POINTS, 5);
+      }
     });
 
     it('rasterises at a fixed multiple of the size it is placed at', () => {
-      const plan = planOf(SMALL);
+      const only = planOf(SMALL).drawing?.sheets[0];
 
-      // The canvas is measured against the placed size rather than the
-      // drawing's own, so it is bounded whatever the design's size: a page is
-      // a page, and a 200-node design rasterises into the same canvas a
-      // 7-node one does.
-      expect(plan.drawing?.rasterWidth).toBe(
-        Math.round((plan.drawing?.width ?? 0) * RASTER_SCALE),
+      expect(only?.rasterWidth).toBe(Math.round((only?.width ?? 0) * RASTER_SCALE));
+      expect(only?.rasterHeight).toBe(Math.round((only?.height ?? 0) * RASTER_SCALE));
+    });
+
+    it('never paints a hairline, whatever shape the drawing is', () => {
+      // The defect this replaces: a thousand-node chain placed at 0.01 inches
+      // wide produced a 3 x 2304 PNG, because the canvas was measured off the
+      // placed size and nothing else. The placed size may still be thin — a
+      // drawing a hundred times wider than it is tall is thin — but the
+      // picture of it is no longer three pixels of anything.
+      const thin = designOf(
+        'Very wide',
+        Array.from({ length: 600 }, (_, index) => node(`n${index}`, `Node ${index}`)),
       );
-      expect(plan.drawing?.rasterHeight).toBe(
-        Math.round((plan.drawing?.height ?? 0) * RASTER_SCALE),
-      );
-      expect(plan.drawing?.rasterWidth).toBeLessThanOrEqual(
-        CONTENT_WIDTH_PX * RASTER_SCALE,
-      );
-      expect(plan.drawing?.rasterHeight).toBeLessThanOrEqual(
-        DRAWING_MAX_HEIGHT_PX * RASTER_SCALE,
-      );
+      const sheets = planOf(thin).drawing?.sheets ?? [];
+
+      expect(sheets.length).toBeGreaterThan(1);
+      for (const sheet of sheets) {
+        expect(Math.min(sheet.rasterWidth, sheet.rasterHeight)).toBeGreaterThanOrEqual(
+          MIN_RASTER_SIDE,
+        );
+        // And painting it larger must not stretch it out of shape.
+        expect(sheet.rasterWidth / sheet.rasterHeight).toBeCloseTo(
+          sheet.width / sheet.height,
+          1,
+        );
+      }
+    });
+
+    it('keeps the raster work bounded, per sheet and over the whole file', () => {
+      const designs = [
+        designOf(
+          'Very wide',
+          Array.from({ length: 600 }, (_, index) => node(`n${index}`, `Node ${index}`)),
+        ),
+        designOf(
+          'Very tall',
+          Array.from({ length: 300 }, (_, index) => node(`n${index}`, `Node ${index}`)),
+          Array.from({ length: 299 }, (_, index) => ({
+            from: `n${index}`,
+            to: `n${index + 1}`,
+            label: 'next',
+          })),
+        ),
+        SMALL,
+      ];
+
+      for (const design of designs) {
+        const sheets = planOf(design).drawing?.sheets ?? [];
+        const total = sheets.reduce(
+          (pixels, sheet) => pixels + sheet.rasterWidth * sheet.rasterHeight,
+          0,
+        );
+
+        expect(sheets.length).toBeLessThanOrEqual(MAX_DRAWING_SHEETS);
+        for (const sheet of sheets) {
+          expect(sheet.rasterWidth * sheet.rasterHeight).toBeLessThanOrEqual(
+            MAX_SHEET_RASTER_PIXELS,
+          );
+        }
+        expect(total).toBeLessThanOrEqual(MAX_RASTER_PIXELS);
+      }
     });
 
     it('describes the picture for a reader who cannot see it', () => {
       const plan = planOf(SMALL);
 
-      expect(plan.drawing?.altText).toContain('Public API');
-      expect(plan.drawing?.altText).toContain('publishes order');
+      expect(plan.drawing?.sheets[0]?.altText).toContain('Public API');
+      expect(plan.drawing?.sheets[0]?.altText).toContain('publishes order');
+    });
+
+    it('names each later sheet rather than reading the whole design again', () => {
+      const wide = designOf(
+        'Wide one',
+        Array.from({ length: 24 }, (_, index) => node(`n${index}`, `Node ${index}`)),
+      );
+      const sheets = planOf(wide).drawing?.sheets ?? [];
+      const [first, ...rest] = sheets;
+
+      expect(first?.altText).toContain('Node 0');
+      expect(first?.altText).toContain('sheet 1 of');
+      for (const sheet of rest) {
+        expect(sheet.altText).toBe(sheet.caption);
+        expect(sheet.altText).not.toContain('Node 0');
+      }
+    });
+
+    it('starts every sheet of a tiled drawing on a page of its own', () => {
+      const wide = designOf(
+        'Wide one',
+        Array.from({ length: 24 }, (_, index) => node(`n${index}`, `Node ${index}`)),
+      );
+      const plan = planOf(wide);
+
+      expect(plan.drawing?.spread).toContain('sheets');
+      for (const sheet of plan.drawing?.sheets ?? []) {
+        expect(sheet.onItsOwnPage).toBe(true);
+        expect(sheet.caption).not.toBeNull();
+      }
     });
 
     it('is a sentence rather than a picture when the design has no nodes', () => {
@@ -337,7 +446,7 @@ describe('docxPlan', () => {
       // control character would stop the picture loading at all.
       expect(drawn?.label).toBe(`Soh${UNDRAWABLE_MARK}Charlie`);
       expect(drawn?.labelLines.join(' ')).toContain(UNDRAWABLE_MARK);
-      expect(plan.drawing?.altText).not.toContain('');
+      expect(plan.drawing?.sheets[0]?.altText).not.toContain('');
     });
 
     it('says nothing when the design carries no control character at all', () => {
