@@ -49,13 +49,16 @@ Six kinds of node have a silhouette of their own — `service`, `database`,
 as a plain grey dashed rectangle rather than disappearing, and every node prints
 its own type under its label.
 
-A file that is not a design says why, in a panel beside the upload control. A
-syntax error names the line and column when the browser gives a position to
-count from and says plainly that it does not know when it gives none — it never
-guesses one. A schema error gets one message per problem, each naming the field
-at fault, such as `nodes[0].label is missing. It has to be text.` The panel
-clears when a good file loads, and no drawing is left behind that nothing is
-describing.
+A file that is not a design says why, in a panel beside the upload control.
+Before anything is read, its name and browser-reported type are checked
+against JSON — a name ending in `.json`, or a JSON media type — and a file
+that is neither, whether picked or dropped, is refused unread with a message
+asking you to rename it if it really holds JSON. A syntax error names the line
+and column when the browser gives a position to count from and says plainly
+that it does not know when it gives none — it never guesses one. A schema
+error gets one message per problem, each naming the field at fault, such as
+`nodes[0].label is missing. It has to be text.` The panel clears when a good
+file loads, and no drawing is left behind that nothing is describing.
 
 Still to come: there are no exports yet. The task list in `docs/RUNBOOK.md` says
 what comes next.

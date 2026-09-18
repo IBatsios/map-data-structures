@@ -17,16 +17,24 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 to 03 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 04 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
-edge naming an unknown node is refused, not silently drawn wrong. A loaded
-design is laid out with `@dagrejs/dagre` and drawn as an SVG below the status
-line: six node kinds each in their own silhouette (`service`, `database`,
-`queue`, `external`, `user`, `decision`), anything else a grey dashed
-rectangle, labelled edges with arrowheads, self-edges looped against their own
-node, a `<title>` and `<desc>` for accessibility. Still one blunt validation
-line, no exports yet. See `docs/RUNBOOK.md` for the frontier.
+edge naming an unknown node is refused, not silently drawn wrong, and no
+string may be blank (`"   "` is refused; `"  Public API  "` keeps its spaces).
+A loaded design is laid out with `@dagrejs/dagre` and drawn as an SVG below the
+status line: six node kinds each in their own silhouette (`service`,
+`database`, `queue`, `external`, `user`, `decision`), anything else a grey
+dashed rectangle, labelled edges with arrowheads, self-edges looped against
+their own node, a `<title>` and `<desc>` for accessibility.
+
+A file that is not JSON by name or reported type (`src/lib/jsonFile.ts`) is
+refused before it is opened, whether picked or dropped. A file that fails to
+parse or to validate is explained in a live-region panel beside the upload
+control: a syntax error names the line and column when the engine gives one
+and says so plainly when it does not, never guessing; a schema error names the
+field at fault, one message per problem. No exports yet. See
+`docs/RUNBOOK.md` for the frontier.
 
 ## Run and test
 
