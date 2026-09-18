@@ -4,7 +4,14 @@ import { expect, test } from '@playwright/test';
 
 import type { SavedFile } from './pages/uploadPage';
 import { UploadPage } from './pages/uploadPage';
-import { pdfFonts, pdfLanguage, pdfText, pdfTitle } from './pdfText';
+import {
+  pdfDrawnText,
+  pdfFonts,
+  pdfLanguage,
+  pdfPageCount,
+  pdfText,
+  pdfTitle,
+} from './pdfText';
 
 /**
  * Exporting what is on screen as a PDF: click the button, get a file, and read
@@ -44,16 +51,42 @@ const PDF_BUDGET_MS = 15_000;
  */
 const MARK = '■';
 
+/**
+ * A chain of `count` nodes, as the JSON a user would have uploaded.
+ *
+ * Built here rather than checked in as a fixture: what it is for is reaching
+ * the sheet cap, which takes hundreds of nodes, and a fixture that size is a
+ * hundred kilobytes of generated JSON in the repository for one assertion.
+ */
+function chainDesign(count: number): string {
+  return JSON.stringify({
+    title: `Chain of ${count}`,
+    nodes: Array.from({ length: count }, (_, index) => ({
+      id: `n${index}`,
+      label: `Node ${index}`,
+      type: 'service',
+    })),
+    edges: Array.from({ length: count - 1 }, (_, index) => ({
+      from: `n${index}`,
+      to: `n${index + 1}`,
+      label: 'next',
+    })),
+  });
+}
+
 /** Every piece of text the PDF draws, in the order it draws it. */
 async function pdfRuns(file: SavedFile): Promise<readonly string[]> {
   return pdfText(await readFile(file.path));
 }
 
-/** How many pages the PDF holds. */
-async function pdfPageCount(file: SavedFile): Promise<number> {
-  const raw = (await readFile(file.path)).toString('latin1');
+/** The bytes of a downloaded file. */
+async function bytesOf(file: SavedFile): Promise<Buffer> {
+  return readFile(file.path);
+}
 
-  return (raw.match(/\/Type\s*\/Page[^s]/gu) ?? []).length;
+/** How many pages the PDF holds, from its own page objects. */
+async function pagesIn(file: SavedFile): Promise<number> {
+  return pdfPageCount(await bytesOf(file));
 }
 
 test.describe('Exporting the design as PDF', () => {
@@ -410,7 +443,7 @@ test.describe('Exporting the design as PDF', () => {
     expect(written).toContain('This design has no nodes, so there is nothing to draw.');
     expect(written).toContain('Nodes');
     expect(written).toContain('Edges');
-    expect(await pdfPageCount(file)).toBe(1);
+    expect(await pagesIn(file)).toBe(1);
   });
 
   test('runs a design too long for one page onto the pages it needs', async ({
@@ -425,7 +458,7 @@ test.describe('Exporting the design as PDF', () => {
     const file = await upload.downloadPdf();
     const written = await pdfRuns(file);
 
-    expect(await pdfPageCount(file)).toBeGreaterThan(1);
+    expect(await pagesIn(file)).toBeGreaterThan(1);
     // Nothing falls off the end: the last stage of the last region is in the
     // file just as the first one is.
     expect(written).toContain('Ingest stage 0');
@@ -536,5 +569,114 @@ test.describe('Exporting the design as PDF', () => {
 
     expect(await pdfRuns(file)).toContain('Estate sweep');
     expect(took).toBeLessThan(PDF_BUDGET_MS);
+  });
+  test.describe('the size the drawing prints at', () => {
+    /**
+     * The size of the smallest text the drawing draws, in its own pixels.
+     *
+     * Spelled out here rather than imported from `src/`, the way `MARK` is:
+     * the point of reading the bytes back is to be a second opinion on the
+     * modules, and a constant imported from the module under test would make
+     * this an echo of it. Eleven is the `type` line under every node, which is
+     * smaller than the 14 a label is drawn at and the 12 an edge label is, and
+     * is therefore the one a floor has to be judged against.
+     */
+    const TYPE_SIZE_PX = 11;
+
+    /** The floor this cycle put under that text, in points. */
+    const FLOOR_PT = 6;
+
+    /** The most sheets the drawing may take, whatever the design. */
+    const SHEET_CAP = 16;
+
+    /** Every run of the drawing's smallest text, with the size it prints at. */
+    function typeText(bytes: Buffer): readonly { page: number; points: number }[] {
+      const drawn = pdfDrawnText(bytes).filter((run) => run.nominal === TYPE_SIZE_PX);
+
+      expect(drawn.length, 'the drawing drew no type line at all').toBeGreaterThan(0);
+
+      return drawn;
+    }
+
+    for (const design of [
+      { file: 'markup-labels.json', labels: ['Tom & Jerry "quoted"'] },
+      { file: 'order-intake.json', labels: ['Public API', 'Order queue'] },
+      { file: 'platform-overview.json', labels: ['Edge router', 'Billing service'] },
+      { file: 'estate-sweep.json', labels: ['Ingest stage 0'] },
+    ]) {
+      test(`keeps ${design.file} above the floor, measured off the file`, async ({
+        page,
+      }, testInfo) => {
+        const upload = new UploadPage(page);
+        await upload.goto();
+        await upload.choose(design.file);
+        await expect(upload.svg).toBeVisible();
+
+        const file = await upload.downloadPdf();
+        const bytes = await bytesOf(file);
+        const drawn = typeText(bytes);
+        const smallest = Math.min(...drawn.map((run) => run.points));
+        const sheets = new Set(drawn.map((run) => run.page)).size;
+
+        testInfo.annotations.push({
+          type: 'drawing-size-pdf',
+          description: `${design.file}: smallest text ${smallest.toFixed(2)} pt on ${sheets} sheet(s) of ${pdfPageCount(bytes)} pages`,
+        });
+
+        expect(smallest).toBeGreaterThanOrEqual(FLOOR_PT - 0.01);
+        expect(sheets).toBeLessThanOrEqual(SHEET_CAP);
+
+        // And nothing was traded for it: the tables still carry every label at
+        // full size, which is what made the old behaviour survivable at all.
+        const written = pdfText(bytes).join('\n');
+
+        for (const label of design.labels) {
+          expect(written, `"${label}" is missing from the export`).toContain(label);
+        }
+      });
+    }
+
+    test('says so in the document when a design is too large to honour the floor', async ({
+      page,
+    }, testInfo) => {
+      const upload = new UploadPage(page);
+      await upload.goto();
+      await upload.chooseMade('huge.json', chainDesign(400));
+      await expect(upload.svg).toBeVisible();
+
+      const bytes = await bytesOf(await upload.downloadPdf());
+      const written = pdfText(bytes).join(' ');
+      const smallest = Math.min(...typeText(bytes).map((run) => run.points));
+
+      testInfo.annotations.push({
+        type: 'drawing-size-pdf',
+        description: `400-node chain: smallest text ${smallest.toFixed(2)} pt over ${pdfPageCount(bytes)} pages`,
+      });
+
+      // Below the floor, and the document is what says so, rather than leaving
+      // a reader to work it out from a picture they cannot read — D69's habit,
+      // applied to size instead of to characters.
+      expect(smallest).toBeLessThan(FLOOR_PT);
+      expect(written).toContain('too large to print at 6 pt');
+      expect(written).toContain('tables below carry every label at full size');
+      expect(written).toContain('Node 399');
+    });
+
+    test('names every sheet of a tiled drawing so a reader can place it', async ({
+      page,
+    }) => {
+      const upload = new UploadPage(page);
+      await upload.goto();
+      await upload.choose('platform-overview.json');
+      await expect(upload.svg).toBeVisible();
+
+      const written = pdfText(await bytesOf(await upload.downloadPdf()));
+      const captions = written.filter((text) => text.startsWith('Drawing, sheet'));
+
+      expect(written.join(' ')).toContain('The drawing follows on');
+      expect(captions.length).toBeGreaterThan(1);
+      expect(captions[0]).toContain('sheet 1 of');
+      expect(captions.at(-1)).toContain(`sheet ${captions.length} of ${captions.length}`);
+    });
   });
 });

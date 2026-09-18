@@ -228,13 +228,85 @@ export function docxImages(bytes: Buffer): readonly string[] {
   );
 }
 
-/** The alt text written on the one picture, for a reader who cannot see it. */
+/** The alt text written on the first picture, for a reader who cannot see it. */
 export function docxImageAltText(bytes: Buffer): string {
-  const properties = /<wp:docPr\s([^>]*?)\/?>/u.exec(
-    docxPart(bytes, 'word/document.xml'),
-  )?.[1];
+  return docxImageAltTexts(bytes)[0] ?? '';
+}
 
-  return unescapeXml(/descr="([^"]*)"/u.exec(properties ?? '')?.[1] ?? '');
+/** The alt text of every picture, in the order the document places them. */
+export function docxImageAltTexts(bytes: Buffer): readonly string[] {
+  return [
+    ...docxPart(bytes, 'word/document.xml').matchAll(/<wp:docPr\s([^>]*?)\/?>/gu),
+  ].map(([, properties]) =>
+    unescapeXml(/descr="([^"]*)"/u.exec(properties ?? '')?.[1] ?? ''),
+  );
+}
+
+/** How many EMU make one inch, which is how OOXML places a picture. */
+const EMU_PER_INCH = 914_400;
+
+/** One picture: the pixels it holds, and the size it is placed at. */
+export interface DocxPicture {
+  /** The PNG's own dimensions, read out of its header. */
+  readonly pixelWidth: number;
+  readonly pixelHeight: number;
+  /** Where it is placed on the page, in inches. */
+  readonly placedInches: { readonly width: number; readonly height: number };
+}
+
+/**
+ * Every picture in the package, with its own size and its placed size.
+ *
+ * The two are separate questions and the defect that opened this cycle lived
+ * in the gap between them: a picture placed a hundredth of an inch wide was
+ * painted three pixels wide to match, so the placed size was driving the
+ * raster. Reading both off the bytes is the only way to see that they have
+ * stopped agreeing on purpose.
+ *
+ * The pixel size comes from the PNG's own IHDR, which is the first chunk of
+ * every PNG and holds the width and height as two big-endian 32-bit integers
+ * at a fixed offset. The placed size comes from the `wp:extent` the document
+ * puts the picture in, in EMU.
+ *
+ * @param bytes - the file exactly as it was downloaded
+ * @returns one entry per picture, in the order the document places them
+ *
+ * @example
+ * ```typescript
+ * for (const picture of docxPictures(bytes)) {
+ *   expect(Math.min(picture.pixelWidth, picture.pixelHeight)).toBeGreaterThanOrEqual(200);
+ * }
+ * ```
+ */
+export function docxPictures(bytes: Buffer): readonly DocxPicture[] {
+  const parts = docxParts(bytes);
+  const extents = [
+    ...docxPart(bytes, 'word/document.xml').matchAll(
+      /<wp:extent\s+cx="(\d+)"\s+cy="(\d+)"/gu,
+    ),
+  ];
+
+  return docxImages(bytes).map((name, index) => {
+    const png = parts.get(name) ?? Buffer.alloc(0);
+    const extent = extents[index];
+
+    return {
+      // A PNG's IHDR is always the first chunk: an 8-byte signature, a 4-byte
+      // length, a 4-byte type, then the width and height.
+      pixelWidth: png.length >= 24 ? png.readUInt32BE(16) : 0,
+      pixelHeight: png.length >= 24 ? png.readUInt32BE(20) : 0,
+      placedInches: {
+        width: Number(extent?.[1] ?? 0) / EMU_PER_INCH,
+        height: Number(extent?.[2] ?? 0) / EMU_PER_INCH,
+      },
+    };
+  });
+}
+
+/** How many pages the document forces, by counting the breaks it writes. */
+export function docxPageBreaks(bytes: Buffer): number {
+  return [...docxPart(bytes, 'word/document.xml').matchAll(/<w:pageBreakBefore\s*\/>/gu)]
+    .length;
 }
 
 /** Every paragraph inside one piece of the document's XML. */
