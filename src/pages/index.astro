@@ -210,18 +210,26 @@ const pageTitle = 'MapDataStructures';
         }
       }
 
-      /** A good file: the drawing, the count, and the panel emptied. */
+      /**
+       * A good file: the drawing, the count, and the panel emptied.
+       *
+       * Everything that can throw is done before anything on the page changes,
+       * so a file that fails halfway never leaves the page half-updated — the
+       * caller catches it and the panel explains it instead.
+       */
       function showDrawing(
         elements: PageElements,
         fileName: string,
         fileText: string,
       ): void {
         const design = loadDesign(fileText);
+        const drawing = renderDrawing(layoutDesign(design), document);
+        const description = describeUpload(fileName, design);
 
         elements.problems.dataset.state = 'empty';
         elements.problems.replaceChildren();
-        elements.drawing.replaceChildren(renderDrawing(layoutDesign(design), document));
-        elements.status.textContent = describeUpload(fileName, design);
+        elements.drawing.replaceChildren(drawing);
+        elements.status.textContent = description;
       }
 
       /**
