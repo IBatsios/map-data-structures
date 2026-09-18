@@ -17,13 +17,16 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 and 02 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 03 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
 edge naming an unknown node is refused, not silently drawn wrong. A loaded
-design shows its file name and node/edge counts, then a box per node and a
-line per edge. No layout beyond a single row, no styling beyond defaults, no
-export yet. See `docs/RUNBOOK.md` for the frontier.
+design is laid out with `@dagrejs/dagre` and drawn as an SVG below the status
+line: six node kinds each in their own silhouette (`service`, `database`,
+`queue`, `external`, `user`, `decision`), anything else a grey dashed
+rectangle, labelled edges with arrowheads, self-edges looped against their own
+node, a `<title>` and `<desc>` for accessibility. Still one blunt validation
+line, no exports yet. See `docs/RUNBOOK.md` for the frontier.
 
 ## Run and test
 
