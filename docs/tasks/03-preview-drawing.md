@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 02.
 
-**Status:** in progress
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -20,7 +20,7 @@
 ## Acceptance criteria
 
 - [x] As a user, I can preview the generated drawing in the browser: demonstrated end to end.
-- [ ] Every node and edge in the JSON is visible in the drawing, with nothing dropped or mislabeled (5.2).
+- [x] Every node and edge in the JSON is visible in the drawing, with nothing dropped or mislabeled (5.2).
 - [x] The drawing appears within one second of choosing the file, for a design the size of the owner's use cases.
 - [x] Tests cover the behavior, as a user would observe it, and pass; the Playwright test runs in CI.
 - [x] Every earlier test still passes; CI is green.

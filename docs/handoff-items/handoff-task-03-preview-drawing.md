@@ -1275,3 +1275,93 @@ scope**: the page outside the drawing has no styling, `role="status"` announces
 the count but nothing announces that the drawing changed, `astro check` has no
 incremental mode, edge labels sit beside their route rather than on it by
 dagre's default, and a very wide design still scales down to fit.
+
+---
+
+## Test report from Jahmyr — round 3
+
+### Verdict
+
+**Pass.** The round 2 defect is fixed, and I verified it by looking at the
+drawing rather than at the test that claims it. All seven acceptance criteria
+now hold; criterion 2 is checked and `**Status:**` is `done`.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can preview the generated drawing in the browser | pass | Loaded eight designs through the real file input in Chromium — the four committed fixtures plus four of mine. Every one drew. |
+| Every node and edge is visible, nothing dropped or mislabeled (5.2) | **pass** | My own probe, not Amon's test: for each design, node and edge counts against the JSON; every label matched against the file (whitespace-collapsed, since long labels wrap); every route `d` distinct; a geometric sweep for any plate painted over an earlier plate or label; and `document.elementFromPoint` over a 24x6 grid on every `<text>`, requiring the browser to name that text as topmost somewhere. Zero occlusions across `two-loops` (3 edges, 3 drawn), `retry-loop`, `order-intake`, `billing-run`, five-loops-on-one-node, a crowded four-sibling rank with two 56-char loop labels on the middle node, three duplicate edges between the same pair, and a 120-node / 129-edge design with 10 self-loops on one node. Screenshot at 4x confirms two nested loops, two distinct arrowheads, two readable stacked labels. |
+| Drawing appears within one second | pass | Measured from `setInputFiles` to the last node being present: `order-intake` 69 ms, the 120-node/129-edge design 98 ms. |
+| Tests cover the behavior and pass; Playwright runs in CI | pass | 125 Vitest, 11 Playwright locally. CI log shows the `Test end to end` step: `Running 11 tests using 1 worker` / `11 passed`. |
+| Every earlier test still passes; CI is green | pass | Both PR check runs green. `astro check` 0 errors over 25 files; `bun run build` clean; `prettier --check` clean. |
+| Best-effort accessibility: SVG title, readable contrast | pass | `<title>` = "Order intake", `role="img"`, `<desc>` names every node and its type. Computed every label's contrast against the fill actually painted under it: worst is 4.91:1 (`queue`), above the 4.5:1 AA floor. |
+| Any new environment variable is in `.env.example` | pass | Grepped the whole tree for env reads: the only hits are `process.env.CI` in `playwright.config.ts`, which CI sets, not a user. The app reads nothing. `.env.example` says exactly that. |
+
+### What I did to try to break it
+
+- **Empty file** and **malformed JSON** (`{ "title": "Broken", "nodes": [ `): both give `That file could not be drawn: Unexpected end of JSON input`, clear the drawing, and raise no uncaught page error.
+- **Valid JSON with no nodes**: `Loaded no-nodes.json: 0 nodes, 0 edges.` and an empty SVG. No crash.
+- **Recovery**: a good file chosen after a bad one draws correctly.
+- **Duplicate edges** — three edges with identical `from`, `to` and `label`: three distinct routes, three readable plates.
+- **Large file** — 120 nodes, 129 edges including 10 self-loops on one node: everything drawn, nothing occluded, 98 ms.
+
+### The "single self-edge is unchanged" claim
+
+Verified directly rather than taken on trust. I dumped `layoutDesign` over all
+fixtures at `225d492` (the round 2 commit I signed off) and at HEAD and diffed
+the two:
+
+- `billing-run.json` and `order-intake.json`: **identical**, not one character.
+- `retry-loop.json`: identical except two `y` values that moved from
+  `69.33333333333334` to `69.33333333333333` — one unit in the last place, about
+  1.4e-14 px, from `node.y + (height * 2) / 3` becoming `middle + band`. Not
+  "byte-for-byte" as Amon wrote, but not a difference any reader or renderer can
+  see. Noted for accuracy, not as a defect.
+- `two-loops.json`: matches the numbers in his round 3 notes exactly — routes at
+  reach 229 and 263, plates at x 271, y 32 and y 62.
+
+I also confirmed the new unit test is genuinely RED against the old code: with
+`src/lib/layout.ts` reverted to `225d492`, `draws two self-edges on one node as
+two loops, neither hiding the other` fails on
+`expected [ …(4) ] to not deeply equal [ …(4) ]` — the exact assertion he said
+he watched fail.
+
+### Command results
+
+`bun run test`: 125 passed, 8 files, 0 failed.
+`bun run test:e2e`: 11 passed.
+`bun run check`: 0 errors, 0 warnings, 0 hints over 25 files.
+`bun run build`: complete, 1 page.
+`bunx prettier --check .`: all matched files use Prettier code style.
+`bun run dev`: serves `http://localhost:4321` with HTTP 200, no errors; stopped after.
+Secret scan: `gitleaks detect --source . --no-banner` — 24 commits, 515 KB, **no leaks found**.
+CI: green. Both runs on PR #5, `Test end to end` reporting `11 passed`.
+
+### Defects for Amon
+
+None.
+
+### Observations, not defects
+
+- **Five loops on one node reads as three.** Confirmed at 4x zoom: with the band
+  clamped from the fourth loop on, loops 3, 4 and 5 share their top and bottom
+  arms and only their right-hand verticals differ, so the group reads as one
+  wide rectangle with dividers. All five routes are distinct and all five labels
+  are readable, so criterion 2 holds as written — and Amon disclosed this. Worth
+  a line in the backlog with the leader-line idea, not a change now.
+- Amon's 4.54:1 figure for `database` was against the node's own fill; measuring
+  against what is actually painted under that text I get 4.99:1. Either way it
+  clears 4.5:1.
+
+### Fixed in place
+
+None. Everything I wrote to test this — my verification specs, the adversarial
+fixtures and a layout-dump script — lived outside the repo or was deleted, and
+the working tree was clean before I pushed.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/5 — pushed
+`225d492..f22193d`, CI green on both runs. Still a draft. I did not mark it
+ready and I did not merge.
