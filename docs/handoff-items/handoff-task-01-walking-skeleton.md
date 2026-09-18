@@ -215,3 +215,99 @@ Real things I found and left alone:
    `vitest.config.ts` reads `import.meta.env` or `process.env` — verified by grep — so there is
    no variable to list. A pattern scan for keys and private keys over the working tree found
    nothing.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** Every acceptance criterion was exercised and holds. CI is green on the pull
+request. No defects to hand back, nothing fixed in place, no secret in the repository.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| `bun run dev` starts the app with no errors | pass | Server came up on 4321 (pid 32476). `astro dev status` reported it running; `astro dev logs` showed `astro v7.3.3 ready in 1030 ms` and nothing above info. `curl http://localhost:4321/` returned 200 with the page's markup. Stopped afterwards. |
+| `bun run test` passes with at least one test | pass | 1 file, **4 tests**, 187ms, all passing. Not a vacuous zero-test exit — the run names `src/lib/parseDesign.test.ts (4 tests)`. |
+| Two nodes and one edge draw two boxes and a line | pass | Driven in **real Chrome** via Playwright against the dev server, using the README's JSON block written to a file and handed to the real file input. Result: 2 `rect` (160×64 at x=24 and x=240, both with non-zero rendered size), 1 `line` (184,56 → 240,56), labels `Public API` and `Order queue`, `<title>Order intake</title>`, `aria-label="Drawing of Order intake"`, empty status line, zero console errors, zero uncaught page errors. Screenshot confirms two labelled boxes joined by a line. |
+| CI is green on GitHub for this branch | pass | Two green runs: [35318087818](https://github.com/IBatsios/map-data-structures/actions/runs/35318087818) from the push and [35318113943](https://github.com/IBatsios/map-data-structures/actions/runs/35318113943) from the pull request, 7s and 8s. Log confirms `bun install --frozen-lockfile` resolved against the committed `bun.lock` and `bun run test` ran `vitest run` to `4 passed (4)`. |
+| `.env.example` lists every variable the code reads, and no secret is in the repository | pass | `git grep` for `import.meta.env`, `process.env`, `getEnv` and `PUBLIC_` across the tracked tree outside `docs/` returns nothing, so there is no variable to list and the untouched `.env.example` is correct. `gitleaks detect --source . --no-banner` scanned 12 commits / 206 KB: **no leaks found**. |
+
+### Command results
+
+`bun run test`: 1 file, 4 tests, 4 passed, 187ms.
+`bun run build`: pass — 1 page, static output to `dist/`, 349ms, no warnings.
+Secret scan: `gitleaks` — no leaks found across 12 commits.
+CI: green, both the push run and the pull request run.
+
+### Beyond the checklist
+
+**Adversarial inputs.** Ten files through the real file input. Every failure is caught,
+writes one line to the status region, clears the drawing, and leaves no uncaught error;
+every success draws. Recovery works — a good file after ten bad ones still draws.
+
+| Input | Result |
+|---|---|
+| empty file (0 bytes) | caught: "Unexpected end of JSON input" |
+| malformed JSON (`{`) | caught: "Expected property name or '}'…" |
+| parses but has no `nodes` | caught: "Cannot read properties of undefined (reading 'map')" |
+| top-level array `[]` | caught, same |
+| `null` | caught: "Cannot read properties of null (reading 'title')" |
+| `nodes` is a string | caught: "raw.nodes.map is not a function" |
+| edge naming an undefined node | caught: "an edge names a node the file does not define" |
+| duplicate node ids | draws; both edges resolve to the later box (see observation 1) |
+| label containing `<script>` / `<img onerror>` | drawn as **text**, no dialog fired — `textContent` is doing its job |
+| 5000 nodes, 4999 edges, 476 KB | drew all 5000 boxes and 4999 lines, no hang, no crash |
+
+**Accessibility (best effort, `front-a11y` rule set).** Zero Critical, zero Major, zero
+Minor against the rule set. `<html lang="en">`, a `<main>` landmark, one `h1`, and the
+file input is properly associated with `<label for="design-file">`. At runtime the first
+Tab stop is that input with accessible name "Design JSON file"; the status paragraph is
+`role="status"`, so a failure is announced; the generated SVG carries `role="img"`, an
+`aria-label`, and a `<title>` child, so it is not an unlabelled graphic.
+
+**Type health.** There is no typecheck script and TypeScript is not installed, exactly as
+D17 records, so the criterion has no gate in the repo. To get real signal on the blind
+spot Amon named, I extracted the 165-line `<script>` block from `index.astro` into a
+`.ts` file in a scratch directory alongside copies of `src/lib`, and ran `tsc --noEmit`
+under `astro/tsconfigs/strict`: **exit 0, zero errors**. The `.astro` script block is
+type-clean today. Nothing in the repository enforces that it stays so — that is the gap,
+and it is a real one, but it is not a defect in this task's work.
+
+### Defects for Amon
+
+None.
+
+### Fixed in place
+
+None. Nothing needed correcting.
+
+### Observations, for Jared to route — not defects in Task 01
+
+1. **Duplicate node ids silently collapse.** `originsByNodeId` in `src/pages/index.astro`
+   builds a `Map` keyed by node id, so two nodes sharing an id both draw their boxes but
+   every edge touching that id resolves to the later box. Correct behaviour for a task
+   that was told to assume well-formed input; it is precisely the kind of thing Task 02's
+   Zod schema should reject, so it is worth naming in that task's assignment as a case to
+   cover rather than leaving it to be rediscovered.
+2. **A successful drawing is announced to nobody.** On success the status line is cleared
+   and `#drawing` is not a live region, so a screen reader user gets silence where a
+   sighted user gets a picture. Out of scope here — Task 03 or Task 04 owns the status
+   messaging, and it is a one-line fix when they do.
+3. **Amon's pushing contradiction is settled, in his favour.** `.claude/settings.json`
+   allows `git push -u origin feature/…`, `gh pr create` and `gh pr checks` and denies
+   force pushes, `git push origin main`, and `gh repo create|edit`. Pushing and opening
+   the pull request are Jahmyr's; Amon was right to stop at the branch. The assignment
+   template's "Watch out for" section addresses that paragraph to the builder, which is
+   what misled him — worth correcting in the template, as he suggested, since it recurs
+   every task.
+4. **`bun test` versus `bun run test` is clean.** The only occurrence of the bare form in
+   the tracked tree is Amon's own warning about it in this document. The husky hook runs
+   `bun run test`.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/1 — open as a **draft**, both CI
+runs green. Sam marks it ready and merges; I do not.

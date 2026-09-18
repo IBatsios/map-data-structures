@@ -39,11 +39,11 @@
 
 ## Acceptance criteria
 
-- [ ] `bun run dev` starts the app with no errors.
-- [ ] `bun run test` passes with at least one test.
-- [ ] "Upload JSON get a drawing back" can be demonstrated in its thinnest form: choose a JSON file with two nodes and one edge, and two boxes and a line appear.
-- [ ] CI is green on GitHub for this branch.
-- [ ] `.env.example` lists every variable the code reads, and no secret is in the repository.
+- [x] `bun run dev` starts the app with no errors.
+- [x] `bun run test` passes with at least one test.
+- [x] "Upload JSON get a drawing back" can be demonstrated in its thinnest form: choose a JSON file with two nodes and one edge, and two boxes and a line appear.
+- [x] CI is green on GitHub for this branch.
+- [x] `.env.example` lists every variable the code reads, and no secret is in the repository.
 
 ## Suggested skills
 
