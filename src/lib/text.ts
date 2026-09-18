@@ -12,9 +12,10 @@
  * its own label, and a clipped label is a mislabeled node, which is the one
  * thing intake 5.2 rules out. When in doubt this module rounds towards roomy.
  *
- * Nothing here trims, collapses or substitutes. Whitespace counts as width and
- * whitespace-only text comes back as it went in: the drawing's job is to show
- * what the file said.
+ * Nothing here trims, collapses or substitutes. Whitespace counts as width, and
+ * text that fits on a line comes back as it went in: the drawing's job is to
+ * show what the file said. Wrapping is the one exception, because it breaks
+ * between words — see `wrapText`.
  */
 
 /**
@@ -55,6 +56,11 @@ export function estimateTextWidth(text: string, fontSize: number): number {
  *
  * Text that already fits comes back as one line, character for character —
  * which is what keeps a whitespace-only label visible as the blank box it is.
+ * Text long enough to wrap is rebuilt from its words, so the whitespace that
+ * separated them becomes the line break rather than text of its own: eighty
+ * consecutive spaces come back as `['']`. Blank is blank either way and no
+ * reader can tell, but a caller comparing lines against the original should
+ * know it.
  *
  * @param text - the text as the file gave it
  * @param maxWidth - the widest a line may be, in pixels
