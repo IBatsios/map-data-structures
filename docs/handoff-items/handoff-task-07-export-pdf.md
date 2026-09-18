@@ -1270,3 +1270,201 @@ Checked 1, 3, **4**, 5 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 unchecked
 for defect 1. `**Status:**` stays `in progress`, which is Amon's to change once
 defect 1 is settled and I have re-verified it. The header's `**Round:**` is now
 3.
+
+## Work completed by Amon — round 3
+
+### What was built
+
+**Defect 1 is closed by the first of the two shapes you offered: nothing but the
+newline is spared any more.** A tab, a DEL, a carriage return or any other
+control character in a label is marked with the same `■` as a character the face
+has no glyph for, counted with them, and named in the same sentence.
+`Alpha\tBravo` now reaches the Nodes table as `Alpha■Bravo` rather than as
+`Alpha`, and `edge\twith\ttabs` as `edge■with■tabs`. Ugly in the rare label that
+carries one, and nothing after it is lost.
+
+**The one line turned out to be two, and the second is the half that would have
+been missed.** The obvious change — `coverage.has(point) || point ===
+LINE_BREAK` — was written first, and the walk then counted **5** where the
+fixture holds 6. The character it still let through was the carriage return,
+because **Roboto Regular maps U+0000, U+0002 and U+000D**, as many faces do: the
+coverage reader answers "drawable" for a CR while jsPDF ends the string at it
+regardless. So the font is no longer asked about a control character at all —
+`isDrawable` answers for the control ranges before it consults the cmap — and a
+design carrying a lone `\r` in the middle of a label, which truncates exactly
+like a tab, would have gone on losing everything after it under the first shape
+of the fix. A unit test against the real embedded face pins all three code
+points, so regenerating the font cannot undo this quietly.
+
+**The false premise is corrected where it was stated**, at `drawableText.ts:156`
+and `drawableText.test.ts:102`, and the newline's safety is now written down as
+something checked rather than assumed: `pdfPlan`'s `wrap` splits a cell on `\n`
+before a line is measured, and svg2pdf's `transformXmlSpace` calls
+`removeNewlines` on a text element before jsPDF ever sees it
+(`node_modules/svg2pdf.js/dist/svg2pdf.es.js`). Reading that file also corrects
+one detail of the diagnosis, and it made the fix bigger rather than smaller: the
+drawing showed `Alpha Bravo` because svg2pdf's `replaceTabsBySpace` turned the
+tab into a space, not because `text.ts` split on it — `wrapText` returns a label
+that fits exactly as it came in, tab included. The picture was carrying the tab
+too, so marking was needed in both halves of the file rather than in the tables
+alone.
+
+**Read back out of the file with an outside reader**, not with `pdfText.ts`:
+`pdftotext -enc UTF-8` (xpdf) on an export driven through the built site.
+
+| Label in the design | Drawing in the PDF | Table cell in the PDF |
+|---|---|---|
+| `Alpha\tBravo` | `Alpha■Bravo` | `Alpha■Bravo` |
+| `Soh\u0001Charlie` | `Soh■Charlie` | `Soh■Charlie` |
+| `Del\u007fDelta` | `Del■Delta` | `Del■Delta` |
+| `edge\twith\ttabs` | `edge■with■tabs` | `edge■with■tabs` |
+| `Newline\nEcho` | `NewlineEcho` | `Newline` / `Echo` |
+| `carriage\r\nreturn` | `carriage■return` | `carriage■` / `return` |
+
+The page says *"cannot draw 6 characters"* for that design: the tab, the SOH,
+the DEL, two more tabs in an edge label and the carriage return — counted once
+per piece of the design's own text, with the line break counted as nothing
+because nothing is lost to it.
+
+### Files added or changed
+
+- `src/lib/drawableText.ts` — `isDrawable` answers for the control ranges before
+  it consults the font, and spares the newline alone. `isControl` is back, with
+  the opposite meaning to the one it had. The comment that stated the false
+  premise now states what was measured instead.
+- `src/lib/drawableText.test.ts` — the test that asserted the old behaviour is
+  gone, along with the comment that repeated the premise; five tests in its
+  place.
+- `e2e/fixtures/control-labels.json` — new. Your design rebuilt: a tab, a SOH, a
+  DEL, an edge label of tabs, a label's own line break, and a CRLF.
+- `e2e/exportPdf.spec.ts` — three tests.
+- `docs/DECISIONS.md` — D72 appended.
+- `README.md` — a paragraph saying control characters are marked too, and that
+  two labels or ids differing only in marked characters read alike in the PDF.
+  That second sentence is the README line you asked for on known gap 3.
+- `docs/handoff-items/handoff-task-07-export-pdf.md` — this section.
+
+Not touched: `src/lib/pdfPlan.ts`, `src/lib/toPdf.ts`, `src/lib/fontCoverage.ts`,
+`src/lib/text.ts`, `src/lib/download.ts`, `src/lib/layout.ts`,
+`src/pages/index.astro`, `src/lib/exportStyles.ts`, the loader modules, and
+`docs/tasks/07-export-pdf.md`, whose boxes and `**Status:**` line are yours.
+
+### Tests written
+
+**Vitest, `src/lib/drawableText.test.ts` (5 new, 319 in the suite).**
+
+- *marks a tab, because jsPDF ends the line it is in* — the defect as arithmetic
+  over one string, with the corrected premise written into the comment.
+- *marks every other control character, which ends a line the same way* —
+  U+0001, U+000B, U+000C, U+000D, U+001F, U+007F, U+0085 and U+009F, each one
+  mark and one count. The class, rather than the one spelling of it you found.
+- *marks a control character the font does map, because jsPDF ends the line
+  anyway* — against a made-up coverage carrying `\r`, so the rule is pinned
+  independently of which font is embedded.
+- *marks the control characters the real embedded face does map* — U+0000,
+  U+0002 and U+000D, asserted first to be in the face and then to be marked in
+  spite of it. This is the test that goes red if anyone puts the coverage check
+  back in front of the control check, and the second place in the file that
+  reads the real font rather than a stand-in.
+- *marks a tab in a label, in the picture and in the table alike* — over a whole
+  laid-out design, asserting the two halves say the same thing rather than
+  asserting a number of lines, since a label long enough to wrap has already had
+  the tab become its line break.
+- Unchanged and now meaning more: *leaves a line break alone, because nothing is
+  ever asked to draw one*.
+
+**Playwright, `e2e/exportPdf.spec.ts` (3 new, 76 in the walk).** Against
+`control-labels.json`, read back out of the bytes:
+
+- *keeps what a control character used to cut the line off at* — the four marked
+  labels arrive whole; no run anywhere in the file is the bare `Alpha`, `Soh` or
+  `edge`, which is exactly what a cut-off cell was; and `Alpha■Bravo` appears
+  **twice**, once in the drawing and once in the table, so a fix that marked one
+  half only would fail it.
+- *leaves a label's own line break as a line break, not as a mark* — `Newline`
+  and `Echo` are both runs in the file and neither carries a square.
+- *counts the characters it marked in a design full of control characters* — the
+  status region says 6 for that design.
+
+### Local results
+
+`bun run test`: **pass, 319 tests in 20 files** (314 at the end of round 2).
+`bun run test:e2e`: **pass, 76 tests** (73 at the end of round 2).
+`bun run check`: pass, 0 errors, 0 warnings, 0 hints across 57 files.
+`bun run build`: pass, 1 page.
+
+**Criterion 11.1, re-measured** on the same machine and by the same method as
+the two rounds before it — Windows 11 Pro, bun 1.4.2, Chromium via Playwright,
+`dist/` served from localhost, clock from the click to the browser having the
+file, four clicks per fixture.
+
+| Fixture | Nodes / edges | Clicks, in order |
+|---|---|---|
+| `order-intake.json` | 7 / 6 | 241 / 106 / 102 / 93 ms |
+| `undrawable-labels.json` | 5 / 4 | 157 / 99 / 99 / 99 ms |
+| `control-labels.json` | 4 / 3 | 155 / 89 / 102 / 99 ms |
+| `platform-overview.json` | 15 / 16 | **176 / 105 / 117 / 114 ms** |
+| `estate-sweep.json` | 40 / 46 | **208 / 150 / 155 / 144 ms** |
+
+Within noise of your round-two table. The change is one comparison per character
+inside a loop that already ran, so there was no reason to expect movement and
+there is none. The 15-second guard in the walk is untouched.
+
+`.env.example` confirmed rather than assumed for a third round: it still lists
+no variables, and a grep for `process.env` and `import.meta.env` across `src/`,
+`e2e/` and the root finds only `process.env.CI` in `playwright.config.ts`, which
+the runner sets.
+
+### Decisions recorded
+
+One row appended to `docs/DECISIONS.md`:
+
+- **D72** — a control character is marked like any other character the font
+  cannot draw, and the font is not consulted about one, with the newline alone
+  spared: what jsPDF actually does with one, why the premise that spared the tab
+  was false, why the cmap's answer misleads for these code points, how the
+  newline's safety was checked rather than assumed, and the cost that a `\r\n`
+  now shows a mark.
+
+### Known gaps
+
+1. **A `\r\n` inside a label now shows a mark at the end of its first line, and
+   is counted.** `carriage\r\nreturn` becomes `carriage■` / `return` in the
+   table, where round two showed `carriage` / `return` and lost nothing. This is
+   the deliberate cost of the shape chosen: a lone `\r` truncates like any other
+   control character, and `isDrawable` sees one code point rather than where in
+   the string it sits, so sparing the harmless CRLF would mean sparing the
+   harmful lone one. Nothing is lost either way, and the count is honest about
+   what the font could not draw.
+2. **The drawing writes `Newline\nEcho` as `NewlineEcho`.** svg2pdf removes a
+   newline from a text element without putting a space in its place, so a label
+   whose own line break survives into `labelLines` — which happens when the
+   label is short enough not to wrap — loses the gap in the picture, while the
+   table breaks the cell correctly on it. Pre-existing, unchanged by this round,
+   and not a loss of characters; noted because the new fixture makes it visible
+   and because you will see it in `pdftotext` output.
+3. Carried from round two and still parked: the count is of the design's text
+   rather than of the marks in the file; two ids differing only in uncovered
+   characters read alike, which now has its README line; the same sentence twice
+   announces once (D41 family); nothing stops a second click while a PDF is
+   being written (D41 family); and `src/lib/exportStyles.ts` still carries D57's
+   stale `?raw` comment, because nothing this round went near that file.
+
+### Out-of-scope notes for Jared
+
+- **The drawing's on-page label size still degrades from 15 nodes.** Untouched
+  again this round and still the item to schedule: landscape pages, or a
+  readable floor on the label size with the drawing tiled across sheets.
+- **Task 08 inherits the question this round answers.** What to ask of whatever
+  library opens the `.docx` gate is not only "what does it do with a character
+  its font cannot draw" but "what does it do with a control character in a
+  string": those turned out to be two different failures with two different
+  shapes — an uncovered glyph wrote nothing and left the line standing, a
+  control character ended the line.
+- **A font's `cmap` answering for a control character is a trap worth writing
+  down.** Roboto maps U+0000, U+0002 and U+000D. Anything that asks a font what
+  it can draw and believes the answer across the whole range will be wrong the
+  same way `fontCoverage` was about to be.
+- Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts`,
+  `pdfPlan.ts`, `download.ts` or `empty.json`, and the `intersectRect` crash was
+  not touched. All still carried.

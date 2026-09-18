@@ -88,6 +88,13 @@ that was. The mark is there so that nothing goes missing quietly: `Gateway →
 Queue` comes out as `Gateway ■ Queue` rather than as `Gateway  Queue`. The
 Markdown and HTML exports carry every character as it was written.
 
+A tab, or any other control character a label happens to carry, is marked the
+same way, because a PDF stops the line it is in at one. A label's own line break
+is still a line break. One consequence of a mark per character is worth knowing
+before sending a file: two labels or ids that differ only in characters the font
+cannot draw read alike in the PDF — `東` and `京` are both `■` — and the Markdown
+and HTML exports are the ones that still tell them apart.
+
 Every button is disabled until there is something to export, and goes back to
 disabled the moment a file fails, so none of them ever saves the design before
 last.
