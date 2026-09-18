@@ -149,6 +149,28 @@ test.describe('Exporting the design as Markdown', () => {
     await expect(upload.exportMarkdown).toBeDisabled();
   });
 
+  test('exports a design with nothing in it without writing a broken diagram', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    // A design with no nodes and no edges is valid (D19). `empty.json` beside
+    // this fixture is a *file* with nothing in it, which is a syntax error;
+    // this one is a design with nothing in it, which draws an empty picture.
+    await upload.choose('empty-design.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadMarkdown();
+
+    expect(file.name).toBe('Nothing-yet.md');
+    expect(file.text).toContain('# Nothing yet');
+    expect(file.text).toContain('This design has no nodes, so there is nothing to draw.');
+    expect(file.text).not.toContain('```mermaid');
+    expect(rowsUnder(file.text, 'Nodes')).toHaveLength(0);
+    expect(rowsUnder(file.text, 'Edges')).toHaveLength(0);
+  });
+
   test('is reachable and usable from the keyboard alone', async ({ page }) => {
     const upload = new UploadPage(page);
     await upload.goto();
