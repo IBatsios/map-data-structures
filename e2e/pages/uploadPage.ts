@@ -84,14 +84,31 @@ export class UploadPage {
       });
   }
 
-  /** The corners of one edge's route, read back off the path it was drawn as. */
-  async routePoints(index: number): Promise<readonly DrawnPoint[]> {
+  /** The `d` one edge's route was drawn with, exactly as the renderer wrote it. */
+  async routePath(index: number): Promise<string> {
     const path = await this.edges()
       .nth(index)
       .locator('[data-part="route"]')
       .getAttribute('d');
 
-    return pointsOf(path ?? '');
+    return path ?? '';
+  }
+
+  /** The corners of one edge's route, read back off the path it was drawn as. */
+  async routePoints(index: number): Promise<readonly DrawnPoint[]> {
+    return pointsOf(await this.routePath(index));
+  }
+
+  /** The plate one edge's label was drawn on, as the browser laid it out. */
+  async plateBox(index: number): Promise<DrawnBox> {
+    return this.edges()
+      .nth(index)
+      .locator('[data-part="plate"]')
+      .evaluate((plate) => {
+        const { x, y, width, height } = (plate as SVGRectElement).getBBox();
+
+        return { x, y, width, height };
+      });
   }
 
   /** How many edges were routed. */

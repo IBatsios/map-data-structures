@@ -41,6 +41,22 @@ function overlaps(a: LayoutBox, b: LayoutBox): boolean {
   );
 }
 
+/** One routed edge by its place in the file, named rather than optional-chained. */
+function edgeAt(edges: readonly LayoutEdge[], index: number): LayoutEdge {
+  const found = edges[index];
+
+  if (!found) {
+    throw new Error(`The layout routed no edge at ${index}.`);
+  }
+
+  return found;
+}
+
+/** How far out from the node a loop reaches, which is its widest point. */
+function reachOf(edge: LayoutEdge): number {
+  return Math.max(...edge.points.map((point) => point.x));
+}
+
 /** The one edge of a two-node design, so a label can be varied on its own. */
 function plateFor(label: string): LayoutEdge {
   const layout = layoutDesign({
@@ -308,6 +324,61 @@ describe('layoutDesign', () => {
 
     expect(labelBox?.x).toBeGreaterThanOrEqual(a.x + a.width + SELF_LOOP_EXTENT);
     expect((labelBox?.y ?? 0) + (labelBox?.height ?? 0) / 2).toBe(a.y + a.height / 2);
+  });
+
+  it('draws two self-edges on one node as two loops, neither hiding the other', () => {
+    // A loop drawn from the node's box and nothing else is the same loop every
+    // time. Two self-edges on one node landed on the same four points with
+    // their plates on top of each other, and because a plate is opaque the
+    // wider one hid the other label completely: three edges in the file, two on
+    // screen. Dagre reserves a lane beside the node for every self-edge, so the
+    // room is there; what was missing was which of them this one is.
+    const layout = layoutDesign({
+      title: 'Two loops',
+      nodes: [
+        { id: 'worker', label: 'Delivery worker', type: 'service' },
+        { id: 'outbox', label: 'Outbox', type: 'queue' },
+      ],
+      edges: [
+        { from: 'worker', to: 'worker', label: 'retries on failure' },
+        { from: 'worker', to: 'worker', label: 'escalates after five' },
+        { from: 'worker', to: 'outbox', label: 'reads batch' },
+      ],
+    });
+
+    expect(layout.edges.map((edge) => edge.label)).toEqual([
+      'retries on failure',
+      'escalates after five',
+      'reads batch',
+    ]);
+
+    const worker = nodeById(layout.nodes, 'worker');
+    const border = worker.x + worker.width;
+    const first = edgeAt(layout.edges, 0);
+    const second = edgeAt(layout.edges, 1);
+
+    // Both loops still hang off the node's own border at both ends.
+    for (const loop of [first, second]) {
+      expect(loop.points[0]?.x).toBe(border);
+      expect(loop.points.at(-1)?.x).toBe(border);
+
+      for (const point of loop.points) {
+        expect(point.y).toBeGreaterThanOrEqual(worker.y);
+        expect(point.y).toBeLessThanOrEqual(worker.y + worker.height);
+      }
+    }
+
+    // But they are two loops, not one loop drawn twice: the second reaches
+    // further out and meets the border somewhere the first does not.
+    expect(second.points).not.toEqual(first.points);
+    expect(reachOf(second)).toBeGreaterThan(reachOf(first));
+    expect(second.points[0]?.y).not.toBe(first.points[0]?.y);
+
+    // And both labels can be read, which needs the plates clear of each other
+    // and clear of the node. A plate on top of a plate is a lost label.
+    expect(overlaps(first.labelBox, second.labelBox)).toBe(false);
+    expect(overlaps(first.labelBox, worker)).toBe(false);
+    expect(overlaps(second.labelBox, worker)).toBe(false);
   });
 
   it('gives every edge a label box wide enough for its label', () => {

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import type { DrawnBox } from './pages/uploadPage';
 import { UploadPage } from './pages/uploadPage';
 
 /**
@@ -155,6 +156,67 @@ test.describe('Previewing the generated drawing', () => {
     );
   });
 
+  test('draws two self-edges on one node as two loops a reader can tell apart', async ({
+    page,
+  }) => {
+    // A node may loop on itself twice, and the file that says so is valid. Both
+    // loops were drawn on the same four points with their plates on top of each
+    // other, so the opaque upper plate hid the lower label: three edges in the
+    // file, two on screen. What a reader has to get back is two loops and two
+    // labels.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('two-loops.json');
+    await expect(upload.svg).toBeVisible();
+
+    const drawn = await upload.drawnText();
+
+    for (const label of [
+      'Delivery worker',
+      'Outbox',
+      'retries on failure',
+      'escalates after five',
+      'reads batch',
+    ]) {
+      expect(drawn, `"${label}" is missing from the drawing`).toContain(label);
+    }
+
+    await expect(upload.edges()).toHaveCount(3);
+
+    // The first two edges in the file are the loops, and they are two different
+    // paths — byte-identical `d` attributes are one loop drawn twice.
+    const worker = await upload.nodeBox(0);
+    const firstPath = await upload.routePath(0);
+    const secondPath = await upload.routePath(1);
+
+    expect(secondPath).not.toBe(firstPath);
+
+    for (const index of [0, 1]) {
+      const loop = await upload.routePoints(index);
+      const start = loop[0];
+      const end = loop.at(-1);
+
+      expect(start?.x).toBeCloseTo(worker.x + worker.width, 0);
+      expect(end?.x).toBeCloseTo(worker.x + worker.width, 0);
+
+      for (const point of [start, end]) {
+        expect(point?.y).toBeGreaterThanOrEqual(worker.y);
+        expect(point?.y).toBeLessThanOrEqual(worker.y + worker.height);
+      }
+    }
+
+    // And neither label plate covers the other, which is what makes both
+    // labels readable rather than one of them a rectangle over the other.
+    const firstPlate = await upload.plateBox(0);
+    const secondPlate = await upload.plateBox(1);
+
+    expect(
+      overlaps(firstPlate, secondPlate),
+      'one label plate is drawn over the other',
+    ).toBe(false);
+  });
+
   test('says what loaded in the status region', async ({ page }) => {
     const upload = new UploadPage(page);
     await upload.goto();
@@ -218,3 +280,13 @@ test.describe('Previewing the generated drawing', () => {
     await expect(upload.status).toContainText('could not be drawn');
   });
 });
+
+/** Whether two drawn rectangles share any pixel, which is a hidden label. */
+function overlaps(a: DrawnBox, b: DrawnBox): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}

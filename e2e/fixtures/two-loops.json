@@ -1,0 +1,12 @@
+{
+  "title": "Two loops",
+  "nodes": [
+    { "id": "worker", "label": "Delivery worker", "type": "service" },
+    { "id": "outbox", "label": "Outbox", "type": "queue" }
+  ],
+  "edges": [
+    { "from": "worker", "to": "worker", "label": "retries on failure" },
+    { "from": "worker", "to": "worker", "label": "escalates after five" },
+    { "from": "worker", "to": "outbox", "label": "reads batch" }
+  ]
+}
