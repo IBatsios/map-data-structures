@@ -8,10 +8,12 @@
  *
  * Three rules are worth knowing before reading the code:
  *
- * 1. **Every field is required and no string may be empty.** A node without a
+ * 1. **Every field is required and no string may be blank.** A node without a
  *    label is a blank box and an edge without a label is an unexplained line,
  *    and neither is worth drawing. An empty `id` is worse: an edge could not
- *    name it.
+ *    name it. "Blank" means no character that is not a space: a label of three
+ *    spaces draws the same blank box as a label of none. Nothing is trimmed —
+ *    see `requiredText` for why those are different things.
  * 2. **A property the schema does not name is ignored, not rejected.** A file
  *    exported from somewhere else may carry its own extra keys; dropping them
  *    is friendlier than refusing the file, and Zod strips them for us.
@@ -31,11 +33,23 @@
 import { z } from 'zod';
 
 /**
- * A string the design cannot do without: present, a string, and not empty.
- * Whitespace is left alone rather than trimmed, because trimming would edit the
- * user's labels on the way through and the drawing must show what the file says.
+ * A string the design cannot do without: present, a string, and holding at
+ * least one character that is not a space.
+ *
+ * Two things that look alike and are not. **Rejecting** a blank string is the
+ * rule: `"   "` draws exactly the blank box the rule above exists to stop, so a
+ * rule that counted characters rather than visible ones under-delivered on it.
+ * **Trimming** an accepted string is not, and never will be: `"  Public API  "`
+ * loads with its spaces intact, because the drawing must show what the file
+ * says rather than a tidied version of it.
+ *
+ * `min` aborts, so an empty string reports one issue rather than two — the
+ * panel shows one message per problem, and `\S` would only repeat what `min`
+ * has already said. The two checks stay separate because they say different
+ * things: "this is empty" and "this is only whitespace" are different faults to
+ * be told about, and both are representable in the published schema.
  */
-const requiredText = z.string().min(1);
+const requiredText = z.string().min(1, { abort: true }).regex(/\S/u, { abort: true });
 
 /** One box in the drawing: something with an identity, a name and a kind. */
 export const designNodeSchema = z.object({

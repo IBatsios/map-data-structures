@@ -66,6 +66,41 @@ describe('designNodeSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each(['id', 'label', 'type'])(
+    'rejects a node whose %s holds nothing but whitespace',
+    (field) => {
+      // A label of three spaces draws a blank box, which is the very thing the
+      // "no empty string" rule exists to stop, so the rule reads visible
+      // characters rather than any characters at all.
+      // Arrange
+      const node: Record<string, unknown> = {
+        id: 'api',
+        label: 'Public API',
+        type: 'service',
+      };
+      node[field] = '   ';
+
+      // Act
+      const result = designNodeSchema.safeParse(node);
+
+      // Assert
+      expect(result.success).toBe(false);
+    },
+  );
+
+  it('keeps the spaces around a label it accepts, rather than trimming them', () => {
+    // Rejecting a blank label is not the same as editing a padded one: the
+    // drawing must show what the file says.
+    // Arrange
+    const node = { id: 'api', label: '  Public API  ', type: 'service' };
+
+    // Act
+    const result = designNodeSchema.parse(node);
+
+    // Assert
+    expect(result.label).toBe('  Public API  ');
+  });
+
   it('rejects an id that is not a string', () => {
     // Arrange
     const node = { id: 7, label: 'Public API', type: 'service' };
@@ -98,6 +133,17 @@ describe('designEdgeSchema', () => {
       label: 'publishes order',
     };
     delete edge[field];
+
+    // Act
+    const result = designEdgeSchema.safeParse(edge);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an edge whose label holds nothing but whitespace', () => {
+    // Arrange
+    const edge = { from: 'api', to: 'queue', label: ' ' };
 
     // Act
     const result = designEdgeSchema.safeParse(edge);
@@ -200,6 +246,24 @@ describe('designSchema', () => {
 
     // Assert
     expect(result.success).toBe(false);
+  });
+
+  it('rejects a title that holds nothing but whitespace', () => {
+    // Arrange
+    const design = { ...structuredClone(twoNodesOneEdge), title: '\t\n ' };
+
+    // Act, Assert
+    expect(issuePathsOf(design)).toContain('title');
+  });
+
+  it('reports one issue for a field that is blank, not two', () => {
+    // The panel shows one message per problem, so a single blank field has to
+    // arrive as a single issue rather than as "too small" and "blank" both.
+    // Arrange
+    const design = { ...structuredClone(twoNodesOneEdge), title: '' };
+
+    // Act, Assert
+    expect(issuePathsOf(design)).toEqual(['title']);
   });
 
   it('rejects two nodes that share an id, naming the second one', () => {
