@@ -15,6 +15,12 @@ export interface DrawnBox extends DrawnPoint {
   readonly height: number;
 }
 
+/** A file the page handed to the browser: what it was called, and what is in it. */
+export interface DownloadedFile {
+  readonly name: string;
+  readonly text: string;
+}
+
 /**
  * The upload page, as the end-to-end tests talk to it.
  *
@@ -31,6 +37,7 @@ export class UploadPage {
   readonly problems: Locator;
   readonly drawing: Locator;
   readonly svg: Locator;
+  readonly exportMarkdown: Locator;
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
@@ -39,6 +46,7 @@ export class UploadPage {
     this.problems = page.locator('#upload-problems');
     this.drawing = page.locator('#drawing');
     this.svg = page.locator('#drawing svg');
+    this.exportMarkdown = page.locator('#export-markdown');
   }
 
   async goto(): Promise<void> {
@@ -131,6 +139,27 @@ export class UploadPage {
       },
       { name: fixture, mediaType: mediaTypeOf(fixture), bytes: contents },
     );
+  }
+
+  /**
+   * Clicks Export Markdown and waits for the file the browser saves.
+   *
+   * The wait is armed before the click, because the download begins inside it:
+   * clicking first and listening afterwards is the race that makes a download
+   * test flaky. Nothing is written to the repo — Playwright keeps the file in
+   * its own temporary place and hands back the path.
+   */
+  async downloadMarkdown(): Promise<DownloadedFile> {
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download'),
+      this.exportMarkdown.click(),
+    ]);
+    const path = await download.path();
+
+    return {
+      name: download.suggestedFilename(),
+      text: await readFile(path, 'utf8'),
+    };
   }
 
   /** Every message the validation panel lists, in the order it lists them. */

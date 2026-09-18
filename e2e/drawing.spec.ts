@@ -285,6 +285,24 @@ test.describe('Previewing the generated drawing', () => {
     await expect(upload.problems).toContainText('was not drawn');
     await expect(upload.status).toHaveText('');
   });
+
+  test('exports the drawing it just showed, the way a user would', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadMarkdown();
+
+    // The walk, end to end and in one place: a file chosen, a drawing looked
+    // at, and a `.md` of it saved with every label still in it. What the file
+    // holds in detail, and when the button is offered, are `export.spec.ts`'s.
+    expect(file.name).toBe('Order-intake.md');
+    for (const label of [...NODE_LABELS, ...EDGE_LABELS]) {
+      expect(file.text, `"${label}" is missing from the exported file`).toContain(label);
+    }
+  });
 });
 
 /** Whether two drawn rectangles share any pixel, which is a hidden label. */

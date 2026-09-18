@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 03.
 
-**Status:** ready
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -18,11 +18,11 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can export the design as Markdown: demonstrated end to end.
-- [ ] The file lists every node and edge the preview shows, with the same labels (5.2).
-- [ ] Tests cover the behavior, as a user would observe it, and pass; the Playwright test from Task 03 now also clicks this button and checks the download.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] As a user, I can export the design as Markdown: demonstrated end to end.
+- [x] The file lists every node and edge the preview shows, with the same labels (5.2).
+- [x] Tests cover the behavior, as a user would observe it, and pass; the Playwright test from Task 03 now also clicks this button and checks the download.
+- [x] Every earlier test still passes; CI is green.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 

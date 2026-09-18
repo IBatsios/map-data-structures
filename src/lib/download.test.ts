@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+
+import { fileNameFor } from './download';
+
+/**
+ * Naming the file an export downloads as.
+ *
+ * `downloadBlob` in the same module is deliberately not tested here: it is the
+ * three lines that touch `document` and `URL`, and this project's Vitest suite
+ * has no DOM at all (see `vitest.config.ts`). The pattern the repo keeps is
+ * pure logic in Vitest and DOM work in Playwright, so the click, the download
+ * and the file that lands are asserted in `e2e/export.spec.ts` instead.
+ */
+
+describe('fileNameFor', () => {
+  it('names the file after the design', () => {
+    expect(fileNameFor('Order intake', 'md')).toBe('Order-intake.md');
+  });
+
+  it('gives the file whichever extension the export asked for', () => {
+    // Tasks 06 to 08 name the same design `.html`, `.pdf` and `.docx`.
+    expect(fileNameFor('Order intake', 'html')).toBe('Order-intake.html');
+  });
+
+  it('keeps the capitals the title was written with', () => {
+    expect(fileNameFor('Billing Run', 'md')).toBe('Billing-Run.md');
+  });
+
+  it('trims the spaces around a title, even though the drawing keeps them', () => {
+    // D39: a label keeps its interior spaces because the drawing shows what the
+    // file said. A file name is not a label — nothing is served by a name that
+    // begins with a space.
+    expect(fileNameFor('  Public API  ', 'md')).toBe('Public-API.md');
+  });
+
+  it('replaces the characters a file system will not take', () => {
+    expect(fileNameFor('Billing: v2/final?', 'md')).toBe('Billing-v2-final.md');
+  });
+
+  it('collapses a run of separators rather than writing a row of dashes', () => {
+    expect(fileNameFor('A // B', 'md')).toBe('A-B.md');
+  });
+
+  it('drops the control characters a title should never have held', () => {
+    expect(fileNameFor('Order\u0000 intake', 'md')).toBe('Order-intake.md');
+  });
+
+  it('keeps letters an English keyboard does not have', () => {
+    expect(fileNameFor('Ordenación', 'md')).toBe('Ordenación.md');
+  });
+
+  it('never writes a dotfile out of a title that starts with a dot', () => {
+    expect(fileNameFor('.hidden', 'md')).toBe('hidden.md');
+  });
+
+  it('falls back to a plain name when nothing of the title survives', () => {
+    // A blank title cannot reach here (D39 refuses it), but `***` can.
+    expect(fileNameFor('***', 'md')).toBe('design.md');
+  });
+
+  it('cuts a very long title to a length a file system will take', () => {
+    const name = fileNameFor('a'.repeat(200), 'md');
+
+    expect(name.endsWith('.md')).toBe(true);
+    expect(name.length).toBeLessThanOrEqual(83);
+  });
+
+  it('does not leave the cut name ending in a separator', () => {
+    const name = fileNameFor(`${'a'.repeat(79)} tail`, 'md');
+
+    expect(name).toBe(`${'a'.repeat(79)}.md`);
+  });
+});

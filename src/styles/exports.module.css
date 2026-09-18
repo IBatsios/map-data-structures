@@ -1,0 +1,60 @@
+/*
+ * The export controls: the row of buttons that turn the drawing on screen into
+ * a file. Markdown is the first of four (Tasks 06 to 08 add HTML, PDF and
+ * Word), so this is a row from the start rather than one button's styling.
+ *
+ * It declares no colour of its own, on purpose. The page around it is still
+ * unstyled — Task 09 adds the second page and makes that decision once, for
+ * both — so the button borrows the page's own text colour through
+ * `currentColor` and its type through `font: inherit`. Whatever contrast the
+ * page has, the button has; there is no new colour here for a test to measure
+ * or for Task 09 to have to undo.
+ *
+ * What it does spend room on is the parts a keyboard and a mouse notice: a
+ * focus ring that is visible against any background, a hover that answers the
+ * pointer, and a disabled state that looks unavailable rather than broken —
+ * which is what the button is before any design has been drawn.
+ */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.action {
+  padding: 0.55rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background-color: transparent;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background-color: rgb(0 0 0 / 6%);
+}
+
+/*
+ * `:focus-visible` rather than `:focus`, so a pointer user does not get a ring
+ * they did not ask for while a keyboard user always does. The offset keeps the
+ * ring off the border it would otherwise sit on top of.
+ */
+.action:focus-visible {
+  outline: 3px solid;
+  outline-offset: 2px;
+}
+
+/*
+ * Disabled until a design is on screen. Dimmed rather than recoloured, so the
+ * unavailable state does not depend on telling two colours apart, and WCAG
+ * exempts a disabled control from the contrast minimum the rest of the page
+ * keeps.
+ */
+.action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
