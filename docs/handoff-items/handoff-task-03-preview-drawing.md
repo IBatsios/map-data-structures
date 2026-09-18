@@ -3,7 +3,7 @@
 **Date:** 2026-09-18
 **Branch:** feature/preview-drawing
 **Task file:** docs/tasks/03-preview-drawing.md
-**Round:** 2 (round 1 tested by Jahmyr, changes requested)
+**Round:** 3 (rounds 1 and 2 tested by Jahmyr, changes requested both times)
 
 ## Assignment from Jared
 
@@ -941,3 +941,184 @@ produces a large canvas that the SVG scales to fit the page. Nothing is cropped.
 Jahmyr's 150-node case is beyond the sizes intake 11.1 describes, and he raised
 the same product question — whether a large drawing wants zoom or scroll. Still
 a decision for whoever owns the drawing next, not a defect.
+
+---
+
+## Test report from Jahmyr — round 2
+
+### Verdict
+
+**Changes requested.** All three round 1 defects are genuinely fixed — I watched
+each one in a real browser, not in a test report. The self-edge now leaves
+`Delivery worker`'s right border, loops, and lands its arrowhead back on the
+box; a 130-character edge label wraps into a six-line plate with every other
+node still at full size; the spoken description says "an external" and "a user".
+Six of seven criteria pass, and CI is green on the pull request with 124 Vitest
+and 10 Playwright tests on Linux.
+
+Criterion 2 still fails, on one input, for a new reason the fix introduced.
+`selfLoop` ignores which self-edge it is routing, so **every self-edge on the
+same node is drawn at exactly the same coordinates**. Two loops on one node
+render as one loop with one readable label; the other is underneath it and
+invisible. Dagre was reserving a separate lane per self-edge and the old code
+was passing those lanes through — so this is the half of the routing that moved
+in-house without bringing the lane with it.
+
+It is one small, well-understood change away, and I would rather say so now than
+check a box that a two-edge fixture disproves.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can preview the generated drawing in the browser: demonstrated end to end. | **pass** | Loaded `order-intake.json` and `retry-loop.json` through the real file input in Chromium against the built `dist/`, and looked at full-page screenshots of both. All seven nodes in their own silhouettes, six labelled arrows, nothing dropped. Unchanged from round 1. |
+| Every node and edge in the JSON is visible in the drawing, with nothing dropped or mislabeled (5.2). | **fail** | The round 1 case is fixed and verified in the browser: `retry-loop.json` gives a loop whose route is `M 195 48.67 L 229 48.67 L 229 69.33 L 195 69.33` against a node box the browser reports as x 28..195, y 28..90 — both ends exactly on the border, both inside the vertical span, `marker-end="url(#drawing-arrowhead)"` on the route. But two self-edges on one node draw byte-identical `d` attributes and overlapping plates, and one label disappears under the other. See Defect 1. |
+| The drawing appears within one second of choosing the file, for a design the size of the owner's use cases. | **pass** | 150 nodes and 199 edges: SVG visible **157ms** after the file was chosen, all 150 node groups and all 199 edge groups present in the DOM. The layout function alone is 75.7ms on that design and 2.9ms on twenty self-loops, so the wrapping added per edge costs nothing measurable. |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright test runs in CI. | **pass** | `bun run test` 124/124 in 8 files; `bun run test:e2e` 10/10. CI job log shows `Running 10 tests using 1 worker` then `10 passed (5.1s)` after `bunx playwright install --with-deps chromium`. The new walk asserts against `getBBox` and the path the renderer wrote, which is the right instrument — it measures the drawing, not the layout's own opinion of it. |
+| Every earlier test still passes; CI is green. | **pass** | 118 to 124 with no test removed or weakened; the replaced self-edge assertion is strictly stronger. CI green on both the push and the pull-request run: Typecheck `Result (25 files): 0 errors, 0 warnings, 0 hints`, Test `124 passed`, Test end to end `10 passed`. |
+| Best-effort accessibility: the SVG has a title, and label text has readable contrast against its shape. | **pass** | Verified rather than trusted. In the browser: `role="img"`, `aria-labelledby="drawing-title drawing-description"` resolving to both, no duplicate ids on the page, first Tab stop still `INPUT#design-file`, no horizontal overflow at 800px. I recomputed every contrast band from the stylesheet with my own WCAG implementation: labels 11.12:1 to 14.08:1, type lines 4.54:1 to 6.29:1 — `database` is still **exactly 4.54:1**, unmoved, as claimed. `git diff` confirms zero lines changed in any `.css` or `.astro` file this round. The `<desc>` still carries each edge label whole even when the plate wraps it. |
+| Any new environment variable is in `.env.example` with a placeholder. | **pass** | Re-grepped `import.meta.env`, `process.env`, `Bun.env`, `Deno.env` across `src/`, `e2e/` and the root configs. The only hits are `process.env.CI` in `playwright.config.ts`, which GitHub Actions sets and this project does not own. `.env.example` correctly still says the project reads nothing. |
+
+### Command results
+
+`bun run test`: **124 passed, 8 files**, 397ms
+`bun run test:e2e`: **10 passed**, 5.2s including the build
+`bun run check`: **0 errors, 0 warnings, 0 hints** over 25 files
+`bun run build`: **pass**, 1 page in 468ms
+`bunx prettier --check .`: clean
+Secret scan: **gitleaks, 20 commits scanned, no leaks found**
+CI: **green** — https://github.com/IBatsios/map-data-structures/actions/runs/35351398473
+
+### Defects for Amon
+
+**1. `src/lib/layout.ts:356` (`selfLoop`), reached from `layout.ts:319-322` —
+every self-edge on the same node is routed to identical coordinates, so the
+second one is invisible underneath the first.**
+
+`selfLoop(edge, node, plate)` derives its whole route from the node's box and
+nothing else. Two self-edges on one node therefore produce the same four points
+and the same label origin, and the renderer draws one on top of the other.
+
+Expected: two self-edges on a node read as two loops with two readable labels,
+the way two parallel edges between two nodes already do — round 1 confirmed
+dagre bows those apart and both labels stay readable.
+
+Actual, measured in Chromium on a two-loop fixture:
+
+```
+route[0] "M 195 48.66666666666667 L 229 48.66666666666667 L 229 69.33333333333334 L 195 69.33333333333334"
+route[1] "M 195 48.66666666666667 L 229 48.66666666666667 L 229 69.33333333333334 L 195 69.33333333333334"
+plate[0] x 237 y 47  148x24   ("retries on failure")
+plate[1] x 237 y 47  163x24   ("escalates after five")
+```
+
+Identical routes, co-located plates. Because the plate is opaque and the second
+is the wider of the two, it covers the first completely: the screenshot shows
+one loop labelled "escalates after five" and no trace of "retries on failure".
+The file says three edges, the drawing shows two.
+
+Cause, and the part worth knowing: **dagre was already reserving a lane per
+self-edge, and the round 2 change stopped reading it.** Driving dagre directly
+with the same graph — two self-edges on `a`, node `a` at x 0..132 — it returns
+stubs at x 281.5 and x 404, with label centres at 270 and 396. That is two
+distinct lanes about 122px apart, which is why the pre-fix drawing put two
+readable (if detached) labels on screen. `readRoutedEdges` now short-circuits to
+`selfLoop` before it ever calls `graph.edge(...)` for that edge, so the lane
+dagre picked is discarded along with the stub that was wrong.
+
+The narrow fix is to give `selfLoop` the ordinal of this edge among the
+self-edges on that node and step out by it — `border + SELF_LOOP_EXTENT * (n+1)`
+for the reach, and the label origin with it — or to keep reading dagre's label
+`x` for the self-edge and hang the loop off that, which uses the lane dagre has
+already sized to the label. The room exists either way; only the offset is
+missing.
+
+Reproduce with this as a fixture:
+
+```json
+{
+  "title": "Two loops",
+  "nodes": [
+    { "id": "worker", "label": "Delivery worker", "type": "service" },
+    { "id": "outbox", "label": "Outbox", "type": "queue" }
+  ],
+  "edges": [
+    { "from": "worker", "to": "worker", "label": "retries on failure" },
+    { "from": "worker", "to": "worker", "label": "escalates after five" },
+    { "from": "worker", "to": "outbox", "label": "reads batch" }
+  ]
+}
+```
+
+I did not commit it — the test comes first, and it is yours to write. Note that
+both new unit tests use a design with exactly one self-edge, which is why they
+stayed green through this.
+
+### What I checked specifically because you asked
+
+**The `NODE_SEPARATION` claim holds, and holds better than the argument for it.**
+The worry was that the loop could reach a neighbour. It cannot, and not only for
+the 34 + 8 < 48 reason given: dagre sizes the self-edge's reserved lane to the
+*label*, so a long label widens the lane rather than pushing the plate into the
+next one. On a four-sibling rank with a self-loop on the middle node, the plate
+lands at x 562..614 with the next node at 650..782. With a 74-character
+self-edge label the plate lands at 382..612 and the next node at 648..780. I
+checked every node box against every route point and every plate against every
+other plate, programmatically, on both designs: no collision.
+
+**Nothing you said was untouched, was touched.** `git diff fccde52..HEAD` over
+`*.css`, `*.astro`, `.github/`, `.husky/`, `package.json`, `e2e/staticServer.ts`
+and `playwright.config.ts` is **zero lines**. So D30's foreground static server,
+the four-step CI order, both carve-ins and every colour band are the ones I
+verified in round 1, and the contrast numbers I recomputed confirm it.
+
+**The wrapping does not shorten anything.** A 300-character unbroken label wraps
+to 11 lines that rejoin character-for-character identical to the original; a
+400-character one to 14 lines, identical; a 99-character word-y label to 4 lines
+with every word preserved; CJK text to 6 lines, identical.
+
+### Adversarial pass
+
+Through the real file input in Chromium, collecting `pageerror` and console
+errors. **No uncaught errors in any case.**
+
+| Input | Result |
+|---|---|
+| Empty file, 0 bytes | No drawing, "That file could not be drawn: Unexpected end of JSON input" |
+| Truncated JSON | Same, drawing cleared |
+| `null` | "That file could not be drawn: That JSON file is not a design." |
+| Parses but has no nodes | Empty SVG, "0 nodes, 0 edges" — the documented intent (D19) |
+| 150 nodes, 199 edges | 157ms, all 150 nodes and all 199 edges drawn |
+| Two self-edges on one node | **Defect 1** |
+| One self-edge, empty label | Loop drawn, 14px plate, correct |
+| Self-edge on a lone node | Loop drawn against the node, canvas 274x134 |
+| Self-edge in a crowded rank, short and long label | No collision with any neighbour |
+| 300 and 400 character edge labels, unbroken | Wrapped, nothing lost, drawing stays full size |
+| CJK edge label | Wrapped, nothing lost |
+| Edge label of tabs, newlines, or a few spaces | Preserved verbatim |
+
+One note, not a defect: an edge label of **80 consecutive spaces** now comes back
+as `['']` rather than 80 spaces, because wrapping splits on words and drops the
+separators. This is pre-existing `wrapText` behaviour that node labels have had
+since round 1, it is only newly reachable from edge labels, and it is invisible
+to a reader either way — blank is blank, and the plate is now 14px instead of
+2,250px, which is an improvement. Worth a line in `text.ts`'s doc comment, whose
+"whitespace-only text comes back as it went in" is true only of text short
+enough not to wrap. Not worth a round.
+
+**Known gaps I confirmed rather than re-litigated:** "an ui" is wrong, as
+documented — so is nothing else I tried; `api`, `actor`, `external`, `unknown`,
+`user`, `service`, `queue`, `database`, `worker` and a hyphenated unknown type
+all come out right. Loop ends meet the bounding box rather than the silhouette,
+the same as every other edge end. Both are recorded as gaps and neither is a
+criterion failure.
+
+### Fixed in place
+
+None. The one defect changes routing behaviour, so it is Amon's.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/5 — pushed
+`fccde52..dd8ba05`, CI green on the pull-request run. Still a draft, for Sam. I
+did not mark it ready and did not merge.
