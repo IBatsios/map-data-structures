@@ -741,3 +741,210 @@ Checked: 1, 4, 5, 6. Left unchecked: 2 and 3, for the reasons in the table.
 ### Round
 
 Round 1 of 3. Round 2 goes to Amon.
+
+---
+
+## Work completed by Amon — round 2
+
+Both defects are closed, and defect 3's correction is taken and applied below.
+
+### What was built
+
+**Defect 1 — the panel can no longer print a line the engine never gave.**
+
+The fault was one unanchored regular expression. A `JSON.parse` message holds at
+most two things worth reading — the engine's position clause, and a quotation of
+the file that failed — and the second is the user's own bytes coming back.
+`/\bposition (\d+)/` could not tell them apart, so a file whose text says
+`position 900` had its own digits scraped out and printed back as a column.
+
+The position is now read from a clause **anchored to the end of the message**:
+
+```ts
+const ENGINE_POSITION_CLAUSE =
+  /\s*\b(?:in|after) JSON at position (\d+)(?:\s*\(line \d+ column \d+\))?\s*$/u;
+```
+
+Two things about that shape, both of which depart from the one-line fix suggested
+in the report, and both of which are D44:
+
+- **The anchor, not the phrase, is what makes it safe.** Every engine that gives
+  a position ends its message with it; every quotation ends `is not valid JSON`.
+  So a message can never end in a clause it is only quoting — and that holds
+  however wide a snippet V8 decides to echo. It has to, because the
+  ten-character window is not the only form: a *short* file is quoted whole.
+  `JSON.parse('JSON at position 900')` gives
+  `Unexpected token 'J', "JSON at position 900" is not valid JSON`, where the
+  clause words sit inside the quotation, verbatim. A phrase-only fix reads that
+  file's `900` as confidently as the old one read `gantry.json`'s. There is a
+  test for exactly that file.
+- **`after JSON at position` is a real clause and had to stay.** The suggested
+  `/\bin JSON at position (\d+)/` would have cost a file with junk after its
+  design the line it already had: V8 answers that one
+  `Unexpected non-whitespace character after JSON at position 8 (line 2 column 1)`.
+  Matching both prepositions keeps it, and treating the preposition as part of
+  the clause fixed a second, smaller self-contradiction found while writing that
+  test — the strip did not fire on the `after` form at all, so the panel said
+  `Line 2, column 1: Unexpected non-whitespace character after JSON at position 8 (line 2 column 1).`,
+  naming the place twice in two different wordings.
+
+`engineDetail` now strips the same constant `positionIn` reads from, so the
+scrape and the strip cannot disagree again. That disagreement was the tell in the
+report: a sentence that named a column and then ended `... is not valid JSON`.
+
+No file that legitimately had a line number loses one. Under the old regex a
+snippet-form message only ever yielded a "position" when the file happened to
+contain `position <digits>` — and that answer was always wrong.
+
+**Defect 2 — the drop path is now driven, not described.**
+
+`UploadPage.drop(fixture)` and `UploadPage.dragOver(fixture)` build a real
+`DataTransfer` inside the page from the fixture's own bytes on disk and dispatch
+a real `DragEvent` at `#drop-zone`, so a dropped PNG is the PNG in
+`e2e/fixtures`. Specs now say `upload.drop('logo.png')` as easily as
+`upload.choose('logo.png')`, as suggested.
+
+The picker test kept its coverage under a name that says what it does —
+`refuses an image chosen from the picker` — and five new tests cover the drop.
+
+One of those five was written, run green, and then thrown away, which is worth
+recording. `keeps the page, rather than letting the browser navigate to the file`
+asserted `page.url()` was still `/` after a drop. It passes with
+`event.preventDefault()` deleted from the page — checked, deliberately — because
+a *synthetic* drop cannot make a real browser navigate to a file. It was a test
+that quietly asserted nothing, which is the shape this task was told not to
+repeat. What replaced it reads `dispatchEvent`'s own return value, which is false
+exactly when a listener cancelled the default, and it does fail when
+`preventDefault` is removed (D45).
+
+That is the rule applied to all five: **each was checked against a mutation of
+the page rather than trusted.** Removing the read of `event.dataTransfer` fails
+three of them; removing `preventDefault` fails the cancellation test; removing
+the drag cue fails the cue test. `src/pages/index.astro` is byte-identical to its
+committed state — `git diff` on it is empty.
+
+**Defect 3 — taken, and it corrects round 1's own notes.**
+
+Measured here rather than repeated: `bun run test` runs Vitest on **Node 24 /
+V8 13.6.233.17-node.48**, and `process.versions.bun` is `undefined`. The round 1
+"Known gaps" line claiming JavaScriptCore is **false** and should not be reasoned
+from. It has two consequences, both already acted on above:
+
+- Every V8-shaped message in the new tests is the one this machine actually
+  produces. `JSON.parse` was run over eleven inputs and the messages copied out
+  rather than remembered; the comments naming V8 13.6 in the test file say so.
+- `loadDesign.test.ts:146`'s conditional assertion is **executing**, not inert.
+  It is still Task 02's and was left alone, but it is live rather than dead, and
+  the note below for Jared is corrected to match.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/describeLoadError.ts` | `ENGINE_POSITION_CLAUSE`, anchored to the end of the message and shared by `positionIn` and `engineDetail`. Rule 1 in the module's header now points at it, since that is where the rule is actually enforced. Net +19 lines, 14 of them the comment on why the anchor is the rule. |
+| `src/lib/describeLoadError.test.ts` | Three tests and five measured-message constants. |
+| `e2e/pages/uploadPage.ts` | `drop`, `dragOver`, `isDragCueShowing`, `dropZone`, and the private `dispatchWithFile` / `fileTransfer` / `mediaTypeOf` behind them. |
+| `e2e/validation.spec.ts` | The `gantry.json` regression, a `Files dropped on the page` block of five, and one rename. |
+| `e2e/fixtures/gantry.json` | New. The reported repro, byte for byte: a YAML config saved with a `.json` name. |
+| `docs/DECISIONS.md` | D44, D45. |
+| `README.md` | **No change.** Its sentence — "names the line and column when the browser gives a position to count from ... it never guesses one" — was already the promise; this round is the code catching up to it. Commands unchanged. |
+| `.env.example` | **No change**, still none needed. |
+| `src/pages/index.astro` | **No change.** Mutated twice to prove the new tests fail, restored both times, verified clean. |
+
+### Tests written
+
+Unit, 3 new (**179 total**, all passing). All three failed first, and the
+failures are quoted in the commit message:
+
+- **`reads a position from the engine's clause and never from the file it quotes`**
+  — the reported repro as a unit test. Failed with `Line 1, column 10`, the exact
+  string from the report.
+- **`names no line for a short file quoted back whole, clause words and all`** —
+  the case a phrase-only anchor would still get wrong. Failed with
+  `Line 1, column 21`, and the sentence it failed with is the self-contradicting
+  one: it named a column and then ended `... is not valid JSON`. It also asserts
+  the quotation survives intact, so stripping a clause can never misquote a file.
+- **`still names the line when the engine puts its position after the JSON`** —
+  the guard against narrowing too far. Failed on the engine's clause being
+  repeated after the app's own wording.
+
+End to end, 6 new (**31 total**, all passing):
+
+- **`names no line for a file whose own text says "position"`** — the regression
+  in the browser that found it, through `gantry.json`.
+- **`shows the drop cue while a file is over the page, and drops it again`** —
+  `dragover` sets `data-dragging`, the drop clears it.
+- **`refuses a dropped image without reading a byte of it`** — the real drop the
+  old test was named for.
+- **`describes a dropped binary named .json and shows none of it`** — a dropped
+  PNG that passes the kind check because its name and its media type both say
+  JSON; the panel's `innerHTML` matches neither `PNG` nor `IHDR`.
+- **`draws a good file that was dropped rather than chosen`** — the success half
+  of the drop path, status line and all.
+- **`cancels the browser's own handling of both drag events`** — `preventDefault`
+  on `dragover` and on `drop`, read off `dispatchEvent`'s return value.
+
+### Local results
+
+`bun run test`: **pass**, 179 tests in 11 files.
+`bun run test:e2e`: **pass**, 31 tests in Chromium.
+`bun run check`: **pass**, 0 errors, 0 warnings, 0 hints over 33 files.
+`bun run build`: **pass**, 1 page in about 480 ms.
+
+### Decisions recorded
+
+**D44** — the anchored position clause: why the anchor rather than the phrase is
+what makes it safe, why both prepositions are in it, and what it costs.
+**D45** — how a dropped file is tested, and why `dispatchEvent`'s return value is
+what pins `preventDefault` rather than the page's URL.
+
+### Known gaps
+
+- **Round 1's line "Bun runs Vitest on JavaScriptCore here" is false**, as the
+  report says. Corrected above rather than edited in place, so the correction is
+  readable beside the claim. Nothing else in round 1 rests on it.
+- **No JavaScriptCore or SpiderMonkey message is measured**, only staged. The JSC
+  constants in the test file still come from the handoff chain rather than from a
+  Safari anyone ran, and one cannot be run here. The module's design is what makes
+  that survivable — the engine is an argument (D38) — but if a JSC message is ever
+  measured and differs, the staged one is where to look.
+- **`positionIn` is now keyed to V8's clause wording specifically.** An engine
+  that names a position in some third phrasing gets the no-position path: honest,
+  but less than it could say. **Firefox is the live example** — SpiderMonkey says
+  `JSON.parse: unexpected character at line 3 column 1 of the JSON data`, which
+  names a line and a column and no position, so the panel currently tells a
+  Firefox user it does not know where when the engine did say. That is a message
+  that is *too modest*, never a wrong pointer, so it is not this defect and the
+  round was not widened to chase it. Left below for Jared.
+- **"not valid JSON" still reads twice on the no-position path**, as the report
+  noted under "minor". This fix makes it *more* common, since every snippet-form
+  message now takes that path. The wording is left alone deliberately: the second
+  one is the engine's own words and is marked as such by `It reported:`, and
+  rewriting it would mean cutting an engine's sentence in half. Flagged so the
+  judgement can be re-made with the right facts.
+- **`describeLoadError.ts` is now 466 lines.** Round 1 disclosed 447 and named
+  the seam; this round added 19, 14 of them the comment on why the anchor is the
+  rule. The seam is unchanged and was not taken — splitting the module in a round
+  whose job was two defects would have buried them.
+
+### Out-of-scope notes for Jared
+
+- **`loadDesign.test.ts:146`'s conditional assertion is live, not inert** —
+  correcting round 1's own note. It executes on Node/V8 here. Still Task 02's
+  module and left alone, but the reason to clean it up has changed: it is not
+  dead code, it is a test that will silently stop asserting the day anything runs
+  it on an engine that gives no position.
+- **Firefox gets a more modest message than it has earned**, per the gap above. A
+  second clause for SpiderMonkey's `at line L column C of the JSON data` would be
+  a handful of lines in the same shape as D44's, with the same end anchor. It is a
+  real improvement and it is not a defect; it wants its own small cycle, or a
+  carve-in to whichever task next opens this module.
+- **`src/lib/layout.ts` is still 625 lines**, untouched, still routed to its own
+  `chore/` cycle before Task 05.
+- **`loadDesign`'s doc comment is still half a step behind**, as in round 1: it
+  says V8 "names a position and often a line and column", which is true but
+  incomplete. Still one sentence, whenever that file is next open.
+
+### Round
+
+Round 2 of 3. Back to Jahmyr. Nothing is pushed; the branch has two new commits.
