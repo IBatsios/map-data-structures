@@ -409,3 +409,312 @@ it written.
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+
+## Work completed by Amon — round 1
+
+### The library gate, verified at add time
+
+`docx` 9.7.1, MIT, added with `bun add docx`. Checked against the registry and
+against the package on disk rather than against the handoff: `npm view docx`
+returns `9.7.1` / `MIT`, the package ships `LICENSE` (MIT, "Copyright (c) 2016
+Dolan"), `dist/index.d.ts`, and five dependencies — `hash.js`, `jszip`,
+`nanoid`, `xml`, `xml-js`. Its ESM entry carries no bare imports at all, so
+Astro's build takes it whole; `bun run build` passes. Recorded as **D73**.
+
+Three facts confirmed rather than trusted:
+
+- `Packer.toBlob(file): Promise<Blob>`, and its blob already carries the
+  `wordprocessingml.document` media type. **`src/lib/download.ts` is unchanged
+  for the fourth time and needed no edit.**
+- `IPropertiesOptions` carries `title`, `description` and `creator`; the run
+  `language` is set once on the document's default run rather than per run.
+- `IImageOptions` types an image as `jpg | png | gif | bmp`, and the SVG
+  variant needs a raster fallback regardless — so the Word drawing is a PNG,
+  as expected.
+
+### The two silent-failure questions, answered before the plan
+
+**1. Control characters — determined empirically, three ways.**
+
+`docx` 9.7.1 escapes `&`, `<`, `>` and `"` and writes **everything else through
+verbatim**. It does not strip, does not escape and does not throw. A `U+0001`
+in a label lands raw in `word/document.xml`.
+
+- The produced `document.xml` is then **not well-formed XML**: expat rejects it
+  with `not well-formed (invalid token): line 1, column 2399`.
+- LibreOffice refuses the file outright: `Error: source file could not be
+  loaded`. So the fate is the **loud** one — but loud when the reader opens it,
+  not when the export runs, and it fails criterion 1 for any design carrying one.
+
+The two C0 characters XML *does* allow were measured separately in LibreOffice,
+because neither is safe either:
+
+| in a label | what a `.docx` does with it, measured | what this export does |
+|---|---|---|
+| tab `U+0009` | renders as a tab, exactly as `w:tab` does | **kept as itself** |
+| line feed `U+000A` | legal XML, renders as a **space** | becomes a real `w:br` |
+| carriage return `U+000D` | XML normalises it to a line feed before Word sees it | joins `\r\n` into one break |
+| `U+0001`, `U+000B`, `U+000C`, `U+001F`, `U+0000` | file will not open | marked `■`, counted |
+| DEL `U+007F`, `U+0085`, `U+200B` | carried through, file opens | **kept as itself** |
+
+Recorded as **D76**.
+
+**2. `fontCoverage.ts` does not apply — verified, not assumed.** The produced
+package holds `word/fontTable.xml`, which *names* faces, and no font binary
+part at all. So coverage is the reader's machine's question, and marking `→` or
+`東京` would turn a character the reader's Word draws perfectly well into a
+square. `e2e/exportWord.spec.ts` has a test named for it that asserts
+`undrawable-labels.json` comes out of the `.docx` with every arrow, ideograph
+and tick intact and **no `■` anywhere**. Recorded as **D77**.
+
+### What was built
+
+An **Export Word** button, fourth in the export row. With a design on screen it
+downloads `<design>.docx`: the design's title as a Word title, the drawing as a
+picture, and the node and edge tables as **real Word tables** — a reader opens
+the file and types in a cell.
+
+The split is D63's: a pure `docxPlan(layout)` decides the page, the metadata,
+the title, both tables and their column widths, the size the drawing is placed
+at, D51's sentence for an empty design, and the character rule; a thin
+`toDocx(layout, doc)` builds the file that plan describes.
+
+The drawing is rendered fresh, given the preview's own resolved styles, and
+painted through a canvas at three times the size it is placed at. **D64 applies
+to the canvas identically**, so `openDrawing`/`resolveStyles` were *lifted out*
+of `toPdf.ts` into `src/lib/openDrawing.ts` and both exports call it; the PDF's
+font override now arrives as an argument rather than being hard-coded inside
+it. The marking walk was lifted out of `drawableText.ts` into
+`src/lib/markLayout.ts` on the same reasoning — the rule differs between the
+two exports, the walk does not.
+
+The export row got D59's fuller revisit: four buttons, its name on the page via
+`aria-labelledby` rather than only in an `aria-label`, one minimum width across
+all four, a press state, and `prefers-reduced-motion` respected.
+
+`src/lib/exportStyles.ts:15-18`'s stale `?raw` comment is corrected to D61's
+wording. Bounded to that comment block; nothing else in the module moved.
+
+### Files added or changed
+
+**Product**
+
+| path | what |
+|---|---|
+| `src/lib/docxPlan.ts` | new. The pure planner: page, metadata, title, tables, drawing size, `safeDocxText`, `describeMarkedControls`. |
+| `src/lib/docxPlan.test.ts` | new. 24 unit tests, written first. |
+| `src/lib/toDocx.ts` | new. The thin writer over `docx`, dynamically imported. |
+| `src/lib/rasteriseDrawing.ts` | new. The named seam that paints the SVG into PNG bytes through a canvas. |
+| `src/lib/openDrawing.ts` | new. `openDrawing`/`resolveStyles`, lifted out of `toPdf.ts` and shared. |
+| `src/lib/markLayout.ts` | new. The layout-marking walk, lifted out of `drawableText.ts` and shared. |
+| `src/lib/toPdf.ts` | now calls `openDrawing`, passing its font override; 338 → 242 lines. |
+| `src/lib/drawableText.ts` | now calls `markLayout`; its duplicate walk removed. Behaviour unchanged. |
+| `src/lib/exportStyles.ts` | the `?raw` comment corrected to D61 (comment only). |
+| `src/pages/index.astro` | the fourth button, its handler, the row's new structure. |
+| `src/styles/exports.module.css` | the row's revisit: group label, one minimum width, press state, reduced motion. |
+| `package.json`, `bun.lock` | `docx` ^9.7.1. |
+
+**Tests**
+
+| path | what |
+|---|---|
+| `e2e/docxText.ts` | new. Reads the produced bytes back: zip directory + `inflateRaw` + enough XML for text, tables, metadata, page and media. |
+| `e2e/exportWord.spec.ts` | new. 20 steps, Word-only. |
+| `e2e/export.spec.ts` | the four-download pass for criterion 4; button count 3 → 4. 511 → 561 lines. |
+| `e2e/exportPdf.spec.ts` | button count 3 → 4. |
+| `e2e/pages/uploadPage.ts` | `exportWord`, `downloadWord`. |
+
+**Docs**
+
+`docs/DECISIONS.md` (D73–D80, appended), `README.md`, `CLAUDE.md`,
+`docs/tasks/08-export-word.md` (status line only — **no box checked**), this
+file.
+
+### Tests written
+
+**Unit — `src/lib/docxPlan.test.ts` (24):**
+
+- the page is US Letter portrait in DXA with a 1,440 margin, and is taller than
+  it is wide (`docx` defaults to A4, so a file that does not say so is one
+  nobody chose the page for)
+- the metadata carries the title, a description drawn from the layout, and `en`
+- the title is written at the top as its own lines
+- both tables list every node and every edge in file order, with the same
+  column names the other three exports print
+- every column width is a whole number of DXA and they sum to the text column
+  exactly (a percentage width is what lays out differently in Google Docs)
+- an empty design still prints both headings with no rows under them
+- the drawing fits the content box, is never scaled up, and keeps its
+  proportions when it shrinks
+- the canvas is a fixed multiple of the *placed* size, so it is bounded
+  whatever the design
+- the picture is described for a reader who cannot see it
+- a design with no nodes gets D51's sentence and no drawing
+- `safeDocxText` marks each XML-forbidden control character and counts it
+- `safeDocxText` keeps a tab, keeps `→ 東京`, keeps DEL
+- `safeDocxText` splits `\n`, `\r\n` and a lone `\r` into lines and marks none
+- the same character is marked in a label, an id, a type and a title
+- the count is per piece of the design's own text, not per drawn line
+- the drawing's layout carries the same marked text the tables do
+- `describeMarkedControls` names the count, the mark and the two formats that
+  keep everything, and says nothing at zero
+
+**Walk — `e2e/exportWord.spec.ts` (20):** the button is offered only with a
+design on screen; the file is named `Order-intake.docx` and is a zip with
+`[Content_Types].xml`, `word/document.xml` and `docProps/core.xml` in it; every
+label the preview draws is in the file; both tables are real tables with a row
+per node and per edge and the right cells in the right order; every `w:tcW` is
+`dxa` and none is `pct`; there is exactly one PNG, over 2 kB, with alt text
+naming a node and an edge; the page is 12,240 × 15,840 portrait; the title,
+description and language are in the metadata; Greek, an ampersand and a label
+that is markup survive; `undrawable-labels.json` comes out with **no `■` at
+all**; `control-labels.json` leaves **zero** XML-illegal characters in
+`word/document.xml` and reads `Soh■Charlie` in its table row; the tab, the DEL
+and both line breaks are carried; the page says `1 control character`; a clean
+export says nothing; an empty design gets the sentence, both one-row tables and
+no picture; the export follows the design on screen; the button disables when
+the next file fails; the group holds four buttons, shows its name and is
+reachable by Tab and Enter; and both timed steps.
+
+**Walk — `e2e/export.spec.ts`:** one new step for criterion 4 — four buttons
+clicked one after another on one design, four downloads, four correct names,
+and each file checked by the bytes a reader looks at first (`# Order intake`,
+`<!doctype html>`, `%PDF-`, `PK`), with all four still enabled afterwards.
+
+### Local results
+
+- `bun run test`: **pass — 21 files, 343 tests** (319 before this task).
+- `bun run test:e2e`: **pass — 97 steps** (77 before this task).
+- `bun run check`: **pass — 0 errors, 0 warnings, 0 hints** over 65 files.
+- `bun run build`: **pass**, 1 page in ~0.8 s.
+
+### Criterion 1, verified by hand as well as by the walk
+
+The criterion says the file must open in **Word and LibreOffice**. LibreOffice
+25.x is on this machine and every fixture's export was opened with it and
+converted to PDF without a warning: `order-intake`, `markup-labels`,
+`platform-overview`, `estate-sweep`, `control-labels`, `empty-design`, and a
+200-node design. The drawing's PNG was extracted from `order-intake.docx` and
+looked at: every silhouette, colour band, arrowhead and label is there, so
+D64's inlining carries through the canvas path as well as through svg2pdf's.
+
+**Word itself is not installed on this machine, so the Word half of criterion 1
+is unverified here.** It is the one thing I could not check and Jahmyr should.
+
+### Measurements
+
+**Time (criterion 3).** Measured off the click to the browser holding the file,
+in the walk, `--workers=1`:
+
+| design | nodes / edges | first click | warm | `.docx` |
+|---|---|---|---|---|
+| `markup-labels.json` | 4 / 3 | 298 ms | 143 ms | 165 kB |
+| `order-intake.json` | 7 / 6 | 155 ms | 149 ms | 212 kB |
+| `platform-overview.json` | 15 / 16 | 159 ms | 155 ms | 195 kB |
+| `estate-sweep.json` | 40 / 46 | 183 ms | 187 ms | 140 kB |
+| 200 nodes / 260 edges | 200 / 260 | 558 ms | — | 143 kB |
+| `empty-design.json` | 0 / 0 | 101 ms | 105 ms | 8.9 kB |
+
+The walk's guard is 15 s, D67's deliberately loose one. Word is the *fastest*
+of the four exports — there is no font to fetch and no vector conversion.
+
+**Memory, for the 200-node case Jared asked about.** The page's
+`usedJSHeapSize` was 11.9 MB before the export and 11.9 MB after. The canvas is
+measured against the *placed* size rather than the drawing's own, so it can
+never exceed 624 × 768 × 3 ≈ 4.3 megapixels however large the design is. This
+is a deliberate choice recorded in D74; scaling the drawing's own size would
+have needed a pixel budget and a canvas-dimension cap.
+
+**The Word drawing's on-page label size — the measurement Jared asked for
+specifically.** Read off the `wp:extent` in the produced `word/document.xml`
+(the drawing's node label is 14 layout px, placed at 96 px to the inch):
+
+| design | nodes | canvas | Word label | PDF label (Jahmyr's) |
+|---|---|---|---|---|
+| `markup-labels.json` | 4 | 423 × 660 | **10.50 pt** | 11.8 pt |
+| `order-intake.json` | 7 | 570 × 766 | **10.50 pt** | 10.2 pt |
+| `platform-overview.json` | 15 | 1541 × 1082 | **4.25 pt** | 4.0 pt |
+| `estate-sweep.json` | 40 | 1060 × 6480 | **1.24 pt** | 1.2 pt |
+| 200-node design | 200 | 17210 × 688 | **0.38 pt** | 0.24 pt |
+
+**The Word drawing has the same problem as the PDF's, at the same magnitudes.**
+The scheduled `fix/…` cycle therefore fixes one principle across both formats,
+exactly as Jared hoped. Note the shape of it is not "the page is too small" but
+"the canvas grows without bound in whichever direction the graph runs":
+`estate-sweep` is 6480 px tall and the 200-node design 17,210 px wide, so
+landscape alone does not fix it — tiling across sheets, or a per-node size
+floor, is what would.
+
+**Page orientation, chosen deliberately.** Portrait, and the reason is in the
+canvas column above: three of the four fixtures are taller than they are wide,
+so landscape would shrink the picture in three cases to help it in one. An inch
+of margin is Word's own default and the shape an editable document is expected
+to have. Recorded as D75.
+
+**Raster scale, chosen deliberately.** Three, giving 288 DPI at the placed
+size — a print resolution — and a canvas that is bounded by construction.
+Recorded as D74.
+
+### Decisions recorded
+
+Eight rows appended to `docs/DECISIONS.md`:
+
+- **D73** — `docx` 9.7.1, MIT, confirmed with the user and verified at add
+  time; why the other four routes were rejected.
+- **D74** — `toDocx(layout, doc)` over a pure `docxPlan(layout)`; the drawing is
+  a raster PNG at 3× the placed size, and why that bounds the canvas.
+- **D75** — US Letter portrait, 1,440 DXA margins; landscape measured and
+  rejected.
+- **D76** — what a `.docx` cannot carry, measured: the mark set, the tab, the
+  line endings, the unpaired surrogate, and why the count differs from the
+  PDF's.
+- **D77** — `fontCoverage.ts` does not apply to Word, verified both ways.
+- **D78** — `openDrawing` and `markLayout` extracted and shared rather than
+  copied.
+- **D79** — `e2e/docxText.ts` hand-written, and the Word spec in its own file.
+- **D80** — the export row's revisit.
+
+### Known gaps
+
+1. **Word itself was not used.** LibreOffice verified every file; Microsoft
+   Word is not on this machine. Criterion 1 names both.
+2. **The drawing's label size is unreadable past ~15 nodes** in the Word file
+   as it is in the PDF. Measured and reported above; not fixed, because the
+   handoff says explicitly that it is the next cycle's and must not become this
+   one's second round.
+3. **`bun run test:e2e` is Chromium only**, as it has been since Task 03
+   (`playwright.config.ts` has one project). So "opens the same everywhere" is
+   evidenced by the bytes and by LibreOffice, not by Safari or Firefox.
+4. **`docx` adds about 23 packages and 4.65 MB unpacked** to the dependency
+   tree, of which `jszip` was already arriving transitively with nothing.
+   The `.docx` code is dynamically imported, so a visitor who never clicks
+   Export Word never downloads it — but the repository carries it.
+
+### Out-of-scope notes for Jared
+
+1. **D51's sentence now exists in four places.** `pdfPlan.ts` exports
+   `NOTHING_TO_DRAW`, `toHtml.ts` keeps a private copy, `toMarkdown.ts` has its
+   own, and `docxPlan.ts` now has a fourth. I followed the precedent rather
+   than inventing a coupling mid-task, but four copies of one sentence is a
+   drift risk with no test holding them together — unlike the drawing's
+   palette, which `exportStyles.test.ts` does hold. A one-line shared constant
+   would close it.
+2. **The four exports' column headings are also four copies** — `Id | Label |
+   Type` and `From | To | Label` are written out independently in
+   `toMarkdown.ts`, `toHtml.ts`, `pdfPlan.ts` and `docxPlan.ts`, and the column
+   *shares* in `pdfPlan.ts` and `docxPlan.ts` are the same four numbers twice.
+   Same class of risk as (1), same size of fix.
+3. **The status region says one thing at a time, and the fourth export makes
+   that more visible.** Export PDF and then Export Word on a design carrying
+   both an uncoverable glyph and a control character, and the second sentence
+   replaces the first — so the user is told about the Word file's marks and the
+   PDF's disappear. D41 parked "announcing a finished download" for all four
+   exports at once; this is the same parked question growing a second head.
+   Not a defect against any criterion.
+4. **`e2e/fixtures/empty.json` is still misnamed** beside `empty-design.json`.
+   Unchanged, as instructed.
+5. **LibreOffice on this machine needed `-env:UserInstallation=…` and a clean
+   profile** before `--convert-to` would return; without it the command hangs
+   indefinitely. Worth knowing if the Word half of criterion 1 is ever
+   automated.

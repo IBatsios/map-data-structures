@@ -2,7 +2,7 @@
 
 Turn a JSON description of a system into an architectural design document. You
 choose a JSON file, the app draws its nodes and edges, and hands the same design
-back as a file — Markdown, HTML and PDF today, with Word still to come.
+back as a file — Markdown, HTML, PDF or Word.
 
 Everything runs in your browser. There is no backend and no database, the site
 ships as static files, and no file you choose is ever uploaded anywhere.
@@ -95,11 +95,32 @@ before sending a file: two labels or ids that differ only in characters the font
 cannot draw read alike in the PDF — `東` and `京` are both `■` — and the Markdown
 and HTML exports are the ones that still tell them apart.
 
+**Export Word** downloads `<design>.docx`: the title, the drawing, and the same
+two tables — as real Word tables, so you can open the file and type in a cell.
+It is US Letter portrait with an inch of margin, and it opens in Word and in
+LibreOffice. The drawing goes in as a picture rather than as vector, because a
+`.docx` has no reliable way to carry a drawing any other way; it is painted at
+three times the size it is placed at, so it stays crisp in print.
+
+A Word file names the font it wants rather than carrying one, so your reader's
+own machine draws the characters and nothing is marked for a font's sake: an
+arrow, a Greek label or a Chinese one arrives as itself. The one thing that
+cannot go in is a control character — a `.docx` is XML, and Word refuses to open
+a file holding one — so those are replaced with the same `■` and the page says
+how many. A tab is kept as a tab and a label's own line break as a real line
+break.
+
 Every button is disabled until there is something to export, and goes back to
 disabled the moment a file fails, so none of them ever saves the design before
 last.
 
-Still to come: Word. The task list in `docs/RUNBOOK.md` says what comes next.
+One thing to know before sending a large design: the drawing in the PDF and in
+the Word file is scaled to fit one page, and past about fifteen nodes its labels
+get too small to read. The two tables under it still carry every label at full
+size, and the Markdown and HTML exports do not shrink anything.
+
+Still to come: a page that publishes the JSON schema with a sample file, and
+deployment. The task list in `docs/RUNBOOK.md` says what comes next.
 
 The JSON it reads looks like this:
 
@@ -133,7 +154,8 @@ src/lib/fonts/ the font the PDF export embeds, generated from its source,
               with its licence beside it
 src/pages/    the Astro pages
 src/styles/   CSS Modules, and the tests that measure their contrast
-e2e/          the Playwright walk, its fixtures, and the server it runs against
+e2e/          the Playwright walk, its fixtures, the server it runs against,
+              and the readers that open an exported PDF or `.docx` back up
 docs/         PRD, architecture, decisions, runbook, and one file per task
 ```
 
