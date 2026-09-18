@@ -388,6 +388,14 @@ both paginated exports from one shared module, and sheets enough to honour it.
 `src/lib/layout.ts` and the preview's renderer are unchanged, as the assignment
 asked.
 
+One note on the commits, so the diff does not surprise you: the last one is
+titled `docs:` but also carries two source changes that were finished at the
+same time — the quiet caption in `pdfPlan.ts`/`toPdf.ts` and the readability
+pass over `drawingSheets.ts` that `front-review` asked for (`laidOut` split,
+`describeSheet` taking a named place and grid, one magic number named). Both are
+covered by tests in the same commit. I did not amend the message, because
+rewriting a commit is not mine to do.
+
 ### Tests written
 
 **`src/lib/drawingSheets.test.ts`** — the arithmetic, all of it pure:
