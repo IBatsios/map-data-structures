@@ -30,7 +30,8 @@
  */
 
 import type { FontCoverage } from './fontCoverage';
-import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
+import type { DesignLayout } from './layout';
+import { markLayout } from './markLayout';
 
 /**
  * What stands in for a character the font cannot draw.
@@ -115,19 +116,17 @@ export function drawableLayout(
   layout: DesignLayout,
   coverage: FontCoverage,
 ): DrawableLayout {
-  const title = markUndrawable(layout.title, coverage);
-  const nodes = layout.nodes.map((node) => markNode(node, coverage));
-  const edges = layout.edges.map((edge) => markEdge(edge, coverage));
+  // The walk itself — title, every node, every edge, the drawn lines included
+  // — is `markLayout`'s, because the Word export needs exactly the same walk
+  // under a different rule and a second copy of it is a second thing to drift.
+  // What is this module's is the rule: what the embedded face can draw.
+  const marked = markLayout(layout, (text) => {
+    const one = markUndrawable(text, coverage);
 
-  return {
-    layout: {
-      ...layout,
-      title: title.text,
-      nodes: nodes.map((marked) => marked.node),
-      edges: edges.map((marked) => marked.edge),
-    },
-    undrawable: title.undrawable + totalOf(nodes) + totalOf(edges),
-  };
+    return { text: one.text, marked: one.undrawable };
+  });
+
+  return { layout: marked.layout, undrawable: marked.marked };
 }
 
 /**
@@ -184,62 +183,4 @@ function isDrawable(point: number, coverage: FontCoverage): boolean {
 
 function isControl(point: number): boolean {
   return point <= LAST_C0 || (point >= FIRST_C1 && point <= LAST_C1);
-}
-
-/** One node: its id, its label, the lines it is drawn on, and its type. */
-function markNode(
-  node: LayoutNode,
-  coverage: FontCoverage,
-): { readonly node: LayoutNode; readonly undrawable: number } {
-  const id = markUndrawable(node.id, coverage);
-  const label = markUndrawable(node.label, coverage);
-  const type = markUndrawable(node.type, coverage);
-
-  return {
-    node: {
-      ...node,
-      id: id.text,
-      label: label.text,
-      type: type.text,
-      labelLines: markLines(node.labelLines, coverage),
-    },
-    undrawable: id.undrawable + label.undrawable + type.undrawable,
-  };
-}
-
-/** One edge: both ends, its label, and the lines its plate is drawn with. */
-function markEdge(
-  edge: LayoutEdge,
-  coverage: FontCoverage,
-): { readonly edge: LayoutEdge; readonly undrawable: number } {
-  const from = markUndrawable(edge.from, coverage);
-  const to = markUndrawable(edge.to, coverage);
-  const label = markUndrawable(edge.label, coverage);
-
-  return {
-    edge: {
-      ...edge,
-      from: from.text,
-      to: to.text,
-      label: label.text,
-      labelLines: markLines(edge.labelLines, coverage),
-    },
-    undrawable: from.undrawable + to.undrawable + label.undrawable,
-  };
-}
-
-/**
- * The lines a label is drawn on, marked but not counted a second time.
- *
- * They are the same text as the label, split for the picture, so counting them
- * would report a label twice over. Marking them is not optional though: the
- * drawing is drawn from these and the table from the label, and a file whose
- * two halves disagree is the failure intake 5.2 names.
- */
-function markLines(lines: readonly string[], coverage: FontCoverage): readonly string[] {
-  return lines.map((line) => markUndrawable(line, coverage).text);
-}
-
-function totalOf(marked: readonly { readonly undrawable: number }[]): number {
-  return marked.reduce((total, one) => total + one.undrawable, 0);
 }
