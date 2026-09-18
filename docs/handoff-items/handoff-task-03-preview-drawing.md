@@ -3,7 +3,7 @@
 **Date:** 2026-09-18
 **Branch:** feature/preview-drawing
 **Task file:** docs/tasks/03-preview-drawing.md
-**Round:** 1
+**Round:** 2 (round 1 tested by Jahmyr, changes requested)
 
 ## Assignment from Jared
 
@@ -568,3 +568,213 @@ matters, it is an edge-bundling decision for whoever owns the drawing next.
 **`astro check` has no incremental mode.** It re-checks everything every run,
 which is the 5.8s above. If the tree grows, the pre-commit line is the first
 thing that will hurt.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Changes requested.** The task is one defect away from done. The path the PRD
+is about — choose a JSON file, get a drawing back — works, and works well: I
+loaded `e2e/fixtures/order-intake.json` in a real browser and looked at the
+result, and all seven nodes are there in the silhouette their type implies, all
+six edges are routed to the right boxes with readable labels, and nothing is
+dropped. Six of the seven acceptance criteria are checked. CI is green on the
+pull request, including the browser install and the e2e step.
+
+What holds it back is one input the schema allows and the drawing gets wrong:
+an edge from a node to itself is drawn as a line and an arrowhead floating in
+empty space, touching neither end. That is a quietly wrong drawing rather than
+a visibly broken one, which is the outcome this project's own schema comments
+call the one thing the PRD rules out.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can preview the generated drawing in the browser: demonstrated end to end. | **pass** | Loaded `order-intake.json` through the real file input in Chromium against the built `dist/`, and looked at a full-page screenshot. Seven nodes, each in its own silhouette — hexagon for `user`, rounded rect for `service`, stadium for `queue`, cut corner for `external`, cylinder for `database`, grey dashed rect for the unrecognised `widget-factory`, which prints its own type under the label. Six arrows, each with its label on a white plate. Also drove the drop path: a `DataTransfer` drop gives "Loaded dropped.json: 1 node, 0 edges." |
+| Every node and edge in the JSON is visible in the drawing, with nothing dropped or mislabeled (5.2). | **fail** | Holds for every design I threw at it except one. A self-edge routes detached from its node — see Defect 1. Everything else verified: whitespace-only labels draw verbatim, nothing trimmed; two edges between the same pair both survive *and* dagre bows them apart, so both labels are readable (better than "Known gaps" claims); an unrecognised type still draws; HTML and unicode in labels render as text, not markup, so `<b>bold</b>` shows literally and there is no injection. |
+| The drawing appears within one second of choosing the file, for a design the size of the owner's use cases. | **pass** | A 25-node, 24-edge design: SVG visible **56ms** after the file was chosen. The 7-node fixture is well inside the spec's own 1000ms assertion. Even a deliberately oversized 150-node, 199-edge design draws in **502ms**. |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright test runs in CI. | **pass** | `bun run test` 118/118 in 8 files; `bun run test:e2e` 9/9. The e2e step ran on the pull request and passed on Linux — job log shows `Running 9 tests using 1 worker` then `9 passed (4.8s)`. The walk asserts through the page's own ids and `data-part` attributes, not hashed class names. One test inside it is weaker than its name — see Defect 1. |
+| Every earlier test still passes; CI is green. | **pass** | The 46 tests from Tasks 01–02 are inside the 118. CI green on both the push and the pull-request run (43s each): Typecheck `Result (25 files): 0 errors, 0 warnings, 0 hints`; Test `118 passed`; `bunx playwright install --with-deps chromium` completed; Test end to end `9 passed`. |
+| Best-effort accessibility: the SVG has a title, and label text has readable contrast against its shape. | **pass** | See "the contrast test, checked rather than trusted" below. Plus, in the browser: the live region exists in the static HTML before any text lands in it, the first Tab stop is `INPUT#design-file`, the SVG carries `role="img"` with `aria-labelledby` resolving to both `#drawing-title` ("Order intake") and `#drawing-description` (which names all seven nodes and all six edges in arrow direction), both ids unique. No horizontal overflow at an 800px viewport. No inline colour anywhere in the renderer. |
+| Any new environment variable is in `.env.example` with a placeholder. | **pass** | Grepped `import.meta.env`, `process.env`, `Bun.env`, `Deno.env` across the tree. The only hits are `process.env.CI` in `playwright.config.ts`, which GitHub Actions sets and this project does not own. `.env.example` correctly still says the project reads nothing. `.env*` is gitignored with `!.env.example`; the only tracked env file is the example. |
+
+### Command results
+
+`bun run test`: **118 passed, 8 files**, 380ms
+`bun run test:e2e`: **9 passed**, 5.0s including the build
+`bun run check`: **0 errors, 0 warnings, 0 hints** over 25 files
+`bun run build`: **pass**, 1 page in 446ms
+`bun run dev`: **pass** — HTTP 200, page serves the file input, no errors in the log
+`bunx prettier --check .`: clean
+Secret scan: **gitleaks, 14 commits scanned, no leaks found**
+CI: **green** — https://github.com/IBatsios/map-data-structures/actions/runs/35348368272
+
+### Defects for Amon
+
+**1. `src/lib/layout.ts:274` (and `src/lib/layout.test.ts:219-228`) — a self-edge
+is routed outside the node it loops on, so it draws as a line and an arrowhead
+in empty space.**
+
+An edge whose `from` and `to` are the same node is valid: the Task 02 schema's
+uniqueness and dangling-edge refinements both accept it, and `layout.test.ts`
+has a test for it, so it is in scope by your own reckoning.
+
+Expected: the route starts and ends on the node's own outline, so a reader can
+see it loops back on itself.
+
+Actual: the route lies entirely outside the node. For the design
+`a(service) -> b`, `a -> b`, `a -> a`, node `a` occupies x 28..160, y 28..90,
+and the self-edge's points come back as
+
+```
+[{328,28},{328,28},{262,59},{196,90},{196,90},{262,59},{262,59}]
+```
+
+— every one of them at x >= 196, at least 36px clear of the node's right edge.
+On screen it is a short diagonal stroke with an arrowhead pointing at nothing,
+plus a "loops to itself" plate beside it. It also inflates the canvas to 426px
+wide to hold a route that means nothing where it sits.
+
+Cause: dagre keeps self-loops out of its normal edge routing and parks a stub
+beside the node for the consumer to replace with its own loop path. `layout.ts`
+passes dagre's points through verbatim, as it correctly does for every ordinary
+edge, so the stub reaches the renderer as if it were a route.
+
+Why the suite did not catch it: `layout.test.ts:219-228`, "routes an edge that
+points a node at itself", asserts only
+`expect(layout.edges[0]?.points.length).toBeGreaterThanOrEqual(2)`. A detached
+stub satisfies that. The neighbouring test that checks an edge runs from source
+box to target box is the assertion this case needs and does not get. I left the
+assertion alone rather than strengthening it, because tightening it turns the
+suite red on a branch I am handing back — but it should be tightened as part of
+the fix, to assert a self-edge's first and last points touch the node's own box.
+
+Smallest honest fix is probably to detect `edge.from === edge.to` in the routing
+step and synthesise a loop against the node's own geometry, which the layout
+already has, rather than trusting dagre's points for that one case.
+
+**2. `src/lib/layout.ts:193` — edge labels never wrap, so one long edge label
+shrinks the whole drawing.**
+
+`nodeSize` at `layout.ts:171` wraps with
+`wrapText(node.label, MAX_TEXT_WIDTH, LABEL_FONT_SIZE)`, so a long node label
+makes a taller box. `edgeLabelSize` at `layout.ts:193` calls
+`estimateTextWidth(label, EDGE_LABEL_FONT_SIZE)` with no wrap at all, so an edge
+label's plate grows without bound.
+
+Expected: an edge label behaves like a node label — it wraps, and its plate
+grows taller.
+
+Actual: a 300-character edge label produces a plate roughly 2,250px wide. The
+canvas grows to match, and because the SVG scales to fit `max-width: 100%`, the
+entire drawing — every node, every other label — is shrunk to near-illegibility
+to make room for one label. Nothing is dropped, so this is not a criterion
+failure, and realistic edge labels are short. But it is an asymmetry with no
+reason behind it, and one line from being consistent.
+
+Worth correcting in the record too: "Known gaps" says "Labels wrap at a maximum
+text width so the box grows taller". That is true of node labels only.
+
+**3. `src/lib/describeDrawing.ts` — the spoken description says "a external",
+"a user", "a unknown".**
+
+The accessible description renders as "Payments provider, a external" and
+"Ledger feed, a widget-factory". Cosmetic, and only a screen-reader user hears
+it, but it is the one part of the drawing that is read aloud. It needs an
+article that agrees with the following word; `describeDrawing.test.ts` pins the
+current phrasing, so the test moves with it.
+
+### What I checked specifically because you asked
+
+**The contrast test measures what it claims — verified by mutation, not by
+reading.** I changed the `unknown` band's `--shape-text` back to a light grey
+(`#8b93a3`) and re-ran: `drawing.module.test.ts` failed with
+`expected 2.802703425369002 to be greater than or equal to 4.5`, naming the
+band. Reverted. So the test genuinely reads the stylesheet and genuinely
+measures. I also recomputed every band independently with my own implementation
+of the WCAG formula and the numbers agree: labels 11.1:1 to 14.1:1, type lines
+4.54:1 to 6.29:1, edge label on its plate 12.6:1 — all clear AA. The wiring is
+honest too: the test reads `--shape-fill`, `--shape-text` and `--shape-stroke`,
+and those are the variables `[data-part='shape']`, `[data-part='label']` and
+`[data-part='type']` actually consume, on elements that inherit them from the
+`data-kind` group. One note, not a defect: the `database` type line is
+**4.54:1**, four hundredths above the threshold. Any future darkening of that
+fill fails the test, which is the test working.
+
+**D30 holds. Overturning the `astro preview` recommendation was right, and I
+reproduced the evidence.** On this Astro (7.3.3), `bunx astro preview` with no
+flags at all:
+
+- returned **exit 0 after 3,533ms**;
+- printed `Preview server running at http://localhost:4321 (pid 20320)`;
+- `astro preview status` then reported `(pid 20320, uptime 8s, background)`;
+- and the orphan was really serving — `curl` got **HTTP 200** from it after the
+  command had already exited. It took `astro preview stop` to kill it.
+
+Playwright's `webServer` watches the process it spawned, so a command that exits
+in 3.5s is exactly the "Process from config.webServer exited early" you hit, and
+the surviving listener on 4321 is exactly what collides with the next run.
+`--background` being documented as opt-in is what made the original
+recommendation reasonable; the flag simply does not describe the behaviour. I
+confirmed `bun run dev` detaches the same way (pid 11652, needed
+`astro dev stop`). `e2e/staticServer.ts` is the right answer, it still serves
+`dist/` so it still tests what Netlify will serve, and it is not a toy: the
+`resolveWithin` containment check decodes `%2e%2e%2f` before resolving and
+refuses anything that lands outside `dist/`.
+
+**CI, the thing most likely to go red on GitHub rather than locally, is green.**
+Both runs passed in 43s. The step you flagged,
+`bunx playwright install --with-deps chromium`, completed on `ubuntu-latest`
+under `oven-sh/setup-bun@v2` — it switched to root, installed the apt
+dependencies and fetched the browser — and the e2e step then ran the full walk
+headlessly: `Running 9 tests using 1 worker` then `9 passed (4.8s)`. The
+four-step order — typecheck, unit, browser install, e2e — works as written.
+
+**The carve-ins are done, and done narrowly.** Carve-in 1: the doc comment at
+`loadDesign.ts` now says the message and the `cause` are the contract and a
+position is a bonus some engines give, naming JavaScriptCore explicitly; the
+assertion in `loadDesign.test.ts` is guarded by
+`if (/position \d+/.test(original.message))`; D32 is its own row and D22 is
+untouched. No fallback message was built — correctly left to Task 04. Carve-in
+2: `forgetChosenFile` clears the input after every read in a `finally`, so it
+also clears after a failure, and the Playwright walk loads a file, then a
+second, then the first again and asserts both the title and the status line.
+
+### Adversarial pass
+
+Every one of these went through the real file input in Chromium, with
+`pageerror` and console errors collected. **No uncaught errors in any case.**
+
+| Input | Result |
+|---|---|
+| Empty file, 0 bytes | No drawing, status "That file could not be drawn: Unexpected end of JSON input" |
+| Truncated JSON | Same, drawing cleared |
+| `null`, a bare array, or an object with no `nodes` | "That file could not be drawn: That JSON file is not a design." |
+| Valid design with no nodes and no edges | Draws an empty SVG, status "0 nodes, 0 edges" — matches the schema's stated intent |
+| Whitespace-only labels and types | Drawn verbatim, nothing trimmed or laundered |
+| Duplicate edges between one pair, plus a self-edge | Both parallel edges drawn and separated, both labels readable; the self-edge is Defect 1 |
+| A 34-character unbroken word as a node label | Wrapped across 6 lines, nothing truncated |
+| A 300-character edge label | Defect 2 |
+| 150 nodes and 199 edges | Draws in 502ms, nothing dropped; scaled down by `max-height: 75vh` to the point of illegibility, with no zoom or scroll affordance. Beyond the sizes intake 11.1 describes, so not a defect — but a product question for whoever owns the drawing next |
+| HTML and unicode in labels | Rendered as text, never as markup. No injection path |
+
+### Fixed in place
+
+None. All three defects change behaviour, so they are Amon's. I did not tighten
+the weak self-edge assertion either, for the reason given in Defect 1.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/5 — draft, base `main`, CI
+green. Left as a draft for Sam; I did not mark it ready and did not merge.
+
+### Notes for Jared, not defects
+
+Everything routed out of scope, I agree is out of scope. Confirmed by looking:
+the page outside the drawing really does render in the browser's default serif
+next to a sans-serif drawing, and it reads as two documents. One correction in
+Amon's favour — two edges between the same node pair do **not** draw on top of
+each other; dagre separates them and both labels are readable.

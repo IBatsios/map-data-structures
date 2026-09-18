@@ -19,13 +19,13 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can preview the generated drawing in the browser: demonstrated end to end.
+- [x] As a user, I can preview the generated drawing in the browser: demonstrated end to end.
 - [ ] Every node and edge in the JSON is visible in the drawing, with nothing dropped or mislabeled (5.2).
-- [ ] The drawing appears within one second of choosing the file, for a design the size of the owner's use cases.
-- [ ] Tests cover the behavior, as a user would observe it, and pass; the Playwright test runs in CI.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Best-effort accessibility: the SVG has a title, and label text has readable contrast against its shape.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] The drawing appears within one second of choosing the file, for a design the size of the owner's use cases.
+- [x] Tests cover the behavior, as a user would observe it, and pass; the Playwright test runs in CI.
+- [x] Every earlier test still passes; CI is green.
+- [x] Best-effort accessibility: the SVG has a title, and label text has readable contrast against its shape.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 
