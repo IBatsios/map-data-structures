@@ -24,7 +24,12 @@
 
 import { describeDrawing } from './describeDrawing';
 import type { DesignLayout, LayoutBox, LayoutEdge, LayoutNode } from './layout';
-import { LABEL_FONT_SIZE, LINE_HEIGHT, TYPE_FONT_SIZE } from './layout';
+import {
+  EDGE_LABEL_LINE_HEIGHT,
+  LABEL_FONT_SIZE,
+  LINE_HEIGHT,
+  TYPE_FONT_SIZE,
+} from './layout';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -306,20 +311,35 @@ function renderEdge(edge: LayoutEdge, doc: Document): SVGElement {
     'data-part': 'plate',
   });
 
-  const label = withText(
-    createElement(doc, 'text', {
-      x: String(edge.labelBox.x + edge.labelBox.width / 2),
-      y: String(edge.labelBox.y + edge.labelBox.height / 2),
-      'text-anchor': 'middle',
-      'dominant-baseline': 'middle',
-      'data-part': 'edge-label',
-    }),
-    edge.label,
-  );
-
-  group.append(line, plate, label);
+  group.append(line, plate, ...edgeLabelText(edge, doc));
 
   return group;
+}
+
+/**
+ * An edge's label, on the lines the layout wrapped it onto.
+ *
+ * One line is the ordinary case and reads as it always did; more than one is
+ * what keeps a long label inside a plate the drawing can afford, rather than
+ * one wide enough to shrink every other label to fit it.
+ */
+function edgeLabelText(edge: LayoutEdge, doc: Document): readonly SVGElement[] {
+  const centreX = edge.labelBox.x + edge.labelBox.width / 2;
+  const blockHeight = edge.labelLines.length * EDGE_LABEL_LINE_HEIGHT;
+  const blockTop = edge.labelBox.y + (edge.labelBox.height - blockHeight) / 2;
+
+  return edge.labelLines.map((line, index) =>
+    withText(
+      createElement(doc, 'text', {
+        x: String(centreX),
+        y: String(blockTop + EDGE_LABEL_LINE_HEIGHT * (index + 0.5)),
+        'text-anchor': 'middle',
+        'dominant-baseline': 'middle',
+        'data-part': 'edge-label',
+      }),
+      line,
+    ),
+  );
 }
 
 function createElement(

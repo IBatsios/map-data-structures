@@ -47,6 +47,9 @@ export const EDGE_LABEL_FONT_SIZE = 12;
 /** Distance between the baselines of two wrapped label lines, in pixels. */
 export const LINE_HEIGHT = 18;
 
+/** The same, for the smaller text on an edge's label plate, in pixels. */
+export const EDGE_LABEL_LINE_HEIGHT = 16;
+
 /** Vertical room the `type` line occupies under the label, in pixels. */
 const TYPE_LINE_HEIGHT = 16;
 
@@ -78,7 +81,7 @@ export const SELF_LOOP_EXTENT = 34;
 const SELF_LOOP_LABEL_GAP = 8;
 
 /** Padding inside an edge label's plate, in pixels. */
-const EDGE_LABEL_PADDING = { x: 7, y: 4 } as const;
+export const EDGE_LABEL_PADDING = { x: 7, y: 4 } as const;
 
 /**
  * Dagre's own graph, typed to the labels this module actually puts on it.
@@ -117,6 +120,8 @@ export interface LayoutEdge {
   readonly to: string;
   /** The label exactly as the file gave it. */
   readonly label: string;
+  /** The label split into the lines its plate is drawn with. */
+  readonly labelLines: readonly string[];
   /** The route, in order, from the source's border to the target's. */
   readonly points: readonly LayoutPoint[];
   /** Where the label's plate sits, sized to hold the label. */
@@ -201,13 +206,29 @@ function widestLine(lines: readonly string[], fontSize: number): number {
   return Math.max(0, ...lines.map((line) => estimateTextWidth(line, fontSize)));
 }
 
-/** The plate an edge label is drawn on, sized to hold the label. */
-function edgeLabelSize(label: string): { width: number; height: number } {
+/** An edge label's plate: the lines it is drawn on, and the room they need. */
+interface EdgeLabelPlate {
+  readonly lines: readonly string[];
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The plate an edge label is drawn on, sized to hold the label.
+ *
+ * It wraps at the same text limit a node label does, and for the same reason:
+ * without one, a single long label makes a plate wide enough that the SVG
+ * scales the whole drawing down to fit it, and every other label with it.
+ * Nothing is ever shortened — the plate grows taller, exactly as a node's box
+ * does (D26).
+ */
+function edgeLabelPlate(label: string): EdgeLabelPlate {
+  const lines = wrapText(label, MAX_TEXT_WIDTH, EDGE_LABEL_FONT_SIZE);
+
   return {
-    width:
-      Math.ceil(estimateTextWidth(label, EDGE_LABEL_FONT_SIZE)) +
-      EDGE_LABEL_PADDING.x * 2,
-    height: EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PADDING.y * 2,
+    lines,
+    width: Math.ceil(widestLine(lines, EDGE_LABEL_FONT_SIZE)) + EDGE_LABEL_PADDING.x * 2,
+    height: lines.length * EDGE_LABEL_LINE_HEIGHT + EDGE_LABEL_PADDING.y * 2,
   };
 }
 
@@ -236,10 +257,17 @@ function buildGraph(sized: readonly SizedNode[], design: Design): LayoutGraph {
   }
 
   for (const [index, edge] of design.edges.entries()) {
-    graph.setEdge(edge.from, edge.to, edgeLabelSize(edge.label), String(index));
+    graph.setEdge(edge.from, edge.to, labelPlateSize(edge.label), String(index));
   }
 
   return graph;
+}
+
+/** The size dagre needs to reserve room for a label, without the lines. */
+function labelPlateSize(label: string): { width: number; height: number } {
+  const { width, height } = edgeLabelPlate(label);
+
+  return { width, height };
 }
 
 /**
@@ -287,11 +315,11 @@ function readRoutedEdges(
   const boxes = new Map(placed.map((node) => [node.id, node] as const));
 
   return design.edges.map((edge, index) => {
-    const size = edgeLabelSize(edge.label);
+    const plate = edgeLabelPlate(edge.label);
     const loopsOn = edge.from === edge.to ? boxes.get(edge.from) : undefined;
 
     if (loopsOn) {
-      return selfLoop(edge, loopsOn, size);
+      return selfLoop(edge, loopsOn, plate);
     }
 
     const routed = graph.edge({ v: edge.from, w: edge.to, name: String(index) });
@@ -302,11 +330,13 @@ function readRoutedEdges(
       from: edge.from,
       to: edge.to,
       label: edge.label,
+      labelLines: plate.lines,
       points: points.length >= 2 ? points.map(toPoint) : straightLine(edge, graph),
       labelBox: {
-        x: centre.x - size.width / 2,
-        y: centre.y - size.height / 2,
-        ...size,
+        x: centre.x - plate.width / 2,
+        y: centre.y - plate.height / 2,
+        width: plate.width,
+        height: plate.height,
       },
     };
   });
@@ -323,11 +353,7 @@ function readRoutedEdges(
  * lets a reader see which box the arrow loops on. The label sits clear of the
  * loop and level with the node, where it cannot cover either.
  */
-function selfLoop(
-  edge: DesignEdge,
-  node: LayoutBox,
-  size: { readonly width: number; readonly height: number },
-): LayoutEdge {
+function selfLoop(edge: DesignEdge, node: LayoutBox, plate: EdgeLabelPlate): LayoutEdge {
   const border = node.x + node.width;
   const reach = border + SELF_LOOP_EXTENT;
   const upper = node.y + node.height / 3;
@@ -337,6 +363,7 @@ function selfLoop(
     from: edge.from,
     to: edge.to,
     label: edge.label,
+    labelLines: plate.lines,
     points: [
       { x: border, y: upper },
       { x: reach, y: upper },
@@ -345,8 +372,9 @@ function selfLoop(
     ],
     labelBox: {
       x: reach + SELF_LOOP_LABEL_GAP,
-      y: node.y + node.height / 2 - size.height / 2,
-      ...size,
+      y: node.y + node.height / 2 - plate.height / 2,
+      width: plate.width,
+      height: plate.height,
     },
   };
 }

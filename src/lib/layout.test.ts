@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { Design } from './design.types';
 import {
   DRAWING_MARGIN,
+  EDGE_LABEL_PADDING,
   MAX_TEXT_WIDTH,
   MIN_NODE_WIDTH,
   SELF_LOOP_EXTENT,
   layoutDesign,
 } from './layout';
-import type { LayoutBox, LayoutNode } from './layout';
+import type { LayoutBox, LayoutEdge, LayoutNode } from './layout';
 import { DEFAULT_SHAPE } from './shapes';
 
 /** The README's own example: the smallest design that has a flow in it. */
@@ -38,6 +39,25 @@ function overlaps(a: LayoutBox, b: LayoutBox): boolean {
     a.y < b.y + b.height &&
     b.y < a.y + a.height
   );
+}
+
+/** The one edge of a two-node design, so a label can be varied on its own. */
+function plateFor(label: string): LayoutEdge {
+  const layout = layoutDesign({
+    title: 'Edge labels',
+    nodes: [
+      { id: 'a', label: 'Alpha', type: 'service' },
+      { id: 'b', label: 'Beta', type: 'service' },
+    ],
+    edges: [{ from: 'a', to: 'b', label }],
+  });
+  const edge = layout.edges[0];
+
+  if (!edge) {
+    throw new Error('The layout routed no edge.');
+  }
+
+  return edge;
 }
 
 describe('layoutDesign', () => {
@@ -296,6 +316,34 @@ describe('layoutDesign', () => {
 
     expect(route?.labelBox.width).toBeGreaterThan(0);
     expect(route?.labelBox.height).toBeGreaterThan(0);
+  });
+
+  it('keeps a short edge label on one line', () => {
+    const layout = layoutDesign(orderIntake);
+
+    expect(layout.edges[0]?.labelLines).toEqual(['publishes order']);
+  });
+
+  it('wraps a long edge label, so its plate grows taller and not endlessly wider', () => {
+    // A node label wraps and its box grows taller. An edge label did not, so
+    // one long label made a plate wide enough to shrink the whole drawing to
+    // fit it. The two behave the same way now.
+    const short = plateFor('asks');
+    const long = plateFor(
+      'drains the outbox and hands every entry to the ledger in order '.repeat(5),
+    );
+
+    expect(long.labelLines.length).toBeGreaterThan(1);
+    expect(long.labelBox.height).toBeGreaterThan(short.labelBox.height);
+    expect(long.labelBox.width).toBeLessThanOrEqual(
+      MAX_TEXT_WIDTH + EDGE_LABEL_PADDING.x * 2,
+    );
+  });
+
+  it('loses no word from an edge label it had to wrap', () => {
+    const label = 'drains the outbox and hands every entry to the ledger in order';
+
+    expect(plateFor(label).labelLines.join(' ')).toBe(label);
   });
 
   it('starts the drawing exactly one margin from the top-left corner', () => {
