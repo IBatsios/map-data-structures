@@ -72,4 +72,44 @@ describe('describeDrawing', () => {
     expect(description).toContain('2 nodes');
     expect(description).toContain('Beta, a service');
   });
+
+  it('agrees the article with the type it is about to say', () => {
+    // The description is the one part of the drawing that is read aloud, and
+    // "a external" is the kind of thing that stops a listener mid-sentence.
+    const description = describeDrawing(
+      layoutDesign({
+        title: 'Articles',
+        nodes: [
+          { id: 'p', label: 'Payments provider', type: 'external' },
+          { id: 'c', label: 'Customer', type: 'user' },
+          { id: 'l', label: 'Ledger feed', type: 'unknown' },
+          { id: 's', label: 'Public API', type: 'service' },
+          { id: 'a', label: 'Warehouse staff', type: 'actor' },
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(description).toContain('Payments provider, an external');
+    expect(description).toContain('Ledger feed, an unknown');
+    expect(description).toContain('Warehouse staff, an actor');
+
+    // A vowel sound, not a vowel letter: "user" opens with a "y" sound.
+    expect(description).toContain('Customer, a user');
+    expect(description).toContain('Public API, a service');
+  });
+
+  it('still says something for a type that is nothing but spaces', () => {
+    const description = describeDrawing(
+      layoutDesign({
+        title: 'Blank types',
+        nodes: [{ id: 'a', label: 'Alpha', type: '  ' }],
+        edges: [],
+      }),
+    );
+
+    // Drawn as the file wrote it, spaces and all — the description launders no
+    // more than the drawing does.
+    expect(description).toContain('Alpha, a   ');
+  });
 });
