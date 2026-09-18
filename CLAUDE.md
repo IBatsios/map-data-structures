@@ -17,7 +17,7 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 to 07 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 08 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
 edge naming an unknown node is refused, not silently drawn wrong, and no
@@ -47,18 +47,35 @@ Regular, SIL OFL 1.1, licence at `src/lib/fonts/Roboto-LICENSE.txt`) so the
 file opens the same everywhere. A character the font cannot draw, including a
 control character, is replaced one-for-one with a visible `■` in both the
 drawing and the tables, never dropped silently, and a lossy export says so
-after the fact. All three buttons live in one `role="group"` export row and
-disable together the moment a file fails. `src/lib/download.ts`
-(`downloadBlob`, `fileNameFor`) is the shared piece Task 08 reuses for Word,
-which is still to come. See `docs/RUNBOOK.md` for the frontier.
+after the fact.
 
-**Known limit carried from Task 07:** the PDF's drawing is scaled to fit one
-page, and its on-page label size degrades much earlier than expected —
-readable at 7 nodes (10.2pt), unreadable without a magnifier at 15 nodes
-(4.0pt, the scale the owner's designs actually run at). The tables still
-carry every label at full size regardless. Landscape pages or tiling the
-drawing across sheets is the fix; it is not built yet and wants its own
-task. Detail in `docs/handoff-items/handoff-task-07-export-pdf.md`.
+**Export Word** downloads `<design>.docx`, built with `docx` 9.7.1 (MIT): the
+title, the drawing as a PNG painted through a canvas at three times the size it
+is placed at, and the same two tables as **real Word tables**, so a
+non-developer can open the file and type in a cell. US Letter portrait with an
+inch of margin, every column width in DXA, a title, a description and a
+language as metadata, and alt text on the picture. It embeds no font, so
+nothing is marked for a font's sake — an arrow or a CJK label is carried as
+itself and drawn by the reader's own machine. What _is_ marked, with the same
+`■`, is a control character XML 1.0 forbids, because a `.docx` carrying one is
+a file Word and LibreOffice refuse to open; a tab is kept and a line break
+becomes a real Word break.
+
+All four buttons live in one `role="group"` export row, named on the page and
+disabled together the moment a file fails. `src/lib/download.ts`
+(`downloadBlob`, `fileNameFor`) is unchanged for the fourth format running.
+See `docs/RUNBOOK.md` for the frontier.
+
+**Known limit, now in two formats:** the drawing is scaled to fit one page and
+its on-page label size degrades much earlier than expected — readable at 7
+nodes (PDF 10.2pt, Word 10.5pt), unreadable without a magnifier at 15 nodes
+(PDF 4.0pt, Word 4.25pt, the scale the owner's designs actually run at). Task
+08 measured its own and the numbers match the PDF's, so this is one problem in
+two places rather than two problems. The tables still carry every label at full
+size regardless. Landscape pages or tiling the drawing across sheets is the
+fix; it is not built yet and has a `fix/…` cycle of its own scheduled before
+Task 09. Detail in `docs/handoff-items/handoff-task-07-export-pdf.md` and
+`docs/handoff-items/handoff-task-08-export-word.md`.
 
 ## Run and test
 

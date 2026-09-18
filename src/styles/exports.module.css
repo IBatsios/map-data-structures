@@ -1,29 +1,70 @@
 /*
- * The export controls: the row of buttons that turn the drawing on screen into
- * a file. Markdown is the first of four (Tasks 06 to 08 add HTML, PDF and
- * Word), so this is a row from the start rather than one button's styling.
+ * The export controls: the block that turns the drawing on screen into a file.
  *
- * It declares no colour of its own, on purpose. The page around it is still
+ * Four formats now, which is what D59 reserved this task for. Three buttons
+ * read as three buttons; four of different widths read as a pile, so the block
+ * has a visible name above them and every button shares one minimum width. The
+ * name is the change worth calling out: the row has always been a `role="group"`
+ * named "Export the design", but only a screen reader ever heard the name. It
+ * is a heading for everybody now, and `aria-labelledby` points at the same
+ * words rather than a second copy of them hidden in an attribute.
+ *
+ * It still declares no colour of its own, on purpose. The page around it is
  * unstyled — Task 09 adds the second page and makes that decision once, for
  * both — so the button borrows the page's own text colour through
  * `currentColor` and its type through `font: inherit`. Whatever contrast the
  * page has, the button has; there is no new colour here for a test to measure
- * or for Task 09 to have to undo.
+ * or for Task 09 to have to undo. The two tints below are alpha over whatever
+ * is behind them rather than a hue of their own, for the same reason.
  *
  * What it does spend room on is the parts a keyboard and a mouse notice: a
- * focus ring that is visible against any background, a hover that answers the
- * pointer, and a disabled state that looks unavailable rather than broken —
- * which is what the button is before any design has been drawn.
+ * focus ring visible against any background, a hover that answers the pointer,
+ * a press that feels pressed, and a disabled state that looks unavailable
+ * rather than broken — which is what every button is before a design is drawn.
  */
 
+.exports {
+  margin: 1.25rem 0;
+}
+
+/*
+ * The block's name, said once for everyone. Sized and spaced as a label rather
+ * than a heading, because the page's own headings belong to Task 09 and this
+ * must not start competing with them.
+ */
+.label {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/*
+ * `stretch` rather than the default, so a button that wraps onto a second line
+ * is the same height as the one beside it. The gap is tighter than the old
+ * half-rem: four controls that do one job in four formats should read as one
+ * set, and space between them is what says they are not.
+ */
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1rem 0;
+  align-items: stretch;
+  gap: 0.375rem;
 }
 
+/*
+ * One minimum width for all four. Without it the row is 15 characters, 11, 10
+ * and 11 wide and reads as an accident; with it the four are a set whose
+ * longest label still fits, and the row keeps the same shape whichever design
+ * is loaded. The hit area clears 40px in both directions at the page's default
+ * type size.
+ */
 .action {
+  flex: 0 1 auto;
+  min-width: 9.5rem;
+  min-height: 2.5rem;
   padding: 0.55rem 1rem;
   border: 1px solid currentColor;
   border-radius: 6px;
@@ -32,10 +73,19 @@
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
+  transition-property: background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
 }
 
 .action:hover:not(:disabled) {
   background-color: rgb(0 0 0 / 6%);
+}
+
+/* Pressed, and it should feel it: one pixel down and a shade further in. */
+.action:active:not(:disabled) {
+  background-color: rgb(0 0 0 / 12%);
+  transform: translateY(1px);
 }
 
 /*
@@ -57,4 +107,15 @@
 .action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* The press is a nicety, not information; someone who asked for less gets it. */
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    transition-duration: 0ms;
+  }
+
+  .action:active:not(:disabled) {
+    transform: none;
+  }
 }

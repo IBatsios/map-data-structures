@@ -473,9 +473,9 @@ test.describe('Exporting the design as PDF', () => {
     await upload.choose('order-intake.json');
     await expect(upload.exportPdf).toBeEnabled();
 
-    // Three buttons that do one job in three formats, named as the set they are.
+    // Four buttons that do one job in four formats, named as the set they are.
     await expect(upload.exports).toBeVisible();
-    await expect(upload.exports.getByRole('button')).toHaveCount(3);
+    await expect(upload.exports.getByRole('button')).toHaveCount(4);
 
     await upload.exportHtml.focus();
     await page.keyboard.press('Tab');

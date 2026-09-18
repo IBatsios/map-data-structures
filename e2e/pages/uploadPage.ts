@@ -47,6 +47,7 @@ export class UploadPage {
   readonly exportMarkdown: Locator;
   readonly exportHtml: Locator;
   readonly exportPdf: Locator;
+  readonly exportWord: Locator;
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
@@ -56,11 +57,14 @@ export class UploadPage {
     this.drawing = page.locator('#drawing');
     this.svg = page.locator('#drawing svg');
     // By its accessible name, because the group's name is the thing under test:
-    // two buttons that do the same job in different formats read as a set.
+    // four buttons that do the same job in four formats read as a set. Since
+    // Task 08 the name is a heading on the page rather than an `aria-label`,
+    // so this finds the same group by the same words a sighted reader sees.
     this.exports = page.getByRole('group', { name: 'Export the design' });
     this.exportMarkdown = page.locator('#export-markdown');
     this.exportHtml = page.locator('#export-html');
     this.exportPdf = page.locator('#export-pdf');
+    this.exportWord = page.locator('#export-word');
   }
 
   async goto(): Promise<void> {
@@ -181,6 +185,19 @@ export class UploadPage {
    */
   async downloadPdf(saveAs?: string): Promise<SavedFile> {
     return this.exportUsing(this.exportPdf, saveAs);
+  }
+
+  /**
+   * Clicks Export Word and waits for the file the browser saves.
+   *
+   * It comes back as a name and a path and not as text, because a `.docx` is a
+   * zip of XML: reading it is `e2e/docxText.ts`'s job.
+   *
+   * @param saveAs - where to put it, for a test that then opens it from there;
+   *   left out, it stays where Playwright put it
+   */
+  async downloadWord(saveAs?: string): Promise<SavedFile> {
+    return this.exportUsing(this.exportWord, saveAs);
   }
 
   /**

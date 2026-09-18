@@ -13,9 +13,15 @@
  * 1. It is a CSS Module, so its class names are hashed at build time and the
  *    name the export would have to write is not knowable from here.
  * 2. Every way of pulling its text in at build time — `?raw`, `?inline` — is a
- *    Vite feature this project's Vitest run does not carry: both come back
- *    empty under `css: false`, so the test would pass on an empty stylesheet
- *    and the built file would be the only place the truth lived.
+ *    Vite feature this project's Vitest run does not carry, though not in the
+ *    same way (D61). `?inline` comes back as an empty string under
+ *    `css: false`; `?raw` comes back as the CSS-Modules proxy stub, where
+ *    `typeof` reads `object`, `String()` throws `Cannot convert a Symbol value
+ *    to a string`, and `.length` reads back an invented class name
+ *    (`_length_f9673f`). Either way the built file would be the only place the
+ *    truth lived — and the `?raw` half makes the case stronger rather than
+ *    weaker, because a test written against it would have thrown rather than
+ *    quietly passed on nothing.
  * 3. An ordinary `import` of it is rewritten by Astro to a URL, which is
  *    exactly the fetch the criterion forbids.
  *

@@ -24,11 +24,10 @@
  * does not use `getComputedStyle`: it collects `<style>` elements found inside
  * the SVG itself and matches selectors by hand, so the app's CSS Module never
  * reaches it, and `fill: var(--shape-fill)` would reach it unresolved even if
- * it did. So the element is put into the page, inside a holder carrying the
- * same class the preview's drawing carries, the browser is asked what each
- * piece actually resolved to, and those answers are written onto the elements
- * as inline styles — which is the first thing svg2pdf reads. The holder is
- * removed before this function returns.
+ * it did. `openDrawing` is that step, and it lives in its own module because
+ * the Word export needs it identically — an SVG loaded into an `Image` has no
+ * host page and so no stylesheet either (D64). The holder it opens is removed
+ * before this function returns.
  *
  * That is why this export needs no second copy of the drawing's palette: the
  * colours in the PDF are the browser's own answer for the preview's own
@@ -50,13 +49,12 @@
  * for the page to say out loud.
  */
 
-import drawingStyles from '../styles/drawing.module.css';
 import { drawableLayout } from './drawableText';
 import { readFontCoverage } from './fontCoverage';
 import type { DesignLayout } from './layout';
+import { openDrawing } from './openDrawing';
 import type { PdfDocumentPlan, PdfItem } from './pdfPlan';
 import { PAGE_HEIGHT, PAGE_WIDTH, pdfPlan } from './pdfPlan';
-import { renderDrawing } from './renderDrawing';
 
 /** What a `.pdf` is, for the browser that is about to save one. */
 export const PDF_MEDIA_TYPE = 'application/pdf';
@@ -101,42 +99,6 @@ const RULE = '#9aa3b5';
 
 /** How thick a rule is drawn, in points. */
 const RULE_WIDTH = 0.5;
-
-/**
- * The style that keeps the drawing off the screen while its styles are read.
- *
- * It has to be in the page — a detached element has no resolved styles — but it
- * must not be seen and must not move anything. `position: fixed` takes it out
- * of the flow, the negative offset puts it outside the viewport without adding
- * anything to scroll, and it is only there for the moment it takes to convert.
- */
-const OFFSCREEN = 'position:fixed;left:-10000px;top:0;pointer-events:none;';
-
-/**
- * What each piece of the drawing is asked about before it is converted.
- *
- * Everything the stylesheet says and svg2pdf would otherwise miss. Geometry is
- * not here because `renderDrawing` writes it as attributes, which svg2pdf reads
- * for itself, and the font is not here because it is overridden rather than
- * copied — see `resolveStyles`.
- */
-const RESOLVED_PROPERTIES: readonly string[] = [
-  'fill',
-  'fill-opacity',
-  'stroke',
-  'stroke-opacity',
-  'stroke-width',
-  'stroke-dasharray',
-  'stroke-linecap',
-  'stroke-linejoin',
-  'font-size',
-];
-
-/** The drawing, in the page, with the way to take it out again. */
-interface OpenDrawing {
-  readonly svg: SVGSVGElement;
-  readonly close: () => void;
-}
 
 /**
  * Renders a laid-out design as a PDF file.
@@ -189,7 +151,17 @@ export async function toPdf(layout: DesignLayout, doc: Document): Promise<PdfExp
     return pdf.getTextWidth(text);
   });
   const drawing =
-    drawable.layout.nodes.length === 0 ? null : openDrawing(drawable.layout, doc);
+    drawable.layout.nodes.length === 0
+      ? null
+      : openDrawing(drawable.layout, doc, {
+          // The preview draws with whatever face the reader's system offers
+          // and a PDF can only draw with one it carries, so every piece of
+          // text is pointed at the embedded one, weight and all —
+          // `openDrawing` says why the weight matters.
+          'font-family': FONT_FAMILY,
+          'font-weight': 'normal',
+          'font-style': 'normal',
+        });
 
   try {
     await writePages(pdf, plan, drawing?.svg ?? null, svg2pdf);
@@ -261,74 +233,6 @@ async function writeItem(
     width: item.width,
     height: item.height,
   });
-}
-
-/**
- * Renders the drawing and puts it where the browser will resolve its styles.
- *
- * The holder carries the preview's own class, so the preview's own stylesheet
- * applies to it and nothing here has to know a single colour. It is hidden from
- * assistive technology while it is there, and the caller always takes it out
- * again.
- */
-function openDrawing(layout: DesignLayout, doc: Document): OpenDrawing {
-  const view = doc.defaultView;
-
-  if (view === null) {
-    throw new Error('The PDF export needs a document with a window to read styles from.');
-  }
-
-  const holder = doc.createElement('div');
-  const svg = renderDrawing(layout, doc);
-
-  holder.className = drawingStyles.drawing ?? '';
-  holder.setAttribute('aria-hidden', 'true');
-  holder.setAttribute('style', OFFSCREEN);
-  holder.append(svg);
-  doc.body.append(holder);
-
-  resolveStyles(svg, view);
-
-  return { svg, close: () => holder.remove() };
-}
-
-/**
- * Writes what the stylesheet resolved to onto the elements themselves.
- *
- * svg2pdf reads an element's own `style` before anything else, so this is what
- * carries the preview's colours into the file. It changes only the elements
- * this export just built and is about to throw away; nothing on the page is
- * touched.
- *
- * **The font is overridden rather than copied, weight and all.** The preview
- * draws with whatever face the reader's system offers, and a PDF can only draw
- * with one it carries, so every piece of text is pointed at the embedded one.
- * The weight has to go with it: svg2pdf turns any weight that is not 400 or 700
- * into a style name of its own — a label at `font-weight: 550` is asked for as
- * `550normal` — and jsPDF answers a style it has never heard of by quietly
- * falling back to Times, which is Latin-1. That is how a Greek label came out
- * of an early build of this export as `±Á±³³µ»¯µÂ` while the same label was
- * correct in the table underneath it. Normalising the weight here removes the
- * whole class of that failure rather than the one spelling of it; the cost is
- * that the label's half-step of extra weight is not in the PDF, which is a
- * fair trade for a label that is the text it says.
- */
-function resolveStyles(svg: SVGSVGElement, view: Window & typeof globalThis): void {
-  for (const element of [svg, ...svg.querySelectorAll('*')]) {
-    if (!(element instanceof view.SVGElement)) {
-      continue;
-    }
-
-    const resolved = view.getComputedStyle(element);
-
-    for (const property of RESOLVED_PROPERTIES) {
-      element.style.setProperty(property, resolved.getPropertyValue(property));
-    }
-
-    element.style.setProperty('font-family', FONT_FAMILY);
-    element.style.setProperty('font-weight', 'normal');
-    element.style.setProperty('font-style', 'normal');
-  }
 }
 
 /** Just enough of jsPDF to write this document, so nothing here says `any`. */
