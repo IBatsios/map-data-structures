@@ -334,7 +334,25 @@ function engineDetail(engineMessage: string): string {
  * are never echoed at all.
  */
 function holdsRawBytes(fileText: string): boolean {
-  return /[ --]/u.test(fileText);
+  return [...fileText].some(isForbiddenControlCharacter);
+}
+
+/** The highest code point that is a C0 control character. */
+const LAST_CONTROL_CODE = 0x1f;
+
+/** Tab, line feed and carriage return: the three a text file may hold. */
+const ALLOWED_CONTROL_CODES: ReadonlySet<number> = new Set([0x09, 0x0a, 0x0d]);
+
+/**
+ * Whether one character is a control character a text file has no business
+ * holding. Written as code points rather than as a range in a regular
+ * expression, because a range of control characters in a source file is a row
+ * of invisible bytes nobody can review.
+ */
+function isForbiddenControlCharacter(character: string): boolean {
+  const code = character.codePointAt(0) ?? 0;
+
+  return code <= LAST_CONTROL_CODE && !ALLOWED_CONTROL_CODES.has(code);
 }
 
 /**
