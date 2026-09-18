@@ -1,0 +1,302 @@
+import { describe, expect, it } from 'vitest';
+
+import type { Design } from './design.types';
+import { DRAWING_MARGIN, MAX_TEXT_WIDTH, MIN_NODE_WIDTH, layoutDesign } from './layout';
+import type { LayoutBox, LayoutNode } from './layout';
+import { DEFAULT_SHAPE } from './shapes';
+
+/** The README's own example: the smallest design that has a flow in it. */
+const orderIntake: Design = {
+  title: 'Order intake',
+  nodes: [
+    { id: 'api', label: 'Public API', type: 'service' },
+    { id: 'queue', label: 'Order queue', type: 'queue' },
+  ],
+  edges: [{ from: 'api', to: 'queue', label: 'publishes order' }],
+};
+
+function nodeById(nodes: readonly LayoutNode[], id: string): LayoutNode {
+  const found = nodes.find((node) => node.id === id);
+
+  if (!found) {
+    throw new Error(`The layout placed no node for "${id}".`);
+  }
+
+  return found;
+}
+
+function overlaps(a: LayoutBox, b: LayoutBox): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
+
+describe('layoutDesign', () => {
+  it('carries the design title onto the drawing', () => {
+    expect(layoutDesign(orderIntake).title).toBe('Order intake');
+  });
+
+  it('places every node exactly once, in the order the file listed them', () => {
+    const layout = layoutDesign(orderIntake);
+
+    expect(layout.nodes.map((node) => node.id)).toEqual(['api', 'queue']);
+  });
+
+  it('carries the label and type of each node through untouched', () => {
+    const layout = layoutDesign(orderIntake);
+
+    expect(nodeById(layout.nodes, 'api').label).toBe('Public API');
+    expect(nodeById(layout.nodes, 'api').type).toBe('service');
+  });
+
+  it('draws a whitespace-only label as it stands, rather than tidying it away', () => {
+    // The schema admits '   ' today, and Task 04 owns whether it should. Until
+    // then the drawing has to show what the file said, spaces and all, because
+    // laundering it here would hide the very thing Task 04 has to see.
+    const layout = layoutDesign({
+      title: 'Blank labels',
+      nodes: [{ id: 'a', label: '   ', type: '  ' }],
+      edges: [],
+    });
+
+    expect(layout.nodes).toHaveLength(1);
+    expect(layout.nodes[0]?.label).toBe('   ');
+    expect(layout.nodes[0]?.type).toBe('  ');
+  });
+
+  it('gives every node the shape its type implies', () => {
+    const layout = layoutDesign(orderIntake);
+
+    expect(nodeById(layout.nodes, 'api').shape.name).toBe('rounded');
+    expect(nodeById(layout.nodes, 'queue').shape.name).toBe('stadium');
+  });
+
+  it('still places a node whose type it does not recognise', () => {
+    const layout = layoutDesign({
+      title: 'Unknown kinds',
+      nodes: [{ id: 'thing', label: 'Widget factory', type: 'widget-factory' }],
+      edges: [],
+    });
+
+    expect(layout.nodes).toHaveLength(1);
+    expect(layout.nodes[0]?.shape).toEqual(DEFAULT_SHAPE);
+  });
+
+  it('sizes a node to its label, never below the minimum width', () => {
+    const layout = layoutDesign({
+      title: 'Widths',
+      nodes: [
+        { id: 'short', label: 'A', type: 'service' },
+        { id: 'long', label: 'Order fulfilment service', type: 'service' },
+      ],
+      edges: [],
+    });
+
+    const short = nodeById(layout.nodes, 'short');
+    const long = nodeById(layout.nodes, 'long');
+
+    expect(short.width).toBe(MIN_NODE_WIDTH);
+    expect(long.width).toBeGreaterThan(short.width);
+  });
+
+  it('grows a node taller, not wider, once its label passes the text limit', () => {
+    const layout = layoutDesign({
+      title: 'Long labels',
+      nodes: [
+        { id: 'one', label: 'Order service', type: 'service' },
+        {
+          id: 'two',
+          label:
+            'Order fulfilment and dispatch coordination service for the eastern region',
+          type: 'service',
+        },
+      ],
+      edges: [],
+    });
+
+    const one = nodeById(layout.nodes, 'one');
+    const two = nodeById(layout.nodes, 'two');
+
+    expect(two.width).toBeLessThanOrEqual(MAX_TEXT_WIDTH + two.shape.padding.x * 2);
+    expect(two.height).toBeGreaterThan(one.height);
+  });
+
+  it('lays the flow out top to bottom: a target sits below its source', () => {
+    const layout = layoutDesign(orderIntake);
+
+    const api = nodeById(layout.nodes, 'api');
+    const queue = nodeById(layout.nodes, 'queue');
+
+    expect(queue.y).toBeGreaterThan(api.y + api.height);
+  });
+
+  it('puts two unconnected nodes side by side on the same row', () => {
+    const layout = layoutDesign({
+      title: 'Two islands',
+      nodes: [
+        { id: 'a', label: 'Alpha', type: 'service' },
+        { id: 'b', label: 'Beta', type: 'service' },
+      ],
+      edges: [],
+    });
+
+    const a = nodeById(layout.nodes, 'a');
+    const b = nodeById(layout.nodes, 'b');
+
+    expect(a.y).toBe(b.y);
+    expect(a.x).not.toBe(b.x);
+  });
+
+  it('never overlaps two node boxes', () => {
+    const layout = layoutDesign({
+      title: 'A fuller design',
+      nodes: [
+        { id: 'user', label: 'Customer', type: 'user' },
+        { id: 'api', label: 'Public API', type: 'service' },
+        { id: 'queue', label: 'Order queue', type: 'queue' },
+        { id: 'worker', label: 'Fulfilment worker', type: 'service' },
+        { id: 'db', label: 'Order store', type: 'database' },
+      ],
+      edges: [
+        { from: 'user', to: 'api', label: 'places order' },
+        { from: 'api', to: 'queue', label: 'publishes order' },
+        { from: 'queue', to: 'worker', label: 'delivers order' },
+        { from: 'worker', to: 'db', label: 'writes order' },
+        { from: 'api', to: 'db', label: 'reads order' },
+      ],
+    });
+
+    for (const [index, node] of layout.nodes.entries()) {
+      for (const other of layout.nodes.slice(index + 1)) {
+        expect(overlaps(node, other)).toBe(false);
+      }
+    }
+  });
+
+  it('routes every edge from its source box to its target box', () => {
+    const layout = layoutDesign(orderIntake);
+
+    expect(layout.edges).toHaveLength(1);
+
+    const route = layout.edges[0];
+    const api = nodeById(layout.nodes, 'api');
+    const queue = nodeById(layout.nodes, 'queue');
+
+    expect(route?.from).toBe('api');
+    expect(route?.to).toBe('queue');
+    expect(route?.label).toBe('publishes order');
+    expect(route?.points.length).toBeGreaterThanOrEqual(2);
+
+    const first = route?.points[0];
+    const last = route?.points.at(-1);
+
+    expect(first?.y).toBeGreaterThanOrEqual(api.y);
+    expect(first?.y).toBeLessThanOrEqual(api.y + api.height);
+    expect(last?.y).toBeGreaterThanOrEqual(queue.y - 1);
+    expect(last?.y).toBeLessThanOrEqual(queue.y + queue.height);
+    expect(last?.y).toBeGreaterThan(first?.y ?? 0);
+  });
+
+  it('keeps both of two edges between the same pair, each with its own label', () => {
+    const layout = layoutDesign({
+      title: 'Two ways round',
+      nodes: [
+        { id: 'a', label: 'Alpha', type: 'service' },
+        { id: 'b', label: 'Beta', type: 'service' },
+      ],
+      edges: [
+        { from: 'a', to: 'b', label: 'asks' },
+        { from: 'a', to: 'b', label: 'tells' },
+      ],
+    });
+
+    expect(layout.edges.map((edge) => edge.label)).toEqual(['asks', 'tells']);
+  });
+
+  it('routes an edge that points a node at itself', () => {
+    const layout = layoutDesign({
+      title: 'Self reference',
+      nodes: [{ id: 'a', label: 'Retry loop', type: 'service' }],
+      edges: [{ from: 'a', to: 'a', label: 'retries' }],
+    });
+
+    expect(layout.edges).toHaveLength(1);
+    expect(layout.edges[0]?.points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('gives every edge a label box wide enough for its label', () => {
+    const layout = layoutDesign(orderIntake);
+    const route = layout.edges[0];
+
+    expect(route?.labelBox.width).toBeGreaterThan(0);
+    expect(route?.labelBox.height).toBeGreaterThan(0);
+  });
+
+  it('starts the drawing exactly one margin from the top-left corner', () => {
+    const layout = layoutDesign(orderIntake);
+    const lefts = layout.nodes.map((node) => node.x);
+    const tops = layout.nodes.map((node) => node.y);
+
+    expect(Math.min(...lefts)).toBe(DRAWING_MARGIN);
+    expect(Math.min(...tops)).toBe(DRAWING_MARGIN);
+  });
+
+  it('fits the canvas around everything it placed, with a margin all round', () => {
+    const layout = layoutDesign(orderIntake);
+
+    for (const node of layout.nodes) {
+      expect(node.x).toBeGreaterThanOrEqual(DRAWING_MARGIN);
+      expect(node.y).toBeGreaterThanOrEqual(DRAWING_MARGIN);
+      expect(node.x + node.width).toBeLessThanOrEqual(layout.width - DRAWING_MARGIN);
+      expect(node.y + node.height).toBeLessThanOrEqual(layout.height - DRAWING_MARGIN);
+    }
+
+    for (const edge of layout.edges) {
+      for (const point of edge.points) {
+        expect(point.x).toBeGreaterThanOrEqual(0);
+        expect(point.x).toBeLessThanOrEqual(layout.width);
+        expect(point.y).toBeGreaterThanOrEqual(0);
+        expect(point.y).toBeLessThanOrEqual(layout.height);
+      }
+    }
+  });
+
+  it('places a lone node at the margin, at the size its shape asks for', () => {
+    const layout = layoutDesign({
+      title: 'One box',
+      nodes: [{ id: 'a', label: 'A', type: 'service' }],
+      edges: [],
+    });
+
+    const only = layout.nodes[0];
+
+    expect(only?.x).toBe(DRAWING_MARGIN);
+    expect(only?.y).toBe(DRAWING_MARGIN);
+    expect(layout.width).toBe(MIN_NODE_WIDTH + DRAWING_MARGIN * 2);
+    expect(layout.height).toBe((only?.height ?? 0) + DRAWING_MARGIN * 2);
+  });
+
+  it('lays an empty design out as an empty canvas that still has size', () => {
+    const layout = layoutDesign({ title: 'Nothing yet', nodes: [], edges: [] });
+
+    expect(layout.nodes).toEqual([]);
+    expect(layout.edges).toEqual([]);
+    expect(layout.width).toBeGreaterThan(0);
+    expect(layout.height).toBeGreaterThan(0);
+  });
+
+  it('does not touch the design it was given', () => {
+    const before = JSON.stringify(orderIntake);
+
+    layoutDesign(orderIntake);
+
+    expect(JSON.stringify(orderIntake)).toBe(before);
+  });
+
+  it('lays the same design out the same way twice', () => {
+    expect(layoutDesign(orderIntake)).toEqual(layoutDesign(orderIntake));
+  });
+});
