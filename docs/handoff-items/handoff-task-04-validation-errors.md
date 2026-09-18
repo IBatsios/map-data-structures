@@ -1041,3 +1041,55 @@ None. Nothing needed correcting.
 ### Round
 
 Round 2 of 3, closed. To Sam.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/04-validation-errors.md` | All six acceptance criteria checked, `**Status:** done` | None needed |
+| `README.md` | Described the whitespace rule correctly already; did not mention the file-kind check (`jsonFile.ts`) that refuses a non-JSON file before it is opened | Added a sentence to the error-panel paragraph naming the pre-read name/type check and its refusal message |
+| `CLAUDE.md` | Status section still said "Tasks 01 to 03," with no mention of the validation panel, the whitespace-only rejection, or the file-kind check — a material, user-visible behaviour change left undocumented | Rewrote the Status section: Tasks 01-04, the tightened whitespace rule with its `"   "` vs `"  Public API  "` example, the file-kind gate, and the two-case error panel, kept to a snapshot |
+| `docs/DECISIONS.md` | D38-D45 present, dated 2026-09-18, sourced to Task 04, each with its reason. Checked against both rounds' reports — nothing decided is missing | None needed |
+| `.env.example` | Confirmed no `process.env`/`import.meta.env` read anywhere in `src/`; placeholder comment still accurate | None needed |
+| Handoff doc (this file) | Jared's assignment, Amon's two rounds, Jahmyr's two rounds all present and legible | This section appended |
+| Also checked: no doc repeats round 1's false "Bun runs Vitest on JavaScriptCore" claim | Confirmed clean — the claim only ever appears inside this handoff doc's own round 1→round 2 correction (lines ~531, ~653-670, ~903-905), which is the record of the mistake, not a restatement of it. `DECISIONS.md`'s JavaScriptCore mentions (D32, D38) are about Safari's engine, a different and correct claim | None needed |
+
+### Gates
+
+`bun run test`: **179 passed**, 11 files, run independently before and after the doc-fix commit.
+CI: **green**, both jobs (push and pull request), on the pre-existing commit `40454f7` and again on the doc-fix commit `eda7d5d` after push — typecheck, 179 Vitest, 31 Playwright on Linux.
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**, 26 commits scanned, ~665 KB.
+
+### Judgement call inherited, not overridden
+
+Jahmyr passed criterion 2 with the Firefox/SpiderMonkey wording fault
+(`src/lib/describeLoadError.ts:191`, `:193`) still open and explicitly invited
+an override. Reviewed independently: the fault is self-contradictory wording,
+never a wrong line/column, is pre-existing rather than a regression, does not
+touch the Chromium/Node path CI actually exercises, and is already scoped for
+its own small cycle with a concrete fix (a second clause yielding a
+`LineAndColumn` directly from SpiderMonkey's own message, sharing D44's
+end-anchor approach). Not overridden — carried forward in
+`docs/handoff-items/handoff-next-phase.md` instead of being buried.
+
+### Merge
+
+Two doc fixes (README.md, CLAUDE.md) committed to the branch as `eda7d5d`
+("docs: describe the whitespace rule and the file-kind check Task 04
+shipped"), pushed, and CI re-ran green before merging — nothing was merged on
+a stale check. `gh pr ready 7`, then squashed as `b0f8210` into `main`. Branch
+`feature/validation-errors` deleted (confirmed via `git fetch --prune`). PR
+https://github.com/IBatsios/map-data-structures/pull/7.
+
+### Left for a person
+
+Nothing generated is wrong here and no Phase 0 step is outstanding for this
+task. Two carry-forwards are recorded in `docs/handoff-items/handoff-next-phase.md`
+for whoever picks up the `layout.ts` chore cycle or Task 05: the Firefox
+wording fault (needs a person's read on whether it is worth its own small
+cycle now or later) and `loadDesign.ts`'s doc comment lagging D38's
+measurement by one sentence.

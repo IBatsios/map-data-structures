@@ -1,88 +1,94 @@
-# Handoff — after Task 03
+# Handoff — after Task 04
 
 **Date:** 2026-09-18
-**Phase finished:** Task 03: Preview the generated drawing
-**Next phase:** Task 04: Validation errors
+**Phase finished:** Task 04: Validation errors
+**Next phase:** Task 05: Export as Markdown
 
 ## Where things stand
 
-`main` has Tasks 01 to 03, merged from `feature/preview-drawing` (squashed as
-`3e6d6c0`, PR #5, three rounds of Jahmyr's testing — two self-edge routing
-defects found and fixed along the way). `bun install`, `bun run dev`,
-`bun run test`, `bun run test:e2e`, `bun run check`, and `bun run build` all
-work. CI (`.github/workflows/ci.yml`) runs all four in order — typecheck,
-Vitest, browser install, Playwright — on every push and pull request, and is
-green.
+`main` has Tasks 01 to 04, merged from `feature/validation-errors` (squashed as
+`b0f8210`, PR #7, two rounds of Jahmyr's testing — two round-1 defects found
+and fixed, both verified closed by mutating the source rather than trusting
+the report). `bun install`, `bun run dev`, `bun run test`, `bun run test:e2e`,
+`bun run check`, and `bun run build` all work. CI (`.github/workflows/ci.yml`)
+runs typecheck, 179 Vitest, and 31 Playwright on every push and pull request,
+and is green. `gitleaks detect` finds nothing.
 
-Choose a JSON file, with the picker or by dropping it on the page, and once
-`loadDesign` accepts it against the Zod schema in `src/lib/design.schema.ts`,
-`layoutDesign` (`src/lib/layout.ts`, wrapping `@dagrejs/dagre`) lays it out
-and an SVG draws below the status line: six node kinds — `service`,
-`database`, `queue`, `external`, `user`, `decision` — each in their own
-silhouette and colour band, anything else a plain grey dashed rectangle
-printing its own type under the label, labelled edges with arrowheads, and
-self-edges looped against their own node, each in its own lane so two or more
-on one node draw as distinct nested loops with stacked, readable labels. The
-SVG carries a `<title>` and a `<desc>` naming every node and edge for
-accessibility. 125 Vitest tests and 11 Playwright tests pass; `gitleaks
-detect` finds nothing.
+Choose a JSON file, with the picker or by dropping it on the page. Before
+anything is read, its name and browser-reported type are checked against JSON
+(`src/lib/jsonFile.ts`, D40) — a file that is neither named `.json` nor
+reports a JSON media type is refused unread, which is what stops a dropped
+image's raw bytes from reaching the parser. A file that passes is validated
+against the Zod schema in `src/lib/design.schema.ts`: every field required,
+no string blank — `"   "` is refused, `"  Public API  "` keeps its spaces
+(D39) — duplicate node ids and edges naming undefined nodes refused (D20). A
+file that fails to parse or to validate says why in a two-region live panel
+beside the upload control (D41): a syntax error names the line and column
+only when the engine's message carries its own anchored clause and says so
+plainly, never guessing, when it does not (D38, D44); a schema error names
+the field at fault, one message per problem, capped at ten with a remainder
+count (D42); nothing the app did not write reaches the screen unbounded
+(D43). A loaded design draws as before: `layoutDesign` (`src/lib/layout.ts`)
+lays it out with `@dagrejs/dagre`, an SVG draws below the status line, six
+node kinds in their own silhouette, self-edges looped in their own lanes,
+`<title>` and `<desc>` for accessibility.
 
 Not live anywhere yet — Task 10 is what deploys to Netlify.
 
 ## What to do next, in order
 
-1. Start Task 04 (`docs/tasks/04-validation-errors.md`) from `main`, on a
-   branch named `feature/<short-description>`. Unblocked — Tasks 01 and 02
-   are done.
-2. Task 04's second acceptance criterion — "malformed JSON shows the
-   line" — needs a plan for engines that give `JSON.parse` no position at
-   all. D32 corrects D22's premise: true of V8, **false of JavaScriptCore**
-   (Safari), which gives a message with no line or column. The loader
-   already throws structured errors carrying the original message and
-   `cause` (D22); Task 04 owns what to say when there is no position to say
-   it from.
-3. Carried forward from Task 02, still open:
-   - `src/pages/index.astro:27` — `accept="application/json,.json"` filters
-     the picker only; a dropped non-JSON file's raw bytes reach `loadDesign`
-     and a byte leaks into the status line inside a `JSON.parse` message.
-     Check the type or extension before parsing so the app can say "that is
-     not JSON."
-   - `src/lib/design.schema.ts:35` — `z.string().min(1)` admits a
-     whitespace-only string, so a blank label or id still loads and draws a
-     blank box. D19 justifies "no empty strings" as exactly what stops a
-     blank box, so the rule under-delivers on what the decision claims. A
-     decision to make (tighten to a non-blank check, or narrow D19's
-     wording), not an obvious bug.
-   - D20 (confirmed correct, not a bug) — Zod's cross-field refinement only
-     runs once every field has passed, so a file with both a malformed field
-     and a dangling edge reports only the field on the first pass. Design
-     the message list around that staged, two-pass reality.
-4. Also open, from Task 03: `src/lib/layout.ts` is 625 lines — inside the
-   800-line ceiling, past the 200-400 that is meant to be typical. The
-   self-edge routing (`selfLoop`, its slots, its four constants — about 130
-   lines answering to one idea, consumed through one call) is the obvious
-   seam to extract. Both Amon and Jahmyr flagged it independently; worth
-   doing before Tasks 05-08 start reading this module in earnest, since all
-   four exporters consume `layoutDesign`.
-5. Small backlog, not blocking Task 04: five self-edge loops on one node
-   reads as three at 4x zoom (the band clamps from the fourth loop on — all
-   five routes and labels stay distinct, so criterion 2 held, but the
-   nesting cue stops working); loop ends meet each node's bounding box
-   rather than its silhouette, the same as every other edge end, so one fix
-   covers all of them; and which stacked self-loop label belongs to which
-   loop is positional, not drawn — fine at two loops, weak at five.
-6. The page outside the drawing has no styling at all — default serif body
-   copy beside a sans-serif drawing, reading as two documents side by side.
-   This wants a global-styling decision, which D1 constrains to CSS Modules
-   but nobody has made yet. Task 09 adds a second page and will hit the same
-   thing.
-7. Update `README.md` or `CLAUDE.md` if a command changes.
-8. When Task 04 ends, write the next handoff doc here, in this shape, and
-   append its own detail to a new `docs/handoff-items/handoff-task-04-*.md`.
+1. **`src/lib/layout.ts`'s `chore/` cycle, before Task 05 proper.** It is 625
+   lines, inside the 800-line ceiling but past the 200-400 that is meant to
+   be typical, and Jared already routed it to its own cycle. It is due now
+   because Task 05 is the first task to read `layoutDesign` in earnest — all
+   four exporters do. The self-edge routing (`selfLoop`, its slots, its four
+   constants, about 130 lines answering to one idea, consumed through one
+   call) is the seam both Amon and Jahmyr flagged independently, across two
+   tasks now.
+2. **Then start Task 05** (`docs/tasks/05-export-markdown.md`) from `main`, on
+   a branch named `feature/export-markdown`. Unblocked — Tasks 01 and 03 are
+   done. Its own note: confirm with the user whether a Mermaid block is
+   acceptable for the drawing inside the `.md` file (it is what renders
+   inside GitHub and GitLab, where "a repo or wiki" points); otherwise link an
+   image the user places beside the file. Build this exporter first among the
+   four — the download helper and the node/edge tables are shared pieces the
+   other three exporters need.
+3. **Carried forward, not blocking either task:**
+   - **Firefox wording fault, `src/lib/describeLoadError.ts:191` and `:193`.**
+     On SpiderMonkey (`JSON.parse: unexpected character at line 3 column 3 of
+     the JSON data`) the panel renders "That file is not valid JSON, and this
+     browser did not say where in it. It reported: …" — the "did not say
+     where" clause is contradicted by the clause right after it, because
+     SpiderMonkey names a line and column with no character index, and
+     `positionIn` can only yield an index, so `atPosition` is unreachable.
+     Not a regression, never a wrong pointer (D32 already scopes non-V8
+     browsers in). **Jahmyr passed criterion 2 despite this and explicitly
+     invited Sam to override; Sam did not** — it does not affect the
+     Chromium/Node path CI actually tests, it was disclosed rather than
+     buried, and it is already scoped: a second clause yielding a
+     `LineAndColumn` directly from SpiderMonkey's own line and column,
+     sharing D44's end-anchor approach. Same four lines: "not valid JSON"
+     appears twice on the no-position path, now the common case — ride the
+     same small cycle.
+   - **`loadDesign.ts`'s doc comment is still half a step behind.** It says V8
+     "names a position and often a line and column," which is true but
+     incomplete since D38's measurement showed the no-position path is V8's
+     ordinary path, not a corner. One sentence, whenever that file is next
+     open.
+   - **The page outside the drawing still has no styling** — default serif
+     body copy beside a sans-serif drawing. Task 09 adds a second page and
+     will make this decision worth taking once.
+   - **Edges have no `id` in the schema**, so the runbook's "duplicate edge
+     ids" case is an ignored extra key by design, not a bug — confirmed by
+     Jahmyr's adversarial pass in round 2.
+4. Update `README.md` or `CLAUDE.md` if a command changes.
+5. When Task 05 ends, write the next handoff doc here, in this shape, and
+   append its own detail to a new `docs/handoff-items/handoff-task-05-*.md`.
 
 ## Suggested skills for the next session
 
-- `error-handling`: typed failures from the loader, user-facing messages in
-  the panel.
-- `tdd-workflow`: one broken file per test, written first.
-- `front-a11y`: the live region and the message contrast.
+- `mermaid`: the diagram block, if Mermaid is chosen for the drawing.
+- `tdd-workflow`: the renderer test before the renderer.
+- `e2e-testing`: extending the Playwright walk with a download assertion.
+- `front-refactor`: for the `layout.ts` chore cycle, simplifying without
+  changing behavior.
