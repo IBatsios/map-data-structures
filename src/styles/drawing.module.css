@@ -1,0 +1,170 @@
+/*
+ * The drawing.
+ *
+ * Direction: a technical drawing, not a graphic. The audience is a developer
+ * who would otherwise have draw.io open (intake 2.1), and what they do with
+ * this is read structure and then read labels — so the page is quiet, the grid
+ * is regular, and every bit of colour earns its place by meaning something.
+ * Nothing here is decorative: hue carries the node's kind and nothing else.
+ *
+ * Three rules hold it together:
+ *
+ * 1. **Colour is semantic.** Each kind gets one hue, at one tint for the fill
+ *    and one much darker shade for the outline and the text. Seven bands, all
+ *    at the same lightness, so no kind shouts louder than another and the
+ *    drawing reads as one diagram rather than a paint chart.
+ * 2. **Every band is measured, not eyeballed.** `drawing.module.test.ts` reads
+ *    this file and checks each band's label and type line against its own fill
+ *    with WCAG's own formula. Labels land around 12:1 and the smaller type line
+ *    around 6:1, both past AA's 4.5:1. That test is why the criterion stays
+ *    true when someone adds a kind — it caught this file's first grey, which
+ *    came out at 3.4:1 and looked fine.
+ * 3. **The unknown kind is grey and says so.** A type this app does not
+ *    recognise gets the neutral band and a dashed outline. It is visibly a box
+ *    that was drawn without a claim, rather than a box pretending to be a
+ *    service.
+ *
+ * Styling reaches the SVG through `data-` attributes, not class names, because
+ * the SVG is built by a script at runtime and the hashed class name belongs to
+ * this file (D23 set the precedent with the drop zone's `data-dragging`).
+ */
+
+.drawing {
+  --shape-fill: #f2f4f7;
+  --shape-stroke: #55607a;
+  --shape-text: #1f2430;
+  --shape-dash: none;
+
+  margin-top: 1.5rem;
+}
+
+/*
+ * The SVG carries its own pixel size, so a small drawing renders at the size it
+ * was laid out at rather than being stretched to fill the page. `max-width` and
+ * `max-height` are what make a large one fit instead of overflowing: the
+ * viewBox scales it down whole, so nothing is ever cropped out of sight.
+ */
+.drawing [data-part='drawing'] {
+  max-width: 100%;
+  max-height: 75vh;
+  height: auto;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+/* One band per kind. Fills sit at ~95% lightness, strokes and text far below. */
+.drawing [data-kind='service'] {
+  --shape-fill: #eef1fe;
+  --shape-stroke: #4c56c0;
+  --shape-text: #1e2160;
+}
+
+.drawing [data-kind='database'] {
+  --shape-fill: #fdf3e3;
+  --shape-stroke: #9a6414;
+  --shape-text: #4a2f06;
+}
+
+.drawing [data-kind='queue'] {
+  --shape-fill: #e6f6f2;
+  --shape-stroke: #0f766e;
+  --shape-text: #0a3b37;
+}
+
+.drawing [data-kind='external'] {
+  --shape-fill: #eef1f6;
+  --shape-stroke: #526175;
+  --shape-text: #1b2432;
+}
+
+.drawing [data-kind='user'] {
+  --shape-fill: #fdeef3;
+  --shape-stroke: #ab2f51;
+  --shape-text: #5a1128;
+}
+
+.drawing [data-kind='decision'] {
+  --shape-fill: #f4eefc;
+  --shape-stroke: #6d34c4;
+  --shape-text: #2f1160;
+}
+
+/*
+ * An unrecognised type: drawn, but visibly without a claim about what it is.
+ * The grey is deliberately as dark as every other band's outline rather than
+ * the faded grey a "nothing here" state would normally get — this box holds a
+ * label and a type the file really said, and both have to stay as readable as
+ * any other. `drawing.module.test.ts` is what holds that to 4.5:1.
+ */
+.drawing [data-kind='unknown'] {
+  --shape-fill: #f2f4f7;
+  --shape-stroke: #55607a;
+  --shape-text: #1f2430;
+  --shape-dash: 5 4;
+}
+
+.drawing [data-part='shape'] {
+  fill: var(--shape-fill);
+  stroke: var(--shape-stroke);
+  stroke-width: 1.5;
+  stroke-dasharray: var(--shape-dash);
+}
+
+/* The cylinder's lid and the cut corner's fold: outline only, no fill. */
+.drawing [data-part='detail'] {
+  fill: none;
+  stroke: var(--shape-stroke);
+  stroke-width: 1.5;
+}
+
+.drawing [data-part='label'] {
+  fill: var(--shape-text);
+  font-weight: 550;
+}
+
+/*
+ * The node's own `type`, printed under its label. Quieter than the label but
+ * not decorative — it is the only place a reader can see the free text the file
+ * actually said, so it stays well inside readable contrast rather than fading
+ * to a hint.
+ */
+.drawing [data-part='type'] {
+  fill: var(--shape-stroke);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.drawing [data-part='route'] {
+  fill: none;
+  stroke: #46516a;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.drawing [data-part='arrowhead'] {
+  fill: #46516a;
+}
+
+/*
+ * The plate behind an edge label. Without it the label sits on top of its own
+ * line and both become hard to read; with it the label is legible wherever the
+ * route happens to pass.
+ */
+.drawing [data-part='plate'] {
+  fill: #ffffff;
+  stroke: #dfe3ec;
+  stroke-width: 1;
+}
+
+.drawing [data-part='edge-label'] {
+  fill: #2b3346;
+  font-size: 12px;
+}

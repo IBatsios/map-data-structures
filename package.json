@@ -12,9 +12,12 @@
     "preview": "astro preview",
     "astro": "astro",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "astro check",
     "prepare": "husky"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "astro": "^7.3.3",
     "zod": "^4.6.5"
   },
@@ -22,10 +25,14 @@
     "esbuild": true
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22",
     "husky": "^9.1.7",
     "lint-staged": "^17.5.1",
     "prettier": "^3.9.8",
     "prettier-plugin-astro": "^1.0.1",
+    "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   }
 }

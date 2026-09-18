@@ -1,0 +1,8 @@
+{
+  "title": "Billing run",
+  "nodes": [
+    { "id": "scheduler", "label": "Nightly scheduler", "type": "service" },
+    { "id": "invoices", "label": "Invoice store", "type": "db" }
+  ],
+  "edges": [{ "from": "scheduler", "to": "invoices", "label": "writes invoices" }]
+}

@@ -4,10 +4,10 @@
  *
  * Nothing downstream re-checks what comes out of here, so nothing may leave
  * here half-validated. A file that is not a design does not return a partial
- * one; it throws a `DesignLoadError`, and the error carries the evidence Task
- * 04 needs to say where the fault is — the position `JSON.parse` reported, or
- * the field paths Zod reported. Neither is flattened into a sentence on the way
- * out, because a sentence cannot be pointed at a line.
+ * one; it throws a `DesignLoadError`, and the error carries whatever evidence
+ * Task 04 has to work with — `JSON.parse`'s own message and error, or the field
+ * paths Zod reported. Neither is flattened into a sentence on the way out,
+ * because a sentence cannot be pointed at a line.
  */
 
 import type { z } from 'zod';
@@ -37,9 +37,19 @@ export class DesignLoadError extends Error {
 }
 
 /**
- * The file is not JSON at all. The message is the one `JSON.parse` produced,
- * kept word for word because it names the position — and, in every browser this
- * app targets, the line and column too.
+ * The file is not JSON at all.
+ *
+ * The message is the one `JSON.parse` produced, kept word for word, and the
+ * original error is kept as `cause`. What that message contains is the
+ * engine's business, not this app's, and it is not the same everywhere: V8
+ * names a position and often a line and column, while JavaScriptCore — Safari,
+ * a browser this desktop app plainly targets — names none of the three. So
+ * what this class promises is the message and the cause, not a position.
+ *
+ * Task 04 has to say where the fault is, and on some engines there will be
+ * nothing here to say it from. That is Task 04's second acceptance criterion
+ * and its design work; this class's job is to hand over whatever there was
+ * without flattening or inventing it.
  */
 export class DesignSyntaxError extends DesignLoadError {
   constructor(cause: SyntaxError) {
@@ -90,7 +100,7 @@ export function loadDesign(text: string): Design {
   return result.data;
 }
 
-/** `JSON.parse`, with its failure translated and its position kept. */
+/** `JSON.parse`, with its failure translated and its own message kept. */
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);

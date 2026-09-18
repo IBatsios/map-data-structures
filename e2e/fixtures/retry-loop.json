@@ -1,0 +1,12 @@
+{
+  "title": "Retry loop",
+  "nodes": [
+    { "id": "worker", "label": "Delivery worker", "type": "service" },
+    { "id": "outbox", "label": "Outbox", "type": "queue" }
+  ],
+  "edges": [
+    { "from": "worker", "to": "outbox", "label": "reads batch" },
+    { "from": "worker", "to": "outbox", "label": "acknowledges" },
+    { "from": "worker", "to": "worker", "label": "retries on failure" }
+  ]
+}

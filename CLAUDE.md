@@ -17,24 +17,33 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 and 02 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 03 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
 edge naming an unknown node is refused, not silently drawn wrong. A loaded
-design shows its file name and node/edge counts, then a box per node and a
-line per edge. No layout beyond a single row, no styling beyond defaults, no
-export yet. See `docs/RUNBOOK.md` for the frontier.
+design is laid out with `@dagrejs/dagre` and drawn as an SVG below the status
+line: six node kinds each in their own silhouette (`service`, `database`,
+`queue`, `external`, `user`, `decision`), anything else a grey dashed
+rectangle, labelled edges with arrowheads, self-edges looped against their own
+node, a `<title>` and `<desc>` for accessibility. Still one blunt validation
+line, no exports yet. See `docs/RUNBOOK.md` for the frontier.
 
 ## Run and test
 
 ```
 bun install
-bun run dev     # http://localhost:4321
-bun run test    # Vitest suite
-bun run build   # static site into dist/
+bun run dev       # http://localhost:4321
+bun run test      # Vitest suite
+bun run test:e2e  # Playwright walk, in a real browser
+bun run check     # astro check
+bun run build     # static site into dist/
 ```
 
 `bun run test` runs Vitest. Plain `bun test` would run Bun's own runner instead, so always include `run`.
+
+`bun run test:e2e` stays out of `bun run test`: the pre-commit hook runs the latter, and a hook that starts a browser on every commit stops being run. It needs `bunx playwright install chromium` once. The hook is lint-staged, then `bun run check`, then `bun run test`.
+
+Astro 7 backgrounds both `dev` and `preview` whether or not `--background` is passed, and both hold a lock file, so neither can be a Playwright `webServer`; `e2e/staticServer.ts` serves `dist/` in the foreground instead (D30).
 
 ## Where things are
 

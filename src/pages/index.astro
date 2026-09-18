@@ -1,4 +1,5 @@
 ---
+import drawingStyles from '../styles/drawing.module.css';
 import styles from '../styles/upload.module.css';
 
 const pageTitle = 'MapDataStructures';
@@ -39,24 +40,14 @@ const pageTitle = 'MapDataStructures';
 
       <p id="upload-status" role="status"></p>
 
-      <div id="drawing"></div>
+      <div id="drawing" class={drawingStyles.drawing}></div>
     </main>
 
     <script>
       import { describeUpload } from '../lib/describeUpload';
-      import type { Design, DesignEdge, DesignNode } from '../lib/design.types';
+      import { layoutDesign } from '../lib/layout';
       import { loadDesign } from '../lib/loadDesign';
-
-      const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
-      const BOX_WIDTH = 160;
-      const BOX_HEIGHT = 64;
-      const BOX_GAP = 56;
-      const MARGIN = 24;
-
-      interface Point {
-        readonly x: number;
-        readonly y: number;
-      }
+      import { renderDrawing } from '../lib/renderDrawing';
 
       interface PageElements {
         readonly fileInput: HTMLInputElement;
@@ -67,12 +58,13 @@ const pageTitle = 'MapDataStructures';
 
       /**
        * Choose a file or drop one on the page, read it here in the browser, say
-       * what it holds, and draw a box per node and a line per edge. Placement is
-       * a single row; Task 03 replaces it with a real layout.
+       * what it holds, and draw it.
        *
-       * Nothing with logic in it lives in this script: no test and, until D17
-       * closes, no type-checker can see in here. Validating is `loadDesign`'s
-       * and counting is `describeUpload`'s, both in `src/lib`, both tested.
+       * Nothing with logic in it lives in this script. Validating is
+       * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
+       * `renderDrawing`'s and counting is `describeUpload`'s — all in
+       * `src/lib`, all tested. What is left here is wiring: find the elements,
+       * listen, and put the result in the right place.
        */
       function startUploadPage(): void {
         const elements = findPageElements();
@@ -153,7 +145,7 @@ const pageTitle = 'MapDataStructures';
 
         try {
           const design = loadDesign(await file.text());
-          elements.drawing.replaceChildren(renderDesign(design));
+          elements.drawing.replaceChildren(renderDrawing(layoutDesign(design), document));
           elements.status.textContent = describeUpload(file.name, design);
         } catch (error) {
           // Never leave a failure silent. Task 04 replaces this one line with
@@ -161,105 +153,24 @@ const pageTitle = 'MapDataStructures';
           // position and issue paths the error still carries.
           elements.drawing.replaceChildren();
           elements.status.textContent = `That file could not be drawn: ${describeError(error)}`;
+        } finally {
+          forgetChosenFile(elements);
         }
       }
 
-      function renderDesign(design: Design): SVGElement {
-        const svg = createSvgElement('svg', {
-          width: String(svgWidthFor(design.nodes.length)),
-          height: String(MARGIN * 2 + BOX_HEIGHT),
-          role: 'img',
-          'aria-label': `Drawing of ${design.title}`,
-        });
-
-        const title = createSvgElement('title', {});
-        title.textContent = design.title;
-        svg.append(title);
-
-        // Edges first, so the boxes sit over the lines rather than under them.
-        const origins = originsByNodeId(design.nodes);
-        for (const edge of design.edges) {
-          svg.append(renderEdge(edge, origins));
-        }
-        for (const [index, node] of design.nodes.entries()) {
-          svg.append(...renderNode(node, boxOriginOf(index)));
-        }
-
-        return svg;
-      }
-
-      function renderNode(node: DesignNode, origin: Point): readonly SVGElement[] {
-        const box = createSvgElement('rect', {
-          x: String(origin.x),
-          y: String(origin.y),
-          width: String(BOX_WIDTH),
-          height: String(BOX_HEIGHT),
-          fill: 'none',
-          stroke: 'currentColor',
-        });
-
-        const label = createSvgElement('text', {
-          x: String(origin.x + BOX_WIDTH / 2),
-          y: String(origin.y + BOX_HEIGHT / 2),
-          'text-anchor': 'middle',
-          'dominant-baseline': 'middle',
-          fill: 'currentColor',
-        });
-        label.textContent = node.label;
-
-        return [box, label];
-      }
-
-      function renderEdge(
-        edge: DesignEdge,
-        origins: ReadonlyMap<string, Point>,
-      ): SVGElement {
-        const from = origins.get(edge.from);
-        const to = origins.get(edge.to);
-
-        // The schema rejects an edge naming a node the file does not define, so
-        // reaching this means the app broke its own guarantee, not that the
-        // user's file is wrong. It stays because a map lookup is still a
-        // maybe-miss, and a silent one would draw a line from nowhere.
-        if (!from || !to) {
-          throw new Error(
-            `No box was placed for the node "${edge.from}" or "${edge.to}".`,
-          );
-        }
-
-        return createSvgElement('line', {
-          x1: String(from.x + BOX_WIDTH),
-          y1: String(from.y + BOX_HEIGHT / 2),
-          x2: String(to.x),
-          y2: String(to.y + BOX_HEIGHT / 2),
-          stroke: 'currentColor',
-        });
-      }
-
-      function originsByNodeId(nodes: readonly DesignNode[]): ReadonlyMap<string, Point> {
-        return new Map(nodes.map((node, index) => [node.id, boxOriginOf(index)]));
-      }
-
-      function boxOriginOf(index: number): Point {
-        return { x: MARGIN + index * (BOX_WIDTH + BOX_GAP), y: MARGIN };
-      }
-
-      function svgWidthFor(nodeCount: number): number {
-        const boxes = Math.max(nodeCount, 1);
-        return MARGIN * 2 + boxes * BOX_WIDTH + (boxes - 1) * BOX_GAP;
-      }
-
-      function createSvgElement(
-        name: string,
-        attributes: Readonly<Record<string, string>>,
-      ): SVGElement {
-        const element = document.createElementNS(SVG_NAMESPACE, name);
-
-        for (const [attribute, value] of Object.entries(attributes)) {
-          element.setAttribute(attribute, value);
-        }
-
-        return element;
+      /**
+       * Clears the input's value after every read.
+       *
+       * Without this, choosing the same file twice fires no `change` event at
+       * all — the value has not changed — so a user who edits their JSON and
+       * re-picks it sees the old drawing and the old status line, both still
+       * claiming to describe the file they just chose. Clearing it makes every
+       * pick a change. The file itself is already read by this point, so
+       * nothing is lost, and the input still shows no file rather than a stale
+       * name.
+       */
+      function forgetChosenFile(elements: PageElements): void {
+        elements.fileInput.value = '';
       }
 
       function describeError(error: unknown): string {

@@ -15,7 +15,16 @@
  * page module that imported both would silently get the wrong one.
  */
 
-/** One box in the drawing. `type` is free text until Task 03 gives it meaning. */
+/**
+ * One box in the drawing.
+ *
+ * `type` stays free text (D14, D18, D19) and always will: the app does not get
+ * to tell a user which kinds of thing exist in their system. What Task 03 added
+ * is meaning without narrowing — `src/lib/shapes.ts` recognises a set of kinds
+ * and draws each as its own silhouette, and answers for every other string with
+ * a plain rectangle. A type nobody has heard of still draws, still carries its
+ * label, and shows its own type text on the face of the box.
+ */
 export interface DesignNode {
   readonly id: string;
   readonly label: string;
