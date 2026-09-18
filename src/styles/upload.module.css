@@ -1,0 +1,35 @@
+/*
+ * The upload area: the file input, and the border that tells a user the page
+ * will take a dropped file.
+ *
+ * Deliberately plain. Task 03 styles the drawing and Task 09 the schema page;
+ * all this needs to do is make a drop target look like one. A dashed edge is
+ * the convention for "you may drop here", and the dragging state changes the
+ * border's *style* as well as its colour, so the cue does not depend on being
+ * able to tell the two colours apart.
+ */
+
+.dropZone {
+  max-width: 44rem;
+  padding: 1rem 1.25rem;
+  border: 2px dashed;
+  border-radius: 8px;
+}
+
+.dropZone[data-dragging='true'] {
+  border-style: solid;
+  background-color: rgb(0 0 0 / 6%);
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0;
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+}
