@@ -160,7 +160,7 @@ const pageTitle = 'MapDataStructures';
           // messages that name the line or the field at fault, out of the
           // position and issue paths the error still carries.
           elements.drawing.replaceChildren();
-          elements.status.textContent = `That file could not be drawn: ${describe(error)}`;
+          elements.status.textContent = `That file could not be drawn: ${describeError(error)}`;
         }
       }
 
@@ -217,8 +217,14 @@ const pageTitle = 'MapDataStructures';
         const from = origins.get(edge.from);
         const to = origins.get(edge.to);
 
+        // The schema rejects an edge naming a node the file does not define, so
+        // reaching this means the app broke its own guarantee, not that the
+        // user's file is wrong. It stays because a map lookup is still a
+        // maybe-miss, and a silent one would draw a line from nowhere.
         if (!from || !to) {
-          throw new Error('an edge names a node the file does not define');
+          throw new Error(
+            `No box was placed for the node "${edge.from}" or "${edge.to}".`,
+          );
         }
 
         return createSvgElement('line', {
@@ -256,7 +262,7 @@ const pageTitle = 'MapDataStructures';
         return element;
       }
 
-      function describe(error: unknown): string {
+      function describeError(error: unknown): string {
         return error instanceof Error ? error.message : String(error);
       }
 
