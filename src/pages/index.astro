@@ -32,7 +32,7 @@ const pageTitle = 'MapDataStructures';
 
     <script>
       import type { Design, DesignEdge, DesignNode } from '../lib/design.types';
-      import { parseDesign } from '../lib/parseDesign';
+      import { loadDesign } from '../lib/loadDesign';
 
       const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
       const BOX_WIDTH = 160;
@@ -88,7 +88,7 @@ const pageTitle = 'MapDataStructures';
         }
 
         try {
-          const design = parseDesign(JSON.parse(await file.text()));
+          const design = loadDesign(await file.text());
           elements.drawing.replaceChildren(renderDesign(design));
           elements.status.textContent = '';
         } catch (error) {

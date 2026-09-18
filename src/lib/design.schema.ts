@@ -19,6 +19,10 @@
  *    ids must be unique, and every edge must name nodes the file defines.
  *    Neither can be expressed on a field, and both are silent corruption of the
  *    drawing rather than an obvious error — see the comments on each below.
+ *    They are checked only after every field has passed: a rule that reads the
+ *    whole list of nodes cannot run over a `nodes` that is not a list of nodes
+ *    yet. A file with both kinds of fault reports its fields first and its
+ *    cross-field faults on the way back through.
  *
  * Failures come back as Zod issues, each carrying the `path` of the field at
  * fault. Task 04 turns those paths into messages; nothing here does.
