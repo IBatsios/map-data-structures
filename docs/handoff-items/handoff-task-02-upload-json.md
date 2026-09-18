@@ -181,3 +181,163 @@ A guide, not a cage.
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+An uploaded file is now validated before anything draws it, and the page takes a
+dropped file and says what it loaded.
+
+- **The schema.** `designSchema` in `src/lib/design.schema.ts` is the one
+  definition of what a design file may be, written to be read: every field
+  required and no empty strings, unknown keys ignored, an empty design valid,
+  and the two cross-field rules — unique node ids, and edges that only name
+  nodes the file defines — in a refinement, with a comment on each saying what
+  goes silently wrong without it.
+- **The loader.** `loadDesign(text): Design` replaces `parseDesign`, which is
+  gone along with its test; its four cases live on in `loadDesign.test.ts`,
+  "every node and edge, in file order" among them. Failures throw
+  `DesignSyntaxError` (keeps `JSON.parse`'s message, position and all, plus the
+  original error as `cause`) or `DesignSchemaError` (keeps Zod's `issues`
+  untouched), both `DesignLoadError` with a `code` for Task 04 to switch on.
+- **The screen.** The labelled file input is untouched and still the keyboard's
+  way in; drag-and-drop is added beside it, over the whole page, with `dragover`
+  and `drop` both prevented so the browser cannot navigate away to the file.
+  After a load the file name and the node and edge counts go into the existing
+  `role="status"` region, so a success is announced where before only a failure
+  was.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/design.schema.ts` | New. The Zod schema, exported and documented. |
+| `src/lib/design.schema.test.ts` | New, written first. |
+| `src/lib/loadDesign.ts` | New. `loadDesign` and the three error classes. |
+| `src/lib/loadDesign.test.ts` | New, written first. |
+| `src/lib/describeUpload.ts` | New. The status line's file name and counts. |
+| `src/lib/describeUpload.test.ts` | New, written first. |
+| `src/lib/parseDesign.ts`, `src/lib/parseDesign.test.ts` | Deleted. One loader in the tree. |
+| `src/lib/design.types.ts` | Comment only: says why the types stay hand-written. |
+| `src/pages/index.astro` | Drop target, file name and counts, calls `loadDesign`. |
+| `src/styles/upload.module.css` | New. What a drop target needs to be visible. |
+| `package.json`, `bun.lock` | `zod@4.6.5` added; lockfile committed with it. |
+| `docs/DECISIONS.md` | D18 to D23. |
+| `README.md` | Two statements that had stopped being true. No command changed. |
+| `.env.example` | **No change, as expected.** Nothing in the tree reads `import.meta.env` or `process.env`; checked, not assumed. |
+
+### Tests written
+
+46 tests pass, 41 of them new. What each group pins down:
+
+**`design.schema.test.ts` (26)**
+
+- A node or an edge missing any one field is rejected, named field by field.
+- An empty `id` is rejected; an id that is not a string is rejected.
+- A good two-node one-edge design parses and comes back unchanged, in file order.
+- A design with no nodes and no edges is valid.
+- A key the schema does not name is ignored rather than fatal.
+- The schema does not mutate what it was handed.
+- A missing `title`, `nodes` or `edges` is rejected, and the issue path names it.
+- An array, a string and `null` are each rejected where a design object belongs.
+- **Two nodes sharing an id are rejected**, and the issue path is `nodes.1.id` —
+  the repeat, which is the line the author has to change.
+- **An edge whose `from` or `to` names no node is rejected**, with the path
+  `edges.0.from` / `edges.0.to` and the undefined id quoted in the message.
+- A self-edge is accepted: it names a node the design defines.
+
+**`loadDesign.test.ts` (15)**
+
+- The four cases carried over from `parseDesign.test.ts`, now from file text.
+- Malformed JSON throws `DesignSyntaxError`, whose message is `JSON.parse`'s
+  own, still matching `/position \d+/`, with the `SyntaxError` as `cause`.
+- An empty file is rejected.
+- A JSON file that is not a design throws `DesignSchemaError` carrying issue
+  paths; `nodes.0.label`, `nodes.1.id` and `edges.0.to` are each pinned by name.
+- Every faulty *field* is reported, not only the first.
+- The cross-field rules are only checked once the fields are sound — pinned
+  deliberately, see "Known gaps".
+- Both errors carry a `code`: `invalid-json` and `invalid-design`.
+
+**`describeUpload.test.ts` (5)**
+
+- Names the file and counts nodes and edges; singular at one, plural at nought
+  and at many; counts what the design holds rather than what is distinct in it;
+  shows the file name as given.
+
+### Local results
+
+`bun run test`: **pass** — 3 files, 46 tests, 0 failures.
+`bun run build`: **pass** — 1 page built. CSS Modules resolve: the hashed class
+names are in `dist/index.html` and the drag handlers are in the client bundle.
+
+Walked by hand as far as this seat allows: `bunx astro dev`, fetched `/`, and
+confirmed the served markup keeps `<label for="design-file">`, the input with
+`aria-describedby="drop-hint"`, `#drop-zone[data-dragging="false"]` and
+`#upload-status[role="status"]`. Actually dragging a file needs a browser, which
+is Playwright's job and Task 03's — **Jahmyr should drop a file by hand**, and
+choose one, and try a duplicate id and a dangling edge.
+
+### Decisions recorded
+
+Six rows appended to the "Added after the build" table in `docs/DECISIONS.md`:
+
+- **D18** — D14 confirmed final, not renamed. `from`/`to` read as the direction
+  the line is drawn and are already in the README, the tests and the skeleton; a
+  rename would cost Task 09 and every reader more than it bought.
+- **D19** — Every field required, no empty strings, unknown keys ignored, an
+  empty design valid.
+- **D20** — The two cross-field rules live in a refinement, and are reached only
+  once every field has passed.
+- **D21** — The types stay hand-written rather than becoming `z.infer`; the
+  exporters should not have to import Zod to read the contract.
+- **D22** — What `loadDesign` throws, and what each failure keeps.
+- **D23** — The CSS Module and the `data-dragging` attribute.
+
+### Known gaps
+
+- **A file with both a bad field and a bad cross-field rule reports only the
+  field.** Zod does not run a refinement once the object's shape has failed, and
+  that is right — a rule that reads the whole list of nodes cannot run over a
+  `nodes` that is not a list of nodes yet. The consequence for a user is a
+  two-pass fix: correct the fields, load again, then hear about the dangling
+  edge. Pinned by a test and written into D20 so Task 04 designs for it rather
+  than discovering it.
+- **Nothing exercises the page's `<script>`.** No test imports it and, until D17
+  closes in Task 03, no type-checker reads it either. The logic that could be
+  moved out of it has been — validating is `loadDesign`'s, counting is
+  `describeUpload`'s — but the drop handlers, the `preventDefault` pair and the
+  status wiring are verified by reading and by the dev server, not by a test.
+  Task 03's Playwright walk is where that ends.
+- **A dropped file does not appear in the file input.** The input still reads
+  "No file chosen" after a drop; the status line is what names the file. Setting
+  `input.files` from the drop is possible and was left out as polish this task
+  does not own.
+- **The drag cue is best-effort for a keyboard or screen-reader user.** There is
+  nothing to announce — dragging is a pointer gesture, and the file input is the
+  equivalent path, which is what the acceptance criterion asks for.
+
+### Out-of-scope notes for Jared
+
+- **`renderEdge` in `index.astro` still guards against a node with no box**, and
+  I kept it: the schema makes it unreachable for a validated design, but the map
+  lookup is still a maybe-miss to the type system, and a silent miss would draw
+  a line from nowhere. Its message now says the app broke its own guarantee
+  rather than blaming the file. When Task 03 moves layout out of the page, that
+  guard should move with it and become an assertion rather than an error string.
+- **`accept="application/json,.json"` filters the file *picker* only.** A
+  dropped file of any type reaches `loadDesign` and comes back as
+  `DesignSyntaxError`, so a dropped PNG is reported as bad JSON rather than as
+  the wrong kind of file. Task 04 may want to check the type or the extension
+  before reading, so it can say "that is an image" instead.
+- **Choosing the same file twice in a row does nothing**, because the input's
+  `change` event does not fire when the value has not changed. A user who edits
+  their file and re-picks it sees a stale drawing with no hint why. Clearing
+  `input.value` after each read would fix it; it belongs with Task 04's
+  messaging or Task 03's page work, not here.
+- **The status region is doing two jobs** — success facts and failure text —
+  through one `textContent`. Task 04 is where that splits; flagging it because
+  Task 03 must not drop the live region when it rebuilds the drawing.

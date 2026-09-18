@@ -77,7 +77,7 @@ export class DesignSchemaError extends DesignLoadError {
  * @example
  * ```typescript
  * const design = loadDesign(await file.text());
- * console.log(design.nodes.length); // 2
+ * design.nodes.length; // 2
  * ```
  */
 export function loadDesign(text: string): Design {
