@@ -476,3 +476,38 @@ changes a recorded decision, so all four went back rather than being patched her
 ### Pull request
 
 https://github.com/IBatsios/map-data-structures/pull/3 — draft, `feature/upload-json` into `main`, CI green. Not merged; Sam marks it ready.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/02-upload-json.md` | All five acceptance-criteria boxes were already checked by Jahmyr; `**Status:**` still read `in progress`. | Set `**Status:** done`. |
+| `README.md` | Run/test/build commands present, correct, and match `CLAUDE.md`; already described the validated upload, drag-and-drop, and the JSON shape (D18/D19). | No change needed. |
+| `CLAUDE.md` | `## Status` still described Task 01 only ("No validation… yet"), which stopped being true once Task 02 merged. | Updated the snapshot to say Tasks 01 and 02 are done, and to name the validation (duplicate ids and dangling edges refused). |
+| `docs/DECISIONS.md` | D18–D23 present, dated 2026-09-18, each with a reason and a source. Matches everything Amon's and Jahmyr's reports describe as decided. | No change needed. |
+| `.env.example` | Still holds no variables; `grep` for `import.meta.env`/`process.env` across `src/`, `astro.config.mjs`, `vitest.config.ts` returns nothing (reconfirmed independently). | No change needed. |
+| This handoff doc | Jared's assignment, Amon's round 1 report, and Jahmyr's round 1 report all present and legible. | Appended this section. |
+
+Not touched, per the generated-file boundary: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md`, and the body of `docs/tasks/02-upload-json.md` (only its `Status` line changed).
+
+### Gates
+
+`bun run test`: **pass** — 3 files, 46 tests, 0 failures (verified independently, both before and after the doc-fix commit).
+CI: **green** — PR #3, both the push-triggered and pull-request-triggered `test` jobs passed on the head commit at merge time (runs `35321375756` and `35321375763`, on top of Jahmyr's already-green `35320855940`).
+Secret scan: **clean** — `gitleaks detect --source . --no-banner`: 12 commits scanned, ~280.88 KB, no leaks found.
+
+### Merge
+
+Squashed as `b98971b` into `main`. Branch `feature/upload-json` deleted (confirmed 404 on the remote branch after merge). PR https://github.com/IBatsios/map-data-structures/pull/3.
+
+A small doc-only commit (`661cccc`: task status → done, `CLAUDE.md` status refresh) was added to the branch before merge, and CI was allowed to re-run and go green on it before `gh pr ready` / `gh pr merge` — no red or pending check was merged.
+
+### Left for a person
+
+Nothing blocks a person here — no generated doc is wrong, Phase 0 is already satisfied (the remote exists, gitleaks is clean), and no check was red or pending at merge time.
+
+The four defects Jahmyr recorded (none failing a Task 02 criterion) are carried forward into `docs/handoff-items/handoff-next-phase.md` for whoever picks up Task 04, since neither Task 04's task file nor a Task 04 handoff doc exists yet to receive them directly. The first — the Safari `JSON.parse` message claim in `src/lib/loadDesign.ts:41-43` and D22 — is flagged there as worth resolving before Task 04's "name the line" acceptance criterion is built against a guarantee that only holds on V8.
