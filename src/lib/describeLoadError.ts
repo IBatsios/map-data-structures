@@ -17,7 +17,9 @@
  *    text rather than read out of the engine's phrasing, which buys one wording
  *    across every engine that gives one. Where there is none, the message says
  *    so. A wrong pointer into a file the user wrote themselves costs them more
- *    than no pointer at all.
+ *    than no pointer at all. The position itself is read only from the engine's
+ *    own clause and never from the quotation of the file beside it — see
+ *    `ENGINE_POSITION_CLAUSE`, which is where this rule is actually enforced.
  * 2. **The engine is an argument, not an ambient fact.** `describeSyntaxFault`
  *    takes the message text and the file text, so a Safari-shaped message is a
  *    one-line test on Node.
@@ -321,9 +323,30 @@ function lineColumnOf(fileText: string, position: number): LineAndColumn {
   return { line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
 }
 
+/**
+ * The engine's own position clause: the only thing a line may be read from.
+ *
+ * It is anchored to the end of the message, and that anchor is the whole of the
+ * rule. A `JSON.parse` message holds at most two things this app cares about —
+ * the engine's clause, and a quotation of the file that failed — and the second
+ * is the user's own bytes coming back. V8's *no-position* form is
+ * `Unexpected token 'p', "position 9"... is not valid JSON`, so a search for
+ * `position 123` anywhere in the message finds whatever the file happened to
+ * say and prints a line the engine never named. Every engine that gives a
+ * position ends its message with it, and every quotation ends
+ * `is not valid JSON`, so a message can never end in a clause it is merely
+ * quoting.
+ *
+ * Both prepositions are here because V8 says `in JSON` for a fault inside the
+ * design and `after JSON` for anything following it. The preposition belongs to
+ * the clause rather than to the sentence left behind once the clause is gone.
+ */
+const ENGINE_POSITION_CLAUSE =
+  /\s*\b(?:in|after) JSON at position (\d+)(?:\s*\(line \d+ column \d+\))?\s*$/u;
+
 /** The position an engine named, if it named one at all. */
 function positionIn(engineMessage: string): number | undefined {
-  const found = /\bposition (\d+)/u.exec(engineMessage);
+  const found = ENGINE_POSITION_CLAUSE.exec(engineMessage);
 
   return found === null ? undefined : Number(found[1]);
 }
@@ -333,13 +356,13 @@ function positionIn(engineMessage: string): number | undefined {
  *
  * The position clause is dropped because this app has already said the line and
  * the column in its own words; if the phrasing is one this does not recognise,
- * nothing is dropped and the whole message is shown.
+ * nothing is dropped and the whole message is shown. It is the same pattern
+ * `positionIn` reads, so the two can never disagree about whether a message
+ * carried a clause — a sentence that named a column and then ended
+ * `… is not valid JSON` was how the round 1 defect announced itself.
  */
 function engineDetail(engineMessage: string): string {
-  const described = engineMessage.replace(
-    /\s*in JSON at position \d+(?:\s*\(line \d+ column \d+\))?/u,
-    '',
-  );
+  const described = engineMessage.replace(ENGINE_POSITION_CLAUSE, '');
   const bounded = boundedText(described);
 
   return bounded === '' ? '' : sentence(bounded);

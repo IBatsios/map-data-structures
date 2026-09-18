@@ -37,6 +37,35 @@ const V8_ON_BYTES =
 const TRAILING_COMMA = '{\n  "title": "Order intake",\n  "nodes": [],\n  "edges": [],\n}';
 
 /**
+ * V8's *no-position* form, which quotes the file's own first bytes back.
+ *
+ * Every message below was measured from `JSON.parse` on Node 24 / V8 13.6
+ * rather than remembered. This one is a YAML config saved with a `.json` name:
+ * V8 clipped its first line to ten characters, so the `900` the file's author
+ * wrote arrives as `position 9`. None of it is a position clause — the digits
+ * are the user's.
+ */
+const V8_QUOTING_A_FILE = 'Unexpected token \'p\', "position 9"... is not valid JSON';
+
+/** The file that message quotes. Its real fault is line 1, column 1. */
+const YAML_NAMING_A_POSITION = 'position 900: gantry\nnodes:\n  - id: a\n';
+
+/** The same trap at its sharpest: a short file is quoted whole, so the snippet
+ * can hold the engine's own clause words verbatim. */
+const V8_QUOTING_A_WHOLE_FILE =
+  'Unexpected token \'J\', "JSON at position 900" is not valid JSON';
+
+/** The file that message quotes, in full. */
+const FILE_NAMING_A_POSITION = 'JSON at position 900';
+
+/** V8 on a file with something after the design: `after JSON`, not `in JSON`. */
+const V8_AFTER_THE_JSON =
+  'Unexpected non-whitespace character after JSON at position 8 (line 2 column 1)';
+
+/** The file that message points into: the junk starts on line 2. */
+const JSON_THEN_JUNK = '{"a":1}\nextra';
+
+/**
  * Two control characters, written by code point.
  *
  * A control character typed straight into a source file is an invisible byte
@@ -133,6 +162,47 @@ describe('describeSyntaxFault', () => {
     // Assert
     expect(message).not.toMatch(/line \d/i);
     expect(message).not.toMatch(/column \d/i);
+  });
+
+  it('reads a position from the engine’s clause and never from the file it quotes', () => {
+    // The round 1 defect. V8's no-position form quotes the file's own first
+    // bytes, so a file whose text says `position 900` had that `9` scraped out
+    // of the quotation and printed back as a column. The engine said nothing
+    // about where; the only honest answer is that it did not.
+    // Act
+    const message = describeSyntaxFault(V8_QUOTING_A_FILE, YAML_NAMING_A_POSITION);
+
+    // Assert
+    expect(message).not.toMatch(/line \d/i);
+    expect(message).not.toMatch(/column \d/i);
+    expect(message).toContain('did not say where');
+  });
+
+  it('names no line for a short file quoted back whole, clause words and all', () => {
+    // The same trap at its sharpest: the quotation holds the engine's own
+    // clause words. What is quoted must also arrive intact — cutting a clause
+    // out of the middle of a file's own text would misquote the file.
+    // Act
+    const message = describeSyntaxFault(V8_QUOTING_A_WHOLE_FILE, FILE_NAMING_A_POSITION);
+
+    // Assert
+    expect(message).not.toMatch(/line \d/i);
+    expect(message).not.toMatch(/column \d/i);
+    expect(message).toContain('"JSON at position 900"');
+  });
+
+  it('still names the line when the engine puts its position after the JSON', () => {
+    // Not every position clause reads `in JSON at position`: a file with
+    // something after the design gets `after JSON at position`. Anchoring the
+    // clause must not cost this file the line it already had, and the
+    // preposition belongs to the clause rather than to what is left behind.
+    // Act
+    const message = describeSyntaxFault(V8_AFTER_THE_JSON, JSON_THEN_JUNK);
+
+    // Assert
+    expect(message).toBe(
+      'That file is not valid JSON. Line 2, column 1: Unexpected non-whitespace character.',
+    );
   });
 
   it('says the file is empty rather than quoting an end-of-input message', () => {
