@@ -6,8 +6,14 @@
  * project that no test and no type-checker can see into, and a wrong count is
  * exactly the kind of quiet mistake the drawing cannot show you.
  *
- * The wording is deliberately plain. Task 04 owns how success and failure are
- * said; this is the fact it will say.
+ * The wording says where the drawing is as well as what is in it. The status
+ * region is the app's only voice on a good file, and "loaded" left a reader who
+ * cannot see the page knowing a file was read and not that a picture appeared
+ * under it. "Is drawn below" costs four words and answers both.
+ *
+ * On failure this line is cleared and `describeLoadError`'s panel speaks
+ * instead, so the two live regions never talk over each other and a success
+ * sentence is never left sitting above a list of errors.
  */
 
 import type { Design } from './design.types';
@@ -25,14 +31,14 @@ import type { Design } from './design.types';
  * @example
  * ```typescript
  * describeUpload('order-intake.json', design);
- * // 'Loaded order-intake.json: 2 nodes, 1 edge.'
+ * // 'order-intake.json is drawn below: 2 nodes, 1 edge.'
  * ```
  */
 export function describeUpload(fileName: string, design: Design): string {
   const nodes = countOf(design.nodes.length, 'node');
   const edges = countOf(design.edges.length, 'edge');
 
-  return `Loaded ${fileName}: ${nodes}, ${edges}.`;
+  return `${fileName} is drawn below: ${nodes}, ${edges}.`;
 }
 
 /** `1 node`, `2 nodes`, `0 nodes` — English's only plural rule this app needs. */
