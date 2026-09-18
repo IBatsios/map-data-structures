@@ -6,7 +6,7 @@
 
 **Blocked by:** 01.
 
-**Status:** in progress
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
