@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 03, 05.
 
-**Status:** ready
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -18,12 +18,12 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can export the design as PDF: demonstrated end to end.
-- [ ] The PDF shows the same nodes and edges as the preview, with every label readable (5.2).
-- [ ] The download finishes within a few seconds for a design the size of the owner's use cases (11.1).
-- [ ] Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] As a user, I can export the design as PDF: demonstrated end to end.
+- [x] The PDF shows the same nodes and edges as the preview, with every label readable (5.2).
+- [x] The download finishes within a few seconds for a design the size of the owner's use cases (11.1).
+- [x] Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download.
+- [x] Every earlier test still passes; CI is green.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 

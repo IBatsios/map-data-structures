@@ -1,0 +1,38 @@
+{
+  "title": "Platform overview",
+  "nodes": [
+    { "id": "browser", "label": "Customer browser", "type": "user" },
+    { "id": "ops", "label": "Operations console", "type": "user" },
+    { "id": "edge", "label": "Edge router", "type": "service" },
+    { "id": "auth", "label": "Identity service", "type": "service" },
+    { "id": "catalogue", "label": "Catalogue service", "type": "service" },
+    { "id": "orders", "label": "Order service", "type": "service" },
+    { "id": "billing", "label": "Billing service", "type": "service" },
+    { "id": "events", "label": "Event bus", "type": "queue" },
+    { "id": "search", "label": "Search indexer", "type": "worker" },
+    { "id": "catalogue-db", "label": "Catalogue store", "type": "database" },
+    { "id": "order-db", "label": "Order store", "type": "database" },
+    { "id": "ledger", "label": "Ledger store", "type": "database" },
+    { "id": "psp", "label": "Payments provider", "type": "external" },
+    { "id": "mail", "label": "Transactional mail", "type": "external" },
+    { "id": "warehouse", "label": "Reporting warehouse", "type": "snowflake-thing" }
+  ],
+  "edges": [
+    { "from": "browser", "to": "edge", "label": "browses and buys" },
+    { "from": "ops", "to": "edge", "label": "runs the console" },
+    { "from": "edge", "to": "auth", "label": "checks the session" },
+    { "from": "edge", "to": "catalogue", "label": "asks for products" },
+    { "from": "edge", "to": "orders", "label": "places an order" },
+    { "from": "catalogue", "to": "catalogue-db", "label": "reads products" },
+    { "from": "orders", "to": "order-db", "label": "writes the order" },
+    { "from": "orders", "to": "events", "label": "publishes order placed" },
+    { "from": "events", "to": "billing", "label": "delivers order placed" },
+    { "from": "events", "to": "search", "label": "delivers catalogue changed" },
+    { "from": "billing", "to": "psp", "label": "authorises the card" },
+    { "from": "billing", "to": "ledger", "label": "writes the entry" },
+    { "from": "billing", "to": "mail", "label": "sends the receipt" },
+    { "from": "search", "to": "catalogue-db", "label": "reindexes" },
+    { "from": "ledger", "to": "warehouse", "label": "feeds nightly" },
+    { "from": "order-db", "to": "warehouse", "label": "feeds nightly" }
+  ]
+}

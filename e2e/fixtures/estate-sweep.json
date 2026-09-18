@@ -1,0 +1,437 @@
+{
+  "title": "Estate sweep",
+  "nodes": [
+    {
+      "id": "ingest-0",
+      "label": "Ingest stage 0",
+      "type": "service"
+    },
+    {
+      "id": "ingest-1",
+      "label": "Ingest stage 1",
+      "type": "worker"
+    },
+    {
+      "id": "ingest-2",
+      "label": "Ingest stage 2",
+      "type": "queue"
+    },
+    {
+      "id": "ingest-3",
+      "label": "Ingest stage 3",
+      "type": "database"
+    },
+    {
+      "id": "ingest-4",
+      "label": "Ingest stage 4",
+      "type": "external"
+    },
+    {
+      "id": "ingest-5",
+      "label": "Ingest stage 5",
+      "type": "user"
+    },
+    {
+      "id": "ingest-6",
+      "label": "Ingest stage 6",
+      "type": "decision"
+    },
+    {
+      "id": "ingest-7",
+      "label": "Ingest stage 7",
+      "type": "lambda-ish"
+    },
+    {
+      "id": "trade-0",
+      "label": "Trade stage 0",
+      "type": "worker"
+    },
+    {
+      "id": "trade-1",
+      "label": "Trade stage 1",
+      "type": "queue"
+    },
+    {
+      "id": "trade-2",
+      "label": "Trade stage 2",
+      "type": "database"
+    },
+    {
+      "id": "trade-3",
+      "label": "Trade stage 3",
+      "type": "external"
+    },
+    {
+      "id": "trade-4",
+      "label": "Trade stage 4",
+      "type": "user"
+    },
+    {
+      "id": "trade-5",
+      "label": "Trade stage 5",
+      "type": "decision"
+    },
+    {
+      "id": "trade-6",
+      "label": "Trade stage 6",
+      "type": "lambda-ish"
+    },
+    {
+      "id": "trade-7",
+      "label": "Trade stage 7",
+      "type": "service"
+    },
+    {
+      "id": "risk-0",
+      "label": "Risk stage 0",
+      "type": "queue"
+    },
+    {
+      "id": "risk-1",
+      "label": "Risk stage 1",
+      "type": "database"
+    },
+    {
+      "id": "risk-2",
+      "label": "Risk stage 2",
+      "type": "external"
+    },
+    {
+      "id": "risk-3",
+      "label": "Risk stage 3",
+      "type": "user"
+    },
+    {
+      "id": "risk-4",
+      "label": "Risk stage 4",
+      "type": "decision"
+    },
+    {
+      "id": "risk-5",
+      "label": "Risk stage 5",
+      "type": "lambda-ish"
+    },
+    {
+      "id": "risk-6",
+      "label": "Risk stage 6",
+      "type": "service"
+    },
+    {
+      "id": "risk-7",
+      "label": "Risk stage 7",
+      "type": "worker"
+    },
+    {
+      "id": "settle-0",
+      "label": "Settle stage 0",
+      "type": "database"
+    },
+    {
+      "id": "settle-1",
+      "label": "Settle stage 1",
+      "type": "external"
+    },
+    {
+      "id": "settle-2",
+      "label": "Settle stage 2",
+      "type": "user"
+    },
+    {
+      "id": "settle-3",
+      "label": "Settle stage 3",
+      "type": "decision"
+    },
+    {
+      "id": "settle-4",
+      "label": "Settle stage 4",
+      "type": "lambda-ish"
+    },
+    {
+      "id": "settle-5",
+      "label": "Settle stage 5",
+      "type": "service"
+    },
+    {
+      "id": "settle-6",
+      "label": "Settle stage 6",
+      "type": "worker"
+    },
+    {
+      "id": "settle-7",
+      "label": "Settle stage 7",
+      "type": "queue"
+    },
+    {
+      "id": "report-0",
+      "label": "Report stage 0",
+      "type": "external"
+    },
+    {
+      "id": "report-1",
+      "label": "Report stage 1",
+      "type": "user"
+    },
+    {
+      "id": "report-2",
+      "label": "Report stage 2",
+      "type": "decision"
+    },
+    {
+      "id": "report-3",
+      "label": "Report stage 3",
+      "type": "lambda-ish"
+    },
+    {
+      "id": "report-4",
+      "label": "Report stage 4",
+      "type": "service"
+    },
+    {
+      "id": "report-5",
+      "label": "Report stage 5",
+      "type": "worker"
+    },
+    {
+      "id": "report-6",
+      "label": "Report stage 6",
+      "type": "queue"
+    },
+    {
+      "id": "report-7",
+      "label": "Report stage 7",
+      "type": "database"
+    }
+  ],
+  "edges": [
+    {
+      "from": "ingest-0",
+      "to": "ingest-1",
+      "label": "hands over to stage 1"
+    },
+    {
+      "from": "ingest-1",
+      "to": "ingest-2",
+      "label": "hands over to stage 2"
+    },
+    {
+      "from": "ingest-2",
+      "to": "ingest-3",
+      "label": "hands over to stage 3"
+    },
+    {
+      "from": "ingest-3",
+      "to": "ingest-4",
+      "label": "hands over to stage 4"
+    },
+    {
+      "from": "ingest-4",
+      "to": "ingest-5",
+      "label": "hands over to stage 5"
+    },
+    {
+      "from": "ingest-5",
+      "to": "ingest-6",
+      "label": "hands over to stage 6"
+    },
+    {
+      "from": "ingest-6",
+      "to": "ingest-7",
+      "label": "hands over to stage 7"
+    },
+    {
+      "from": "trade-0",
+      "to": "trade-1",
+      "label": "hands over to stage 1"
+    },
+    {
+      "from": "trade-1",
+      "to": "trade-2",
+      "label": "hands over to stage 2"
+    },
+    {
+      "from": "trade-2",
+      "to": "trade-3",
+      "label": "hands over to stage 3"
+    },
+    {
+      "from": "trade-3",
+      "to": "trade-4",
+      "label": "hands over to stage 4"
+    },
+    {
+      "from": "trade-4",
+      "to": "trade-5",
+      "label": "hands over to stage 5"
+    },
+    {
+      "from": "trade-5",
+      "to": "trade-6",
+      "label": "hands over to stage 6"
+    },
+    {
+      "from": "trade-6",
+      "to": "trade-7",
+      "label": "hands over to stage 7"
+    },
+    {
+      "from": "ingest-7",
+      "to": "trade-0",
+      "label": "feeds trade"
+    },
+    {
+      "from": "risk-0",
+      "to": "risk-1",
+      "label": "hands over to stage 1"
+    },
+    {
+      "from": "risk-1",
+      "to": "risk-2",
+      "label": "hands over to stage 2"
+    },
+    {
+      "from": "risk-2",
+      "to": "risk-3",
+      "label": "hands over to stage 3"
+    },
+    {
+      "from": "risk-3",
+      "to": "risk-4",
+      "label": "hands over to stage 4"
+    },
+    {
+      "from": "risk-4",
+      "to": "risk-5",
+      "label": "hands over to stage 5"
+    },
+    {
+      "from": "risk-5",
+      "to": "risk-6",
+      "label": "hands over to stage 6"
+    },
+    {
+      "from": "risk-6",
+      "to": "risk-7",
+      "label": "hands over to stage 7"
+    },
+    {
+      "from": "trade-7",
+      "to": "risk-0",
+      "label": "feeds risk"
+    },
+    {
+      "from": "settle-0",
+      "to": "settle-1",
+      "label": "hands over to stage 1"
+    },
+    {
+      "from": "settle-1",
+      "to": "settle-2",
+      "label": "hands over to stage 2"
+    },
+    {
+      "from": "settle-2",
+      "to": "settle-3",
+      "label": "hands over to stage 3"
+    },
+    {
+      "from": "settle-3",
+      "to": "settle-4",
+      "label": "hands over to stage 4"
+    },
+    {
+      "from": "settle-4",
+      "to": "settle-5",
+      "label": "hands over to stage 5"
+    },
+    {
+      "from": "settle-5",
+      "to": "settle-6",
+      "label": "hands over to stage 6"
+    },
+    {
+      "from": "settle-6",
+      "to": "settle-7",
+      "label": "hands over to stage 7"
+    },
+    {
+      "from": "risk-7",
+      "to": "settle-0",
+      "label": "feeds settle"
+    },
+    {
+      "from": "report-0",
+      "to": "report-1",
+      "label": "hands over to stage 1"
+    },
+    {
+      "from": "report-1",
+      "to": "report-2",
+      "label": "hands over to stage 2"
+    },
+    {
+      "from": "report-2",
+      "to": "report-3",
+      "label": "hands over to stage 3"
+    },
+    {
+      "from": "report-3",
+      "to": "report-4",
+      "label": "hands over to stage 4"
+    },
+    {
+      "from": "report-4",
+      "to": "report-5",
+      "label": "hands over to stage 5"
+    },
+    {
+      "from": "report-5",
+      "to": "report-6",
+      "label": "hands over to stage 6"
+    },
+    {
+      "from": "report-6",
+      "to": "report-7",
+      "label": "hands over to stage 7"
+    },
+    {
+      "from": "settle-7",
+      "to": "report-0",
+      "label": "feeds report"
+    },
+    {
+      "from": "ingest-2",
+      "to": "risk-1",
+      "label": "flags for review"
+    },
+    {
+      "from": "trade-4",
+      "to": "report-2",
+      "label": "reports the fill"
+    },
+    {
+      "from": "risk-6",
+      "to": "settle-3",
+      "label": "releases the hold"
+    },
+    {
+      "from": "settle-5",
+      "to": "report-6",
+      "label": "closes the book"
+    },
+    {
+      "from": "ingest-6",
+      "to": "trade-2",
+      "label": "streams the quote"
+    },
+    {
+      "from": "trade-6",
+      "to": "risk-4",
+      "label": "checks the limit"
+    },
+    {
+      "from": "risk-2",
+      "to": "report-0",
+      "label": "raises the exception"
+    }
+  ]
+}

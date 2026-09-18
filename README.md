@@ -2,7 +2,7 @@
 
 Turn a JSON description of a system into an architectural design document. You
 choose a JSON file, the app draws its nodes and edges, and hands the same design
-back as a file — Markdown and HTML today, with PDF and Word still to come.
+back as a file — Markdown, HTML and PDF today, with Word still to come.
 
 Everything runs in your browser. There is no backend and no database, the site
 ships as static files, and no file you choose is ever uploaded anywhere.
@@ -74,11 +74,32 @@ style travels inside the file and nothing is fetched from anywhere — and it is
 laid out to print. A label that happens to be markup is shown as the text it
 says rather than run or removed.
 
-Both buttons are disabled until there is something to export, and go back to
-disabled the moment a file fails, so neither ever saves the design before last.
+**Export PDF** downloads `<design>.pdf`: the title, the drawing, and the same
+two tables, running onto as many pages as the design needs. The drawing goes in
+as vector rather than as a picture, so its text stays selectable and searchable
+and nothing blurs however far you zoom in. The file carries the one font it
+draws with, so it opens the same everywhere — including a label in Greek or
+Cyrillic, which the PDF standard fonts cannot spell.
 
-Still to come: PDF and Word. The task list in `docs/RUNBOOK.md` says what comes
-next.
+No font of a sensible size covers every character, so where that one has no
+glyph — an arrow such as `→`, or a label in Chinese, Arabic, Hebrew or an Indic
+script — the PDF draws a `■` in its place and the page says how many characters
+that was. The mark is there so that nothing goes missing quietly: `Gateway →
+Queue` comes out as `Gateway ■ Queue` rather than as `Gateway  Queue`. The
+Markdown and HTML exports carry every character as it was written.
+
+A tab, or any other control character a label happens to carry, is marked the
+same way, because a PDF stops the line it is in at one. A label's own line break
+is still a line break. One consequence of a mark per character is worth knowing
+before sending a file: two labels or ids that differ only in characters the font
+cannot draw read alike in the PDF — `東` and `京` are both `■` — and the Markdown
+and HTML exports are the ones that still tell them apart.
+
+Every button is disabled until there is something to export, and goes back to
+disabled the moment a file fails, so none of them ever saves the design before
+last.
+
+Still to come: Word. The task list in `docs/RUNBOOK.md` says what comes next.
 
 The JSON it reads looks like this:
 
@@ -108,6 +129,8 @@ src/lib/      the design core: types, the schema, the loader, the layout,
               the shape vocabulary, the SVG renderer, the exporters and the
               download helper they share, and the modules that turn a failed
               load into messages
+src/lib/fonts/ the font the PDF export embeds, generated from its source,
+              with its licence beside it
 src/pages/    the Astro pages
 src/styles/   CSS Modules, and the tests that measure their contrast
 e2e/          the Playwright walk, its fixtures, and the server it runs against
@@ -130,3 +153,7 @@ request — that is what runs CI. Conventions live in `CLAUDE.md`, decisions in
 ## License
 
 MIT. See `LICENSE`.
+
+`src/lib/fonts/robotoRegular.ts` holds Roboto Regular, which the PDF export
+embeds in the files it produces. Roboto is licensed under the SIL Open Font
+License 1.1, whose text is in `src/lib/fonts/Roboto-LICENSE.txt`.

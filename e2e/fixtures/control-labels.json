@@ -1,0 +1,14 @@
+{
+  "title": "Control characters",
+  "nodes": [
+    { "id": "alpha", "label": "Alpha\tBravo", "type": "service" },
+    { "id": "soh", "label": "Soh\u0001Charlie", "type": "queue" },
+    { "id": "del", "label": "Del\u007fDelta", "type": "database" },
+    { "id": "echo", "label": "Newline\nEcho", "type": "external" }
+  ],
+  "edges": [
+    { "from": "alpha", "to": "soh", "label": "edge\twith\ttabs" },
+    { "from": "soh", "to": "del", "label": "plain edge" },
+    { "from": "del", "to": "echo", "label": "carriage\r\nreturn" }
+  ]
+}

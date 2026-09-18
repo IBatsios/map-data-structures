@@ -1,0 +1,16 @@
+{
+  "title": "Regions → 東京",
+  "nodes": [
+    { "id": "gateway", "label": "Gateway → Queue", "type": "service" },
+    { "id": "tokyo", "label": "API gateway (東京)", "type": "external" },
+    { "id": "cairo", "label": "Cache (القاهرة)", "type": "database" },
+    { "id": "checks", "label": "check ✓ cross ✗", "type": "queue" },
+    { "id": "kept", "label": "keeps ≥ ± € … •", "type": "user" }
+  ],
+  "edges": [
+    { "from": "gateway", "to": "tokyo", "label": "double arrow ⇒ element ∈" },
+    { "from": "tokyo", "to": "cairo", "label": "replicates 東京" },
+    { "from": "cairo", "to": "checks", "label": "left ← updown ↔" },
+    { "from": "checks", "to": "kept", "label": "keeps ≥ and —" }
+  ]
+}

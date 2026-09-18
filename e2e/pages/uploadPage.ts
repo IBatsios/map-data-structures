@@ -15,12 +15,16 @@ export interface DrawnBox extends DrawnPoint {
   readonly height: number;
 }
 
-/** A file the page handed to the browser: what it was called, and what is in it. */
-export interface DownloadedFile {
+/** A file the page handed to the browser: what it was called and where it is. */
+export interface SavedFile {
   readonly name: string;
-  readonly text: string;
   /** Where it now sits on disk, which is nowhere near the design it came from. */
   readonly path: string;
+}
+
+/** The same, for a format whose bytes are text a test can read straight off. */
+export interface DownloadedFile extends SavedFile {
+  readonly text: string;
 }
 
 /**
@@ -42,6 +46,7 @@ export class UploadPage {
   readonly exports: Locator;
   readonly exportMarkdown: Locator;
   readonly exportHtml: Locator;
+  readonly exportPdf: Locator;
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
@@ -55,6 +60,7 @@ export class UploadPage {
     this.exports = page.getByRole('group', { name: 'Export the design' });
     this.exportMarkdown = page.locator('#export-markdown');
     this.exportHtml = page.locator('#export-html');
+    this.exportPdf = page.locator('#export-pdf');
   }
 
   async goto(): Promise<void> {
@@ -151,7 +157,7 @@ export class UploadPage {
 
   /** Clicks Export Markdown and waits for the file the browser saves. */
   async downloadMarkdown(): Promise<DownloadedFile> {
-    return this.exportUsing(this.exportMarkdown);
+    return withText(await this.exportUsing(this.exportMarkdown));
   }
 
   /**
@@ -161,7 +167,20 @@ export class UploadPage {
    *   left out, it stays where Playwright put it
    */
   async downloadHtml(saveAs?: string): Promise<DownloadedFile> {
-    return this.exportUsing(this.exportHtml, saveAs);
+    return withText(await this.exportUsing(this.exportHtml, saveAs));
+  }
+
+  /**
+   * Clicks Export PDF and waits for the file the browser saves.
+   *
+   * It comes back as a name and a path and not as text, because a PDF is bytes:
+   * reading it as a string is what `e2e/pdfText.ts` is for.
+   *
+   * @param saveAs - where to put it, for a test that then opens it from there;
+   *   left out, it stays where Playwright put it
+   */
+  async downloadPdf(saveAs?: string): Promise<SavedFile> {
+    return this.exportUsing(this.exportPdf, saveAs);
   }
 
   /**
@@ -173,13 +192,13 @@ export class UploadPage {
    * its own temporary place unless a test asks for it somewhere else, which is
    * how "open it from another folder" is tested.
    */
-  private async exportUsing(button: Locator, saveAs?: string): Promise<DownloadedFile> {
+  private async exportUsing(button: Locator, saveAs?: string): Promise<SavedFile> {
     const [download] = await Promise.all([
       this.page.waitForEvent('download'),
       button.click(),
     ]);
 
-    return { name: download.suggestedFilename(), ...(await fileOf(download, saveAs)) };
+    return { name: download.suggestedFilename(), path: await pathOf(download, saveAs) };
   }
 
   /** Every message the validation panel lists, in the order it lists them. */
@@ -311,18 +330,18 @@ function pointsOf(path: string): readonly DrawnPoint[] {
   return points;
 }
 
-/** Where a download ended up, and what is in it. */
-async function fileOf(
-  download: Download,
-  saveAs?: string,
-): Promise<{ readonly text: string; readonly path: string }> {
+/** Where a download ended up. */
+async function pathOf(download: Download, saveAs?: string): Promise<string> {
   if (saveAs !== undefined) {
     await download.saveAs(saveAs);
   }
 
-  const path = saveAs ?? (await download.path());
+  return saveAs ?? (await download.path());
+}
 
-  return { text: await readFile(path, 'utf8'), path };
+/** The same file, with its text read off disk, for the formats that are text. */
+async function withText(file: SavedFile): Promise<DownloadedFile> {
+  return { ...file, text: await readFile(file.path, 'utf8') };
 }
 
 function fixturePath(fixture: string): string {
