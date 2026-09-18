@@ -587,3 +587,35 @@ Both stand, and neither is this cycle's work.
 
 https://github.com/IBatsios/map-data-structures/pull/9 — draft, as the process asks.
 Sam marks it ready and merges.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| This handoff doc | Complete — all ten acceptance criteria checked, Jared's assignment, Amon's round 1, and Jahmyr's round 1 all present and legible | None. Re-verified independently rather than trusted: `wc -l` on all four modules matches the reported 346/203/115/90; `git diff --stat main...chore/split-layout-module` shows exactly the four source files, two new test files, and two docs changed, with `layout.test.ts`, `renderDrawing.ts`, `describeDrawing.ts`, `index.astro`, `.env.example`, `README.md`, `CLAUDE.md` all empty-diffed; all 16 named exports (`layoutDesign`, `DesignLayout`, `LayoutNode`, `LayoutEdge`, `LayoutBox`, `LayoutPoint`, the eight sizing constants, `DRAWING_MARGIN`, `SELF_LOOP_EXTENT`, `EDGE_LABEL_PADDING`) confirmed importable from `./layout`, re-exported rather than re-declared |
+| `README.md` | Amon's judgment that the `## Layout` section is still true, checked rather than assumed | Read the section directly: it describes `src/lib/` by what it holds ("the design core: types, the schema, the loader, the layout, …") rather than file by file, so the split does not make it stale. Left unchanged, correctly |
+| `CLAUDE.md` | No material change — status and stack are unaffected by a refactor with no behaviour change, and neither section names `layout.ts` or its internal shape | Left unchanged |
+| `docs/DECISIONS.md` | D46 appended, one row, append-only (`git diff` on the file is one added line, zero removed) | None needed |
+| `.env.example` | Unchanged, correctly — the app still reads no environment variables | None needed |
+| `docs/ARCHITECTURE.md` | Checked for staleness per the assignment's ask. It describes layout at a conceptual level ("computes a layout … The layout engine is not specified in the intake") and never names `layout.ts` or any internal module. The split does not make it stale | No action; nothing to flag to a person |
+| `docs/tasks/` | No task file exists for this chore, correctly — it isn't in `docs/intake.md`, so a hand-written file would be lost on regenerate. The handoff doc is the whole contract, as Jared's assignment states | None needed |
+
+### Gates
+
+`bun run test`: pass, 206 tests in 13 files, re-run independently on this branch before merge.
+CI: green — both `test` checks pass on PR #9 (`gh pr checks`), re-confirmed immediately before merge.
+Secret scan: `gitleaks detect --source . --no-banner` — "no leaks found", 16 commits scanned.
+
+### Merge
+
+Squashed as `8a55336` into `main`. Branch `chore/split-layout-module` deleted (confirmed via `git fetch --prune`). PR https://github.com/IBatsios/map-data-structures/pull/9.
+
+### Left for a person
+
+Nothing. No document was found wrong, no generated doc needed a person's edit, and no Phase 0 step was outstanding — the remote already existed and CI already ran.
+
+The three items already queued in `handoff-next-phase.md` (Firefox/SpiderMonkey wording fault, `loadDesign.ts`'s doc comment, `loadDesign.test.ts:146`'s conditional assertion) remain queued for their own small cycle after Task 05, per Jared's routing — not this cycle's or this merge's to act on.
