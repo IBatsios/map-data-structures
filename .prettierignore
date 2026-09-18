@@ -1,0 +1,14 @@
+# Build output and dependencies
+dist/
+.astro/
+node_modules/
+
+# Lockfile: bun owns its formatting
+bun.lock
+
+# docs/ is generated from docs/intake.md by kickoff, except DECISIONS.md and
+# the handoff items. Reformatting it would churn files that get regenerated.
+docs/
+
+# Agent and command definitions are owned by the pipeline, not the formatter.
+.claude/

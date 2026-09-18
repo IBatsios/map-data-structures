@@ -4,195 +4,198 @@ const pageTitle = 'MapDataStructures';
 
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>{pageTitle}</title>
-	</head>
-	<body>
-		<main>
-			<h1>{pageTitle}</h1>
-			<p>
-				Choose a JSON file that describes a system and its drawing appears below. The
-				file is read in your browser and is never sent anywhere.
-			</p>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <main>
+      <h1>{pageTitle}</h1>
+      <p>
+        Choose a JSON file that describes a system and its drawing appears below. The file
+        is read in your browser and is never sent anywhere.
+      </p>
 
-			<p>
-				<label for="design-file">Design JSON file</label>
-				<input id="design-file" type="file" accept="application/json,.json" />
-			</p>
+      <p>
+        <label for="design-file">Design JSON file</label>
+        <input id="design-file" type="file" accept="application/json,.json" />
+      </p>
 
-			<p id="upload-status" role="status"></p>
+      <p id="upload-status" role="status"></p>
 
-			<div id="drawing"></div>
-		</main>
+      <div id="drawing"></div>
+    </main>
 
-		<script>
-			import type { Design, DesignEdge, DesignNode } from '../lib/design.types';
-			import { parseDesign } from '../lib/parseDesign';
+    <script>
+      import type { Design, DesignEdge, DesignNode } from '../lib/design.types';
+      import { parseDesign } from '../lib/parseDesign';
 
-			const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
-			const BOX_WIDTH = 160;
-			const BOX_HEIGHT = 64;
-			const BOX_GAP = 56;
-			const MARGIN = 24;
+      const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+      const BOX_WIDTH = 160;
+      const BOX_HEIGHT = 64;
+      const BOX_GAP = 56;
+      const MARGIN = 24;
 
-			interface Point {
-				readonly x: number;
-				readonly y: number;
-			}
+      interface Point {
+        readonly x: number;
+        readonly y: number;
+      }
 
-			interface PageElements {
-				readonly fileInput: HTMLInputElement;
-				readonly status: HTMLElement;
-				readonly drawing: HTMLElement;
-			}
+      interface PageElements {
+        readonly fileInput: HTMLInputElement;
+        readonly status: HTMLElement;
+        readonly drawing: HTMLElement;
+      }
 
-			/**
-			 * The whole of the walking skeleton: choose a file, read it here in the
-			 * browser, and draw a box per node and a line per edge. Placement is a
-			 * single row; Task 03 replaces it with a real layout.
-			 */
-			function startUploadPage(): void {
-				const elements = findPageElements();
+      /**
+       * The whole of the walking skeleton: choose a file, read it here in the
+       * browser, and draw a box per node and a line per edge. Placement is a
+       * single row; Task 03 replaces it with a real layout.
+       */
+      function startUploadPage(): void {
+        const elements = findPageElements();
 
-				elements.fileInput.addEventListener('change', () => {
-					void drawChosenFile(elements);
-				});
-			}
+        elements.fileInput.addEventListener('change', () => {
+          void drawChosenFile(elements);
+        });
+      }
 
-			function findPageElements(): PageElements {
-				const fileInput = document.querySelector('#design-file');
-				const status = document.querySelector('#upload-status');
-				const drawing = document.querySelector('#drawing');
+      function findPageElements(): PageElements {
+        const fileInput = document.querySelector('#design-file');
+        const status = document.querySelector('#upload-status');
+        const drawing = document.querySelector('#drawing');
 
-				if (
-					!(fileInput instanceof HTMLInputElement) ||
-					!(status instanceof HTMLElement) ||
-					!(drawing instanceof HTMLElement)
-				) {
-					throw new Error('The upload page is missing one of its elements.');
-				}
+        if (
+          !(fileInput instanceof HTMLInputElement) ||
+          !(status instanceof HTMLElement) ||
+          !(drawing instanceof HTMLElement)
+        ) {
+          throw new Error('The upload page is missing one of its elements.');
+        }
 
-				return { fileInput, status, drawing };
-			}
+        return { fileInput, status, drawing };
+      }
 
-			async function drawChosenFile(elements: PageElements): Promise<void> {
-				const file = elements.fileInput.files?.[0];
+      async function drawChosenFile(elements: PageElements): Promise<void> {
+        const file = elements.fileInput.files?.[0];
 
-				if (!file) {
-					return;
-				}
+        if (!file) {
+          return;
+        }
 
-				try {
-					const design = parseDesign(JSON.parse(await file.text()));
-					elements.drawing.replaceChildren(renderDesign(design));
-					elements.status.textContent = '';
-				} catch (error) {
-					// Never leave a failure silent. Task 04 replaces this one line with
-					// messages that name the line or the field at fault.
-					elements.drawing.replaceChildren();
-					elements.status.textContent = `That file could not be drawn: ${describe(error)}`;
-				}
-			}
+        try {
+          const design = parseDesign(JSON.parse(await file.text()));
+          elements.drawing.replaceChildren(renderDesign(design));
+          elements.status.textContent = '';
+        } catch (error) {
+          // Never leave a failure silent. Task 04 replaces this one line with
+          // messages that name the line or the field at fault.
+          elements.drawing.replaceChildren();
+          elements.status.textContent = `That file could not be drawn: ${describe(error)}`;
+        }
+      }
 
-			function renderDesign(design: Design): SVGElement {
-				const svg = createSvgElement('svg', {
-					width: String(svgWidthFor(design.nodes.length)),
-					height: String(MARGIN * 2 + BOX_HEIGHT),
-					role: 'img',
-					'aria-label': `Drawing of ${design.title}`,
-				});
+      function renderDesign(design: Design): SVGElement {
+        const svg = createSvgElement('svg', {
+          width: String(svgWidthFor(design.nodes.length)),
+          height: String(MARGIN * 2 + BOX_HEIGHT),
+          role: 'img',
+          'aria-label': `Drawing of ${design.title}`,
+        });
 
-				const title = createSvgElement('title', {});
-				title.textContent = design.title;
-				svg.append(title);
+        const title = createSvgElement('title', {});
+        title.textContent = design.title;
+        svg.append(title);
 
-				// Edges first, so the boxes sit over the lines rather than under them.
-				const origins = originsByNodeId(design.nodes);
-				for (const edge of design.edges) {
-					svg.append(renderEdge(edge, origins));
-				}
-				for (const [index, node] of design.nodes.entries()) {
-					svg.append(...renderNode(node, boxOriginOf(index)));
-				}
+        // Edges first, so the boxes sit over the lines rather than under them.
+        const origins = originsByNodeId(design.nodes);
+        for (const edge of design.edges) {
+          svg.append(renderEdge(edge, origins));
+        }
+        for (const [index, node] of design.nodes.entries()) {
+          svg.append(...renderNode(node, boxOriginOf(index)));
+        }
 
-				return svg;
-			}
+        return svg;
+      }
 
-			function renderNode(node: DesignNode, origin: Point): readonly SVGElement[] {
-				const box = createSvgElement('rect', {
-					x: String(origin.x),
-					y: String(origin.y),
-					width: String(BOX_WIDTH),
-					height: String(BOX_HEIGHT),
-					fill: 'none',
-					stroke: 'currentColor',
-				});
+      function renderNode(node: DesignNode, origin: Point): readonly SVGElement[] {
+        const box = createSvgElement('rect', {
+          x: String(origin.x),
+          y: String(origin.y),
+          width: String(BOX_WIDTH),
+          height: String(BOX_HEIGHT),
+          fill: 'none',
+          stroke: 'currentColor',
+        });
 
-				const label = createSvgElement('text', {
-					x: String(origin.x + BOX_WIDTH / 2),
-					y: String(origin.y + BOX_HEIGHT / 2),
-					'text-anchor': 'middle',
-					'dominant-baseline': 'middle',
-					fill: 'currentColor',
-				});
-				label.textContent = node.label;
+        const label = createSvgElement('text', {
+          x: String(origin.x + BOX_WIDTH / 2),
+          y: String(origin.y + BOX_HEIGHT / 2),
+          'text-anchor': 'middle',
+          'dominant-baseline': 'middle',
+          fill: 'currentColor',
+        });
+        label.textContent = node.label;
 
-				return [box, label];
-			}
+        return [box, label];
+      }
 
-			function renderEdge(edge: DesignEdge, origins: ReadonlyMap<string, Point>): SVGElement {
-				const from = origins.get(edge.from);
-				const to = origins.get(edge.to);
+      function renderEdge(
+        edge: DesignEdge,
+        origins: ReadonlyMap<string, Point>,
+      ): SVGElement {
+        const from = origins.get(edge.from);
+        const to = origins.get(edge.to);
 
-				if (!from || !to) {
-					throw new Error('an edge names a node the file does not define');
-				}
+        if (!from || !to) {
+          throw new Error('an edge names a node the file does not define');
+        }
 
-				return createSvgElement('line', {
-					x1: String(from.x + BOX_WIDTH),
-					y1: String(from.y + BOX_HEIGHT / 2),
-					x2: String(to.x),
-					y2: String(to.y + BOX_HEIGHT / 2),
-					stroke: 'currentColor',
-				});
-			}
+        return createSvgElement('line', {
+          x1: String(from.x + BOX_WIDTH),
+          y1: String(from.y + BOX_HEIGHT / 2),
+          x2: String(to.x),
+          y2: String(to.y + BOX_HEIGHT / 2),
+          stroke: 'currentColor',
+        });
+      }
 
-			function originsByNodeId(nodes: readonly DesignNode[]): ReadonlyMap<string, Point> {
-				return new Map(nodes.map((node, index) => [node.id, boxOriginOf(index)]));
-			}
+      function originsByNodeId(nodes: readonly DesignNode[]): ReadonlyMap<string, Point> {
+        return new Map(nodes.map((node, index) => [node.id, boxOriginOf(index)]));
+      }
 
-			function boxOriginOf(index: number): Point {
-				return { x: MARGIN + index * (BOX_WIDTH + BOX_GAP), y: MARGIN };
-			}
+      function boxOriginOf(index: number): Point {
+        return { x: MARGIN + index * (BOX_WIDTH + BOX_GAP), y: MARGIN };
+      }
 
-			function svgWidthFor(nodeCount: number): number {
-				const boxes = Math.max(nodeCount, 1);
-				return MARGIN * 2 + boxes * BOX_WIDTH + (boxes - 1) * BOX_GAP;
-			}
+      function svgWidthFor(nodeCount: number): number {
+        const boxes = Math.max(nodeCount, 1);
+        return MARGIN * 2 + boxes * BOX_WIDTH + (boxes - 1) * BOX_GAP;
+      }
 
-			function createSvgElement(
-				name: string,
-				attributes: Readonly<Record<string, string>>,
-			): SVGElement {
-				const element = document.createElementNS(SVG_NAMESPACE, name);
+      function createSvgElement(
+        name: string,
+        attributes: Readonly<Record<string, string>>,
+      ): SVGElement {
+        const element = document.createElementNS(SVG_NAMESPACE, name);
 
-				for (const [attribute, value] of Object.entries(attributes)) {
-					element.setAttribute(attribute, value);
-				}
+        for (const [attribute, value] of Object.entries(attributes)) {
+          element.setAttribute(attribute, value);
+        }
 
-				return element;
-			}
+        return element;
+      }
 
-			function describe(error: unknown): string {
-				return error instanceof Error ? error.message : String(error);
-			}
+      function describe(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
+      }
 
-			startUploadPage();
-		</script>
-	</body>
+      startUploadPage();
+    </script>
+  </body>
 </html>
