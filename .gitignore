@@ -1,0 +1,21 @@
+# Generated from docs/intake.md by kickoff v0.1.0. Edit the intake, not this file.
+
+# Environment and secrets: never commit these
+.env
+.env.*
+!.env.example
+
+# TypeScript stack: Astro build output, dependencies, test artifacts
+node_modules/
+dist/
+build/
+.astro/
+coverage/
+test-results/
+playwright-report/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
