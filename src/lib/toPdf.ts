@@ -13,7 +13,7 @@
  * `pdfPlan.test.ts`. This module puts ink where the plan says, and every line
  * of it needs a real browser: `renderDrawing` builds DOM elements, and
  * `svg2pdf` reads the styles the page resolved for them. This project's Vitest
- * run has no DOM at all, so this half is asserted in `e2e/export.spec.ts`
+ * run has no DOM at all, so this half is asserted in `e2e/exportPdf.spec.ts`
  * against a real browser, exactly as D55 settled for Task 06.
  *
  * It takes the **layout**, not the design (D48), and it takes its `Document` as

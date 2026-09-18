@@ -560,3 +560,205 @@ Seven rows appended to `docs/DECISIONS.md`:
   a reason.
 - Nothing was opened in `describeLoadError.ts`, `loadDesign.ts`, `layout.ts` or
   `empty.json`, and the `intersectRect` crash was not touched. All still carried.
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Changes requested.** Five of the six criteria hold and this is solid work — the
+route, the measurement, the font embedding and the two-oracle walk are all right.
+Criterion 2 does not hold, and the reason is bigger than the known gap says: **the
+PDF silently drops any character the embedded face does not carry, and that
+includes the arrows `→`, `←`, `↔`, `⇒` and the marks `✓`, `✗`, `∈`** — not only
+the CJK, Arabic, Hebrew and Indic scripts D65 enumerates. An arrow in a label is
+an everyday thing in an architecture diagram, so this reaches ordinary
+English-language designs and not only non-Latin ones.
+
+The open question about the 40-node drawing I answer below, and the answer is
+**yes, criterion 2 is satisfiable by "readable in the tables and at any zoom"** —
+that half is not why the box is unchecked.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can export the design as PDF: demonstrated end to end | **pass** | Drove `dist/` in Chromium by hand, outside the suite, and exported nine designs — the five fixtures plus four adversarial ones I wrote. Every one produced a file beginning `%PDF-` that opens and whose text `pdftotext` (xpdf 4.06) reads back. No console errors and no page errors on any of them |
+| The PDF shows the same nodes and edges as the preview, with every label readable (5.2) | **fail** | Defect 1 below. `A → B` exports as `A  B`; `API gateway (東京)` exports as `API gateway ()`. The preview, the `.md` and the `.html` all carry the originals; I checked all three |
+| The download finishes within a few seconds for a design the size of the owner's use cases (11.1) | **pass** | Re-measured independently, click to file-in-hand: `order-intake` 222 ms, `platform-overview` (15/16) **139 ms**, `estate-sweep` (40/46) **192 ms**, and a 200-node/259-edge design I built **479 ms**. Amon's table reproduces. The loose 15 s guard is the right call and I agree with the reasoning |
+| Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download | **fail** | 283 Vitest and 67 Playwright all pass and the walk does check the download. But the behaviour in defect 1 is one a user observes and nothing covers it — which is precisely why nobody saw it. Contingent on defect 1; recheck the two together |
+| Every earlier test still passes; CI is green | **pending CI** | Locally nothing regressed: `export.spec.ts`'s Markdown and HTML blocks, `drawing.spec.ts` and `validation.spec.ts` are all green. The CI result is on the pull request |
+| Any new environment variable is in `.env.example` with a placeholder | **pass** | Grepped `process.env`, `import.meta.env`, `Deno.env` and `getenv` across the tree: the only hits outside `docs/` are `process.env.CI` in `playwright.config.ts`, which the runner sets. `.env.example` correctly still lists none. `gitleaks detect --source . --no-banner`: 20 commits, 1.31 MB, **no leaks found** |
+
+### Command results
+
+`bun run test`: **283 passed, 18 files**, 697 ms.
+`bun run test:e2e`: **67 passed**, 8.5 s.
+`bun run check`: **0 errors, 0 warnings, 0 hints** across 53 files.
+`bun run build`: **pass**, 1 page in 660 ms.
+Secret scan: `gitleaks` — **no leaks found**.
+
+### Defects for Amon
+
+**1. `src/lib/toPdf.ts:resolveStyles`, with `src/lib/fonts/robotoRegular.ts` —
+every character outside the embedded face is dropped silently, and the scope is
+wider than D65 records.**
+
+Expected, from intake 5.2: *"nothing dropped or mislabeled"*, and *"Every export
+format must show the same content as the browser preview."* Actual: a character
+Roboto Regular does not carry is removed from the PDF with no signal — not drawn
+in the picture **and not written in the tables either**, so no copy of it
+survives anywhere in the file. The cause is that `toPdf` points every piece of
+text at the single embedded face — `resolveStyles` sets `font-family: Roboto` on
+every element of the drawing, and the tables are written with it too — and jsPDF
+emits nothing for a code point that face has no glyph for.
+
+D65 names this as CJK, Arabic, Hebrew and Indic. That understates it. Measured,
+by exporting a fixture of common symbols and reading the file back with
+`pdftotext`:
+
+| In the label (the preview shows it) | In the PDF |
+|---|---|
+| `A -> B: → arrow` | `A -> B:  arrow` |
+| `check ✓ cross ✗` | `check  cross` |
+| `double arrow ⇒ element ∈` | `double arrow  element` |
+| `left ← updown ↔` | `left  updown` |
+| `at least ≥ 99.9%`, and `± § ° € £ ¥ ™ © … • ½ † ‰` | all correct |
+
+An arrow is not an exotic script. This is a tool for drawing systems, and
+`Gateway → Queue` is a label its users will write.
+
+Worse than plain absence is the mixed case, because the result is well-formed
+and wrong rather than visibly broken:
+
+| In the label | In the PDF |
+|---|---|
+| `API gateway (東京)` | `API gateway ()` |
+| `Cache (القاهرة)` | `Cache ()` |
+| `replicates 東京→القاهرة` | `replicates` |
+| `Billing — תל אביב` | `Billing —` |
+
+`API gateway ()` reads as a complete label. A reader has no way to know a region
+name was there, and the person who exported it has no way to know either,
+because the export reports success. That is intake 5.2's "mislabeled", and it is
+the quiet wrongness the PRD rules out rather than an honest limit.
+
+The fix is **not** "embed a CJK font" — that is megabytes and I am not asking for
+it. It is that the loss must stop being silent. Three shapes, and the choice is
+yours:
+
+- draw a visible placeholder such as `□` for a code point the face lacks, so the
+  loss is in the document where a reader can see it;
+- tell the user after the export — the page already has `#upload-status` with
+  `role="status"` and already speaks there in the app's own words (D43) — with a
+  sentence naming how many labels lost characters and pointing at the Markdown
+  or HTML export, which do carry them;
+- or, if you judge neither is affordable inside this task, say so and hand the
+  scope question up, rather than leaving it as a `Known gaps` entry.
+
+Whichever you take, it needs a test. The note that *"adding one would mean adding
+a test that asserts a label is missing"* is the reason nothing covers this today
+— but the test to write is not "assert the label is missing". It is "assert the
+user is told", or "assert the placeholder is drawn". There is no fixture for an
+uncovered character; the one I used is described above and is trivial to
+rebuild. D65's enumerated list wants correcting in the same pass, since arrows
+and check marks are not on it and they are the common case.
+
+**2. Minor — `src/lib/toPdf.ts`: the produced PDF carries no `/Title` and no
+`/Lang`.** `Producer` is `jsPDF 4.2.1` and the Info dictionary holds nothing
+else. The design's title is drawn as ink on page 1 but is not metadata, so a
+viewer shows the file name in its window bar and a screen reader has no document
+title or language to announce. `pdf.setProperties({ title: layout.title })` and
+`pdf.setLanguage('en')` are one line each. Not a criterion failure and not a
+blocker — but Task 08's `.docx` will want the same, so the habit is worth
+settling here.
+
+### The judgement call Amon asked for
+
+**Is criterion 2 met by "readable in the tables and at any zoom"? Yes — that half
+of it.** Every label is in the file at full size in the tables, the drawing is
+vector so it stays sharp at any magnification, and nothing is dropped or
+mislabeled *by the scaling*. A PDF attached to a ticket is read on a screen. The
+criterion's words are "every label readable", not "readable at 100% on paper",
+and a label you can zoom to is readable.
+
+**But the measurement is worse than the gap says, and the number belongs on the
+record.** I pulled the text matrices out of page 1 of each file. The drawing is
+scaled to one page, so its 12 pt labels land at:
+
+| Fixture | Nodes | Drawing label, on the page |
+|---|---|---|
+| `markup-labels.json` | 4 | 11.8 pt |
+| `order-intake.json` | 7 | 10.2 pt |
+| `platform-overview.json` | 15 | **4.0 pt** |
+| `estate-sweep.json` | 40 | **1.2 pt** |
+| a 200-node design (mine) | 200 | 0.24 pt |
+
+The gap is written as "a 40-node drawing prints small". It starts at **15
+nodes** — `platform-overview.json`, the fixture created for this task and
+labelled *a design at the owner's scale*. 4 pt is below the smallest type anyone
+sets in print. So the printed drawing stops being useful at the owner's own
+scale, not three times past it.
+
+That is a scheduling matter rather than a defect in this task: landscape pages,
+or a readable floor on the label size with the drawing tiled across sheets, is
+the fix, and neither is in scope here. **Jared and Sam should see this table**,
+because "a few dozen nodes" was the headroom this task was asked to show and the
+honest answer is that the picture degrades a good deal earlier than that. The
+tables carry every label whatever the drawing is scaled to, which is what keeps
+the criterion satisfiable at all.
+
+### Adversarial pass, beyond the checklist
+
+All clean unless noted.
+
+- A zero-byte file, a real `.png`, a `.png` renamed `.json`, trailing-comma JSON,
+  valid JSON that is not a design, and JSON missing `nodes` entirely: each leaves
+  Export PDF **disabled** and shows the validation panel. There is no way to
+  reach the exporter from a failed load.
+- A design with no nodes: one page, D51's sentence, both table headings, the
+  right file name. Matches what the Markdown and HTML exports say.
+- 200 nodes and 259 edges: 14 pages, 730 KB, 479 ms, nothing lost off the end.
+- Duplicate identical edges, a 400-character unbroken word, a 300-character edge
+  label, a label carrying a newline and a tab, leading and trailing spaces, and a
+  title full of markup: all export, all wrap, and the file name is sanitised. No
+  throw.
+- Labels that are markup: shown as the text they say, in the drawing and in both
+  tables. D56 holds in this format too.
+- Greek and Cyrillic: correct in the drawing **and** in the table. The
+  `550normal` defect is genuinely fixed — confirmed independently by reading the
+  faces out with `pdftotext` rather than with `pdfText.ts`.
+- Double-clicking Export PDF on a 200-node design does produce two identical
+  downloads, as known gap 4 says. Parked with D41; agreed.
+
+### Second oracle
+
+`e2e/pdfText.ts` is hand-written, so I did not take its word for anything. Every
+content claim above was re-read out of the files with `pdftotext` (xpdf 4.06),
+and the font claim was re-derived by parsing the `Tf` operators and text matrices
+myself. The two agree everywhere I checked, which also means `pdfText.ts` can be
+trusted going into Task 08.
+
+### Accessibility, best effort
+
+The new button carries its own visible name, is `type="button"`, sits in the
+existing `role="group"` named "Export the design" with no restructuring (D59),
+and is reachable and operable from the keyboard — Tab from Export HTML lands on
+it and Enter downloads, which the walk asserts. The off-screen holder `toPdf`
+puts in the page is `aria-hidden`, `pointer-events: none`, holds nothing
+focusable, and is removed in a `finally`. No new issue at any severity. The
+missing `/Lang` on the produced file is defect 2 above.
+
+### Fixed in place
+
+Two wrong file references in doc comments, both introduced by this task.
+`src/lib/toPdf.ts:16` and `src/lib/pdfPlan.test.ts:15` each said the DOM half is
+asserted in `e2e/export.spec.ts`, but the PDF walk went to
+`e2e/exportPdf.spec.ts` — which D63 and D68 both record correctly. Nothing else
+touched; the pre-existing references in `download.test.ts` and `toHtml.test.ts`
+are right for their formats and were left alone.
+
+### Checkboxes
+
+Checked 1, 3 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 and 4 unchecked for
+defect 1, and 5 unchecked until CI reports on the pull request. `**Status:**`
+stays `in progress`.

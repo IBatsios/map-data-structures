@@ -12,7 +12,7 @@ import { toMarkdown } from './toMarkdown';
  * This is the half of the PDF export a unit test can reach. The other half is
  * `toPdf`, which needs a `Document` — `renderDrawing` builds DOM elements and
  * `svg2pdf` reads them — and this project's Vitest run has no DOM at all, so
- * everything DOM-shaped is asserted in `e2e/export.spec.ts` against a real
+ * everything DOM-shaped is asserted in `e2e/exportPdf.spec.ts` against a real
  * browser. D55 recorded that split for Task 06 and this follows it: what a
  * string and a number can answer belongs here, and that is most of the
  * document — the tables' text, the ordering, the wrapping, the page count, and
