@@ -22,7 +22,7 @@
 - [ ] The PDF shows the same nodes and edges as the preview, with every label readable (5.2).
 - [x] The download finishes within a few seconds for a design the size of the owner's use cases (11.1).
 - [ ] Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download.
-- [ ] Every earlier test still passes; CI is green.
+- [x] Every earlier test still passes; CI is green.
 - [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills

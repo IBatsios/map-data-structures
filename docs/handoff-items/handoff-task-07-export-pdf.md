@@ -586,7 +586,7 @@ that half is not why the box is unchecked.
 | The PDF shows the same nodes and edges as the preview, with every label readable (5.2) | **fail** | Defect 1 below. `A → B` exports as `A  B`; `API gateway (東京)` exports as `API gateway ()`. The preview, the `.md` and the `.html` all carry the originals; I checked all three |
 | The download finishes within a few seconds for a design the size of the owner's use cases (11.1) | **pass** | Re-measured independently, click to file-in-hand: `order-intake` 222 ms, `platform-overview` (15/16) **139 ms**, `estate-sweep` (40/46) **192 ms**, and a 200-node/259-edge design I built **479 ms**. Amon's table reproduces. The loose 15 s guard is the right call and I agree with the reasoning |
 | Tests cover the behavior, as a user would observe it, and pass; the Playwright walk checks this download | **fail** | 283 Vitest and 67 Playwright all pass and the walk does check the download. But the behaviour in defect 1 is one a user observes and nothing covers it — which is precisely why nobody saw it. Contingent on defect 1; recheck the two together |
-| Every earlier test still passes; CI is green | **pending CI** | Locally nothing regressed: `export.spec.ts`'s Markdown and HTML blocks, `drawing.spec.ts` and `validation.spec.ts` are all green. The CI result is on the pull request |
+| Every earlier test still passes; CI is green | **pass** | Nothing regressed locally, and CI is green on [PR #15](https://github.com/IBatsios/map-data-structures/pull/15): typecheck 0 errors, 283 Vitest, 67 Playwright in 18.5 s on the shared runner. The whole e2e run finishing in 18.5 s is itself a point for the loose guard — a 15 s per-export assertion has room it will not need |
 | Any new environment variable is in `.env.example` with a placeholder | **pass** | Grepped `process.env`, `import.meta.env`, `Deno.env` and `getenv` across the tree: the only hits outside `docs/` are `process.env.CI` in `playwright.config.ts`, which the runner sets. `.env.example` correctly still lists none. `gitleaks detect --source . --no-banner`: 20 commits, 1.31 MB, **no leaks found** |
 
 ### Command results
@@ -596,6 +596,7 @@ that half is not why the box is unchecked.
 `bun run check`: **0 errors, 0 warnings, 0 hints** across 53 files.
 `bun run build`: **pass**, 1 page in 660 ms.
 Secret scan: `gitleaks` — **no leaks found**.
+CI: **green** on PR #15 — typecheck, 283 Vitest and 67 Playwright, 18.5 s e2e.
 
 ### Defects for Amon
 
@@ -759,6 +760,6 @@ are right for their formats and were left alone.
 
 ### Checkboxes
 
-Checked 1, 3 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 and 4 unchecked for
-defect 1, and 5 unchecked until CI reports on the pull request. `**Status:**`
-stays `in progress`.
+Checked 1, 3, 5 and 6 in `docs/tasks/07-export-pdf.md`. Left 2 and 4 unchecked
+for defect 1. `**Status:**` stays `in progress`, which is Amon's to change only
+once defect 1 is settled and I have re-verified it.
