@@ -16,7 +16,7 @@
  *   (D52), rather than reaching for a global.
  * - `htmlPage(layout, drawing)` is the whole document given the drawing's
  *   markup, and is pure. This project's Vitest run has no DOM at all, so this
- *   is the half a unit test can reach; the other half is Playwright's. D56
+ *   is the half a unit test can reach; the other half is Playwright's. D55
  *   records that split.
  *
  * It takes the **layout**, not the design, for D48's reason: the layout carries

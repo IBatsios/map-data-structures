@@ -2,7 +2,7 @@
 
 Turn a JSON description of a system into an architectural design document. You
 choose a JSON file, the app draws its nodes and edges, and hands the same design
-back as a file — Markdown today, with Word, PDF and HTML still to come.
+back as a file — Markdown and HTML today, with PDF and Word still to come.
 
 Everything runs in your browser. There is no backend and no database, the site
 ships as static files, and no file you choose is ever uploaded anywhere.
@@ -63,13 +63,22 @@ file loads, and no drawing is left behind that nothing is describing.
 Once a design is drawn, **Export Markdown** downloads it as `<design>.md`: the
 title as a heading, a table of every node, a table of every edge, and the drawing
 itself as a fenced ` ```mermaid ` flowchart, which GitHub and GitLab render where
-the file is pasted. The button is disabled until there is something to export,
-and goes back to disabled the moment a file fails, so it never saves the design
-before last. Node ids in the diagram are the app's own — `n0`, `n1` — because a
-design's ids may hold characters Mermaid will not take; yours stay in the table.
+the file is pasted. Node ids in the diagram are the app's own — `n0`, `n1` —
+because a design's ids may hold characters Mermaid will not take; yours stay in
+the table.
 
-Still to come: HTML, PDF and Word. The task list in `docs/RUNBOOK.md` says what
-comes next.
+**Export HTML** downloads the same design as `<design>.html`: one standalone
+page holding the drawing itself, as the preview drew it, above the same two
+tables. It opens in any browser from any folder with nothing beside it — every
+style travels inside the file and nothing is fetched from anywhere — and it is
+laid out to print. A label that happens to be markup is shown as the text it
+says rather than run or removed.
+
+Both buttons are disabled until there is something to export, and go back to
+disabled the moment a file fails, so neither ever saves the design before last.
+
+Still to come: PDF and Word. The task list in `docs/RUNBOOK.md` says what comes
+next.
 
 The JSON it reads looks like this:
 

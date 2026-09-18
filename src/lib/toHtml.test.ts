@@ -10,7 +10,7 @@ import { htmlPage } from './toHtml';
  *
  * What is tested here is `htmlPage` — the whole document given the drawing's
  * markup — and not `toHtml`, which is the same function with the drawing
- * serialised out of a real `Document` first. That split is deliberate and D56
+ * serialised out of a real `Document` first. That split is deliberate and D55
  * records it: this project's Vitest run has no DOM at all, so the DOM half is
  * Playwright's (`e2e/export.spec.ts`) and everything a string can answer is
  * here. The drawing is passed in as a stand-in string so that a test can tell
