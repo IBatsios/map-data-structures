@@ -521,6 +521,13 @@ D43 bounding everything untrusted and `textContent` everywhere.
   revisiting.
 - **`e2e/fixtures/` is now unformatted by Prettier**, valid fixtures included.
   They are small and hand-written, so it costs nothing today.
+- **`describeLoadError.ts` is 447 lines**, which is past the 200–400 the
+  standards call typical. 227 of them are code and 152 are doc comments, in the
+  house style of `loadDesign.ts` and `design.schema.ts`, so I left it whole
+  rather than splitting a module whose two halves — a syntax message and a list
+  of field messages — are the same decision made twice. The obvious seam if it
+  ever needs one is `boundedText` and `sentence`, which are a rule of their own
+  (D43) and would take about 70 lines with them.
 - Bun runs Vitest on JavaScriptCore here, so `loadDesign.test.ts`'s conditional
   `if (/position \d+/…)` assertion is inert on this machine. That is exactly the
   shape this task was told not to repeat, and none of the new tests have it;
