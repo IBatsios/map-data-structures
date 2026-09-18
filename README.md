@@ -16,24 +16,41 @@ ships as static files, and no file you choose is ever uploaded anywhere.
 
 ```
 bun install
-bun run dev     # start the app on http://localhost:4321
-bun run test    # run the Vitest suite once
-bun run build   # build the static site into dist/
+bun run dev       # start the app on http://localhost:4321
+bun run test      # run the Vitest suite once
+bun run test:e2e  # run the Playwright walk in a real browser
+bun run check     # type-check with astro check
+bun run build     # build the static site into dist/
 ```
 
 `bun run test` runs Vitest. Plain `bun test` runs bun's own test runner instead
 and will quietly skip the suite, so always include `run`.
 
-Astro 7 runs `bun run dev` as a background server. `bunx astro dev status`,
-`bunx astro dev logs`, and `bunx astro dev stop` control it.
+`bun run test:e2e` is separate on purpose: the pre-commit hook runs `bun run
+test`, and a hook that starts a browser on every commit is a hook nobody runs.
+It needs a browser once — `bunx playwright install chromium` — and then builds
+the site and serves `dist/` itself, so it tests what Netlify would serve.
+
+Astro 7 runs `bun run dev` and `bun run preview` as background servers, whether
+or not `--background` is passed. `bunx astro dev status`, `bunx astro dev logs`
+and `bunx astro dev stop` control the dev one; `astro preview` has the same
+three.
 
 ## What works today
 
 One page. Choose a JSON design with the file input or drag one onto the page,
-and it is validated, its name and its node and edge counts appear, and a box
-per node and a line per edge is drawn. Layout is still a single row, the
-validation messages are still one blunt line, and there are no exports yet. The
-task list in `docs/RUNBOOK.md` says what comes next.
+and it is validated, its name and its node and edge counts appear, and a
+laid-out drawing appears below: a shape per node, an arrow per edge, and every
+label on it.
+
+Six kinds of node have a silhouette of their own — `service`, `database`,
+`queue`, `external`, `user` and `decision`, each with a handful of aliases
+(`db`, `actor`, `topic` and so on). `type` is free text, so anything else draws
+as a plain grey dashed rectangle rather than disappearing, and every node prints
+its own type under its label.
+
+Still to come: the validation messages are one blunt line, and there are no
+exports yet. The task list in `docs/RUNBOOK.md` says what comes next.
 
 The JSON it reads looks like this:
 
@@ -57,9 +74,11 @@ page with a sample file.
 ## Layout
 
 ```
-src/lib/      the design core: types, the schema, and the loader
+src/lib/      the design core: types, the schema, the loader, the layout,
+              the shape vocabulary, and the SVG renderer
 src/pages/    the Astro pages
 src/styles/   CSS Modules
+e2e/          the Playwright walk, its fixtures, and the server it runs against
 docs/         PRD, architecture, decisions, runbook, and one file per task
 ```
 

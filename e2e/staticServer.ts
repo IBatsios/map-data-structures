@@ -26,7 +26,13 @@ import { createServer } from 'node:http';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const PORT = Number(process.env.PORT ?? 4321);
+/**
+ * Astro's own default port, and the one `playwright.config.ts` points `baseURL`
+ * at. It is a constant rather than an environment variable on purpose: nothing
+ * in this project reads the environment, `.env.example` holds no variables, and
+ * a knob no one asked for is not worth making that sentence false for.
+ */
+const PORT = 4321;
 
 /** The built site. `astro build` writes here; Netlify serves the same thing. */
 const ROOT = fileURLToPath(new URL('../dist', import.meta.url));

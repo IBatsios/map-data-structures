@@ -29,12 +29,18 @@ export yet. See `docs/RUNBOOK.md` for the frontier.
 
 ```
 bun install
-bun run dev     # http://localhost:4321
-bun run test    # Vitest suite
-bun run build   # static site into dist/
+bun run dev       # http://localhost:4321
+bun run test      # Vitest suite
+bun run test:e2e  # Playwright walk, in a real browser
+bun run check     # astro check
+bun run build     # static site into dist/
 ```
 
 `bun run test` runs Vitest. Plain `bun test` would run Bun's own runner instead, so always include `run`.
+
+`bun run test:e2e` stays out of `bun run test`: the pre-commit hook runs the latter, and a hook that starts a browser on every commit stops being run. It needs `bunx playwright install chromium` once. The hook is lint-staged, then `bun run check`, then `bun run test`.
+
+Astro 7 backgrounds both `dev` and `preview` whether or not `--background` is passed, and both hold a lock file, so neither can be a Playwright `webServer`; `e2e/staticServer.ts` serves `dist/` in the foreground instead (D30).
 
 ## Where things are
 
