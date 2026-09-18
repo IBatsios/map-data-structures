@@ -33,6 +33,8 @@
  *   `LayoutBox`, `LayoutNode`, `LayoutEdge`, `DesignLayout`.
  * - `selfLoops.ts` — a node's n-th loop: the route a self-edge takes, which is
  *   drawn here rather than read from dagre (D34, D37).
+ * - `normaliseDrawing.ts` — the last three steps: how far everything moves to
+ *   sit one margin from the corner, moving it, and sizing the canvas.
  *
  * Nothing outside this folder imports any of them. **This module is the one
  * door**: every public name below is either declared here or re-exported here,
@@ -48,12 +50,12 @@ import type { Design, DesignNode } from './design.types';
 import type {
   DesignLayout,
   EdgeLabelPlate,
-  LayoutBox,
   LayoutEdge,
   LayoutNode,
   LayoutPoint,
   PreparedEdge,
 } from './layout.types';
+import { canvasFor, offsetToMargin, shiftBox, shiftEdge } from './normaliseDrawing';
 import { selfLoop, selfLoopSlots } from './selfLoops';
 import { shapeForType } from './shapes';
 import { estimateTextWidth, wrapText } from './text';
@@ -65,6 +67,7 @@ export type {
   LayoutNode,
   LayoutPoint,
 } from './layout.types';
+export { DRAWING_MARGIN } from './normaliseDrawing';
 export { SELF_LOOP_EXTENT } from './selfLoops';
 
 /** Font size of a node's own label, in pixels. */
@@ -90,9 +93,6 @@ export const MIN_NODE_WIDTH = 132;
 
 /** A label wider than this wraps onto another line instead of widening the box. */
 export const MAX_TEXT_WIDTH = 220;
-
-/** Clear space between the drawing and every edge of the canvas, in pixels. */
-export const DRAWING_MARGIN = 28;
 
 /** Clear space between two boxes on the same row, in pixels. */
 const NODE_SEPARATION = 48;
@@ -343,93 +343,4 @@ function straightLine(
 
 function toPoint(point: Point): LayoutPoint {
   return { x: point.x, y: point.y };
-}
-
-/**
- * How far to move everything so the drawing starts exactly one margin from the
- * top-left corner.
- *
- * Dagre's origin is its own business — an edge label or a route can sit at a
- * negative coordinate — so rather than trusting `graph().width`, this measures
- * what actually came out and moves it. The result is an invariant worth having:
- * whatever the design, the top-left-most thing on the canvas is at
- * `DRAWING_MARGIN`, and nothing is ever off the edge.
- */
-function offsetToMargin(
-  nodes: readonly LayoutNode[],
-  edges: readonly LayoutEdge[],
-): LayoutPoint {
-  const xs = everyX(nodes, edges);
-  const ys = everyY(nodes, edges);
-
-  if (xs.length === 0) {
-    return { x: 0, y: 0 };
-  }
-
-  return {
-    x: DRAWING_MARGIN - Math.min(...xs),
-    y: DRAWING_MARGIN - Math.min(...ys),
-  };
-}
-
-function everyX(
-  nodes: readonly LayoutNode[],
-  edges: readonly LayoutEdge[],
-): readonly number[] {
-  return [
-    ...nodes.flatMap((node) => [node.x, node.x + node.width]),
-    ...edges.flatMap((edge) => [
-      edge.labelBox.x,
-      edge.labelBox.x + edge.labelBox.width,
-      ...edge.points.map((point) => point.x),
-    ]),
-  ];
-}
-
-function everyY(
-  nodes: readonly LayoutNode[],
-  edges: readonly LayoutEdge[],
-): readonly number[] {
-  return [
-    ...nodes.flatMap((node) => [node.y, node.y + node.height]),
-    ...edges.flatMap((edge) => [
-      edge.labelBox.y,
-      edge.labelBox.y + edge.labelBox.height,
-      ...edge.points.map((point) => point.y),
-    ]),
-  ];
-}
-
-function shiftBox<T extends LayoutBox>(box: T, offset: LayoutPoint): T {
-  return { ...box, x: box.x + offset.x, y: box.y + offset.y };
-}
-
-function shiftEdge(edge: LayoutEdge, offset: LayoutPoint): LayoutEdge {
-  return {
-    ...edge,
-    points: edge.points.map((point) => ({
-      x: point.x + offset.x,
-      y: point.y + offset.y,
-    })),
-    labelBox: shiftBox(edge.labelBox, offset),
-  };
-}
-
-/**
- * The canvas: everything that was placed, plus a margin all round.
- *
- * An empty design still gets a canvas, because an empty design is valid (D19)
- * and has to draw as an empty picture rather than as a failure.
- */
-function canvasFor(
-  nodes: readonly LayoutNode[],
-  edges: readonly LayoutEdge[],
-): { width: number; height: number } {
-  const xs = everyX(nodes, edges);
-  const ys = everyY(nodes, edges);
-
-  return {
-    width: Math.ceil(Math.max(0, ...xs) + DRAWING_MARGIN),
-    height: Math.ceil(Math.max(0, ...ys) + DRAWING_MARGIN),
-  };
 }
