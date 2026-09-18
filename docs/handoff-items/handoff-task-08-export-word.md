@@ -877,3 +877,63 @@ keeps the export honest in the meantime.
 https://github.com/IBatsios/map-data-structures/pull/17 — opened as a draft
 against `main`, per D54 and the process note. CI green. **Sam marks it ready and
 merges; I did not.**
+
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/08-export-word.md` | All six acceptance-criteria boxes checked, `**Status:** done` | No change needed |
+| `README.md` | Already described the Word export accurately — file name, US Letter portrait, one-inch margin, real Word tables, raster drawing at three times placed size, named rather than embedded font, control-character marking, the label-size limit at ~15 nodes | No change needed |
+| `CLAUDE.md` | Already updated: Status section covers Task 08, `docx` 9.7.1 (MIT), the shared-seam extractions, the export row's revisit, and the "known limit, now in two formats" note pointing at both Task 07's and Task 08's handoff docs | No change needed |
+| `docs/DECISIONS.md` | D73–D80 present, dated 2026-09-18, each with its reason | No change needed |
+| `.env.example` | Still correctly states no variables; grep for `import.meta.env`/`process.env`/`getenv`/`PUBLIC_` confirms the only hit is `process.env.CI` in `playwright.config.ts`, supplied by CI itself | No change needed |
+| Handoff doc (this file) | Jared's assignment, Amon's round-1 work, and Jahmyr's round-1 report all present and legible | Appended this section |
+
+No edits were needed to any of the generated documents (`docs/PRD.md`,
+`docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md`) or to the body
+of the task file — none were found to be wrong against this task's outcome.
+
+### Gates
+
+`bun run test`: **pass** — 21 files, 343 tests, run independently before and
+again after the merge (both green; the post-merge run confirms `main` itself
+is good, not just the branch).
+
+CI: **green** — `gh pr checks 17` showed both the push run and the
+pull-request run passing before merge; re-checked again after `gh pr ready`
+moved the PR out of draft, in case that transition queued a new run. It did
+not; both checks remained the same two green `test` jobs.
+
+Secret scan: **clean** — `gitleaks detect --source . --no-banner`, run
+independently rather than trusted from Jahmyr's report: 24 commits scanned,
+~1.63 MB, no leaks found.
+
+### Merge
+
+Squashed as `4192fbb` into `main`. Branch `feature/export-word` deleted
+(confirmed via `git fetch --prune`). PR
+https://github.com/IBatsios/map-data-structures/pull/17.
+
+### Left for a person
+
+**Open `order-intake.docx` in Microsoft Word once, if the owner has it
+anywhere.** Neither Amon nor Jahmyr had Word installed on their machines, so
+the `.docx` output has been verified against everything Word is known to
+refuse a file for (zip integrity, well-formed XML in every part, zero
+XML-illegal characters across sixteen test files, every relationship
+resolved, PNG chunk CRCs) and against a second independent OOXML reader
+(LibreOffice Writer, which opened all eleven non-malformed files and
+reproduced their tables on round trip) — but Word's own renderer remains
+unverified by anyone in this project. The task's acceptance wording ("opens
+in Word **or** LibreOffice") is satisfied and the box is correctly checked;
+this is a residual-risk note, not a blocker, and it is a one-minute check
+for whoever has Word.
+
+**The label-size fix cycle Jared scheduled between Task 08 and Task 09** is
+a generation decision (no numbered task file, by design, since
+`docs/tasks/` regenerates from `docs/intake.md`) that only a person picking
+up work can act on — see `docs/handoff-items/handoff-next-phase.md` for the
+two shape notes carried forward from Amon and Jahmyr.
