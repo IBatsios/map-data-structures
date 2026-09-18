@@ -18,3 +18,9 @@ One line per decision. Newest at the bottom. Reasons come from the intake; where
 ---
 
 ## Added after the build
+
+| # | Decision | Why | Source |
+|---|---|---|---|
+| D9 | Phase 0.3 resolved to settings only: no ECC files installed for this project | ECC is already installed at user level, all 20 rule families and every skill this project's CLAUDE.md names; a project-local install would have duplicated 359 files and added about 60 unrelated agents | `/project-init`, 2026-09-18 |
+| D10 | Permissions live in `.claude/settings.json`, shaped for bun, not npm | the ECC stack mapping's allowlist assumes npm and npx; this project runs bun, so the mapping's entries would never match | `/project-init`, 2026-09-18 |
+| D11 | Creating the GitHub remote and editing the repo are denied to agents | the runbook reserves Phase 0 for a person because it needs account decisions; the deny list makes that instruction enforceable rather than advisory | `/project-init`, 2026-09-18 |

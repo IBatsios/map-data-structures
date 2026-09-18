@@ -19,6 +19,3 @@ playwright-report/
 Thumbs.db
 .idea/
 .vscode/
-
-# Claude
-.claude
