@@ -58,6 +58,25 @@ test.describe('Validation errors', () => {
     expect(message).not.toMatch(/column \d/i);
   });
 
+  test('names no line for a file whose own text says “position”', async ({ page }) => {
+    // The round 1 defect, in the browser that found it. `gantry.json` is a YAML
+    // config saved with a `.json` name; V8 quotes its first ten characters back
+    // inside its own message, so the `900` on line 1 used to be scraped out of
+    // that quotation and printed as "Line 1, column 10". The real fault is line
+    // 1, column 1, and the engine never said so.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('gantry.json');
+
+    const [message] = await upload.problemMessages();
+
+    expect(await upload.problemSummary()).toBe('gantry.json was not drawn:');
+    expect(message).toContain('did not say where');
+    expect(message).not.toMatch(/line \d/i);
+    expect(message).not.toMatch(/column \d/i);
+  });
+
   test('says an empty file is empty', async ({ page }) => {
     const upload = new UploadPage(page);
     await upload.goto();
@@ -145,9 +164,9 @@ test.describe('Validation errors', () => {
     );
   });
 
-  test('refuses a dropped image without reading a byte of it', async ({ page }) => {
-    // `accept="application/json,.json"` filters the picker and nothing else, so
-    // a file dropped on the page reaches the same code path this does.
+  test('refuses an image chosen from the picker without reading a byte of it', async ({
+    page,
+  }) => {
     const upload = new UploadPage(page);
     await upload.goto();
 
@@ -213,5 +232,95 @@ test.describe('Validation errors', () => {
     await expect(upload.status).toHaveText(
       'order-intake.json is drawn below: 7 nodes, 6 edges.',
     );
+  });
+});
+
+/**
+ * The other way a file gets into this app, and the one the picker cannot stand
+ * in for.
+ *
+ * `accept="application/json,.json"` filters the file picker and nothing else,
+ * so a file dragged off a desktop arrives unfiltered — which is why
+ * `looksLikeJsonFile` exists (D40) and why the page prevents the browser's own
+ * default of navigating away to the dropped file. None of that is reachable
+ * through `setInputFiles`, so every test here dispatches a real `drop` carrying
+ * a real `DataTransfer` built from the fixture's own bytes.
+ */
+test.describe('Files dropped on the page', () => {
+  test('shows the drop cue while a file is over the page, and drops it again', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    expect(await upload.isDragCueShowing()).toBe(false);
+
+    await upload.dragOver('order-intake.json');
+
+    expect(await upload.isDragCueShowing()).toBe(true);
+
+    await upload.drop('order-intake.json');
+
+    expect(await upload.isDragCueShowing()).toBe(false);
+  });
+
+  test('refuses a dropped image without reading a byte of it', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.drop('logo.png');
+
+    // The name is the page's own evidence that the dropped file is what it
+    // answered: the picker was never touched.
+    expect(await upload.problemSummary()).toBe('logo.png was not drawn:');
+    expect(await upload.problemMessages()).toEqual([
+      'That file is not JSON. Choose a file whose name ends in .json, or rename it if you know it holds JSON.',
+    ]);
+    await expect(upload.svg).toHaveCount(0);
+  });
+
+  test('describes a dropped binary named .json and shows none of it', async ({
+    page,
+  }) => {
+    // This one gets past the kind check, because its name and its media type
+    // both say JSON. What must never happen is the engine's message putting the
+    // file's own bytes on the screen.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.drop('renamed-image.json');
+
+    const [message] = await upload.problemMessages();
+
+    expect(await upload.problemSummary()).toBe('renamed-image.json was not drawn:');
+    expect(message).toContain('not text at all');
+    expect(await upload.problems.innerHTML()).not.toMatch(/PNG|IHDR/u);
+  });
+
+  test('draws a good file that was dropped rather than chosen', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.drop('order-intake.json');
+
+    await expect(upload.svg).toBeVisible();
+    await expect(upload.status).toHaveText(
+      'order-intake.json is drawn below: 7 nodes, 6 edges.',
+    );
+    await expect(upload.problems).toHaveText('');
+  });
+
+  test('cancels the browser’s own handling of both drag events', async ({ page }) => {
+    // Without `preventDefault` on `dragover` *and* `drop` the browser opens the
+    // dropped file itself, which throws this page away and with it the promise
+    // that the file never leaves the browser. A dispatched event cannot make a
+    // real browser navigate, so what is asserted here is the cancellation
+    // itself: `dispatchEvent` is false exactly when a listener prevented the
+    // default.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    expect(await upload.dragOver('order-intake.json')).toBe(true);
+    expect(await upload.drop('order-intake.json')).toBe(true);
   });
 });
