@@ -341,3 +341,206 @@ its own `chore/` cycle before Task 05.
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+A bad file now answers the question it raises. Five things exist that did not:
+
+1. **`describeLoadError`** — pure, no DOM: a `DesignLoadError`, the file's name
+   and the file's text in; a heading, a list of messages and a count of what was
+   left out, back. Every sentence the app says about a file that failed is
+   written and tested here.
+2. **A file-kind check** — `looksLikeJsonFile(name, type)`, asked while the
+   `File` is still unopened, so a dropped picture is refused before a byte of it
+   reaches `JSON.parse`.
+3. **The panel** — `#upload-problems`, in the page from the first paint, filled
+   by `renderProblems` through `textContent`, styled by `upload.module.css`,
+   announced as a polite live region, and cleared by the next good file.
+4. **The whitespace rule, decided** — a required string must now hold a
+   character that is not a space. It rejects a blank label; it still never trims
+   one.
+5. **The walk** — `e2e/validation.spec.ts`: fourteen tests over ten new
+   fixtures, one fault each, including "read the message, fix the file, load it
+   again and see the drawing".
+
+The four carried items are all closed. Answering each in the order the
+assignment weighted them:
+
+**1. The no-position fallback.** `describeSyntaxFault(engineMessage, fileText)`
+takes the engine's message as an argument, so a JavaScriptCore message is a
+one-line test on Node — three of them are. Where a position is given the line
+and column are **counted here** from the file's text, never read out of
+`(line L column C)`, which is why an older-V8 `position 59` with no line clause
+still produces `Line 5, column 1`. Where no position is given, the message says
+so and names no line: the standing rule is tested twice, once per engine shape.
+
+Measuring the engines rather than trusting the earlier handoffs turned up
+something worth recording: **on modern V8 the no-position path is the ordinary
+path, not Safari's corner.** Node 24 and Chromium give a position for a trailing
+comma *inside an object* (`Expected double-quoted property name in JSON at
+position 248 (line 8 column 1)`) and give none at all for a trailing comma
+inside an *array*, for a file that ends early, or for anything that is not JSON
+at all (`Unexpected token ']', …"` with no position). Both fixtures are in the
+walk for that reason. Two cases the file answers better than any engine: an
+empty file is reported as empty, and a file holding raw bytes is reported as
+binary — both derived from the text, neither guessing a position. D38.
+
+**2. The dropped-PNG leak, both halves.** `src/lib/jsonFile.ts` is the check
+before the read, mirroring the input's own `accept` (D40). For the file that
+gets past it — a real PNG renamed `.json`, which is a fixture — the syntax
+message detects bytes no text file holds and says so instead of echoing them.
+And behind both, one bounder: every untrusted fragment, engine message or
+quoted node id alike, is stripped of control and format characters, collapsed
+and cut to 120 code points, and every message is set with `textContent`, stated
+in a comment in both modules (D43).
+
+**3. The whitespace-only string.** Tightened, not narrowed (D39). D19 justified
+the rule by the blank box it was meant to stop, and `min(1)` admitted exactly
+that box, so the rule was the part that under-delivered. Tightening is not
+trimming: `"  Public API  "` still loads with its spaces, and there is a test
+named for that distinction so it cannot erode. `min` aborts, so an empty string
+still reports one issue rather than two — which matters now that one issue is
+one message.
+
+**4. D20's two-pass reality.** Not fought. The panel's heading says what *this
+pass* found; nothing anywhere claims to be the whole list. Over ten problems the
+list is capped and the rest are counted, with a sentence that promises them on
+the next load (D42).
+
+**5. Two live regions, one voice.** Both are in the page from the first paint
+and both start empty, because a region announces changes to itself, not its own
+arrival. Each outcome clears the other, so a stale success line never sits above
+a list of errors — asserted in the walk. Both stay polite `role="status"`; the
+user asked for this by choosing a file. The Task 03 backlog item about
+announcing the drawing is answered in the same breath: the success line now
+reads `order-intake.json is drawn below: 7 nodes, 6 edges.` (D41).
+
+`e2e/drawing.spec.ts`'s "clears the drawing and says so" test keeps what it
+protected and now reads the panel; `could not be drawn` is gone from the tree.
+
+### Files added or changed
+
+| Path | What |
+|---|---|
+| `src/lib/describeLoadError.ts` | New. The messages: syntax, schema, unsupported file, and anything else thrown. Pure. |
+| `src/lib/describeLoadError.test.ts` | New. 31 tests, written first, one broken input each. |
+| `src/lib/jsonFile.ts` | New. `looksLikeJsonFile(name, type)`, the check before the read. |
+| `src/lib/jsonFile.test.ts` | New. 9 tests, written first. |
+| `src/lib/renderProblems.ts` | New. The report as elements; takes the `Document`, like `renderDrawing`. |
+| `src/lib/design.schema.ts` | `requiredText` rejects a blank string; the doc comment's rule 1 changed with it. |
+| `src/lib/design.schema.test.ts` | Five tests for the new rule, including the one that pins "reject, do not trim". |
+| `src/lib/describeUpload.ts`, `.test.ts` | The success line says where the drawing is. |
+| `src/pages/index.astro` | The panel element, the two-region comment, and the wiring: kind check, read, draw or explain. |
+| `src/styles/upload.module.css` | The panel: one red used for one thing, a left rule, wrapped messages. |
+| `src/styles/upload.module.test.ts` | New. Measures the panel's text against its own tint (12.47:1) and the bare page (13.58:1). |
+| `src/styles/contrastRatio.ts` | New. WCAG 2.1's formula, now shared by both stylesheet tests. |
+| `src/styles/drawing.module.test.ts` | Imports that formula instead of holding a second copy. Unchanged otherwise. |
+| `e2e/validation.spec.ts` | New. The walk. |
+| `e2e/drawing.spec.ts` | The failure test reads the panel; two status assertions follow the new wording. |
+| `e2e/pages/uploadPage.ts` | The panel, its summary, its messages and its remainder line. |
+| `e2e/fixtures/` | New: `trailing-comma`, `cut-short`, `empty`, `node-without-label`, `blank-label`, `dangling-edge`, `duplicate-ids`, `many-problems` (15 faults), `logo.png` (a real PNG), `renamed-image.json` (the same PNG). |
+| `.prettierignore` | `e2e/fixtures/` — formatting them would repair the faults they exist to carry. |
+| `docs/DECISIONS.md` | D38 to D43. |
+| `README.md` | What works today, and the schema's blank-string rule. Commands unchanged. |
+| `.env.example` | **No change, and none needed.** Nothing in `src/` or `e2e/` reads `import.meta.env` or `process.env`; the only `process.env` in the repo is `process.env.CI` in `playwright.config.ts`, which CI sets. |
+
+### Tests written
+
+Unit, 51 new (176 total, all passing):
+
+- **`describeSyntaxFault`, 11.** A V8 message with a line; an older V8 message
+  with a position and no line, which pins that the line is counted and not
+  scraped; a JavaScriptCore message, which pins the no-position wording; that
+  the no-position message names no line and no column; an empty file on both
+  engine shapes; a whitespace-only file; a binary file, which pins that bytes
+  are described and never echoed; that control characters are stripped from
+  what is echoed; that a 4,000-character engine message is bounded; that a
+  position past the end of the file is clamped rather than thrown on.
+- **`describeLoadError`, 17.** One message per issue naming the field; missing
+  told apart from wrong-typed; empty told apart from blank; the dangling edge
+  and the duplicate id, each naming its own end; a file that is JSON but not an
+  object; the summary's count, singular and plural; the cap and the remainder;
+  a 3,000-character node id bounded; control characters in an id stripped; a
+  thrown `TypeError` and a thrown string both still saying something.
+- **`describeHiddenProblems`, 3.** Plural, singular, and silence when nothing
+  was left out.
+- **`looksLikeJsonFile`, 9.** The `.json` name, the empty media type, the
+  uppercase extension, `+json`, a media type with parameters, the dropped PNG,
+  `design.json.png`, nothing to go on at all, and the renamed image that passes
+  on purpose.
+- **`design.schema`, 7.** A blank `id`, `label` or `type`; a blank edge label; a
+  blank title; one issue rather than two for an empty string; and spaces around
+  an accepted label kept exactly as the file wrote them.
+- **`upload.module.css`, 4.** Text against its own surface, text against the
+  bare page, the custom properties existing, and the state attribute rather than
+  a class name.
+
+End to end, 14 new (25 total, all passing):
+
+Both live regions present and empty before anything is chosen; the line and
+column named for a malformed file; no line invented for a file that ends early;
+an empty file called empty; the two missing lists; a node without a label; a
+label of three spaces; a dangling edge; a duplicated id; the cap and its
+remainder line; a dropped image refused unread; a renamed PNG described without
+a byte of it on screen; no drawing and no stale sentence left behind; and the
+walk itself — broken file, message, fixed file, drawing, panel cleared.
+
+### Local results
+
+`bun run test`: **pass**, 176 tests in 11 files.
+`bun run check`: **pass**, 0 errors, 0 warnings, 0 hints over 32 files.
+`bun run build`: **pass**, 1 page.
+`bun run test:e2e`: **pass**, 25 tests in Chromium.
+
+### Decisions recorded
+
+D38 the no-position wording and where the line comes from; D39 the whitespace
+rule, tightened, narrowing D19; D40 the file-kind check; D41 the two live
+regions and the new success wording; D42 the cap and the "this pass" heading;
+D43 bounding everything untrusted and `textContent` everywhere.
+
+### Known gaps
+
+- **`renderProblems.ts` has no unit test**, for the same reason
+  `renderDrawing.ts` has none: Vitest runs without a DOM here, so building
+  elements can only be exercised through Playwright. The walk asserts the exact
+  text of the summary, of each message and of the remainder line, so the
+  rendering is covered — but by the slower suite, not by `bun run test`.
+- **The line and column are counted in UTF-16 code units**, because that is what
+  V8's `position` counts in. A file with astral characters before the fault
+  would be off by one per such character if some engine ever counted in code
+  points instead. No engine we know of does; it is written down here rather than
+  discovered later.
+- **The panel's heading is a `<p>`, not a heading element.** A heading that
+  exists only sometimes churns the document outline, and the region is announced
+  anyway. If Task 09 gives the page a real heading structure, this is worth
+  revisiting.
+- **`e2e/fixtures/` is now unformatted by Prettier**, valid fixtures included.
+  They are small and hand-written, so it costs nothing today.
+- Bun runs Vitest on JavaScriptCore here, so `loadDesign.test.ts`'s conditional
+  `if (/position \d+/…)` assertion is inert on this machine. That is exactly the
+  shape this task was told not to repeat, and none of the new tests have it;
+  the old one is Task 02's and was left alone.
+
+### Out-of-scope notes for Jared
+
+- **`loadDesign`'s doc comment is now half a step behind.** It says V8 "names a
+  position and often a line and column". True but incomplete: V8 gives no
+  position for a bad token, an array's trailing comma, or a file that ends
+  early. D38 records the measurement and the loader's contract is unchanged, so
+  I left the comment alone rather than edit a Task 02 module in a Task 04 pull
+  request. One sentence, whenever that file is next open.
+- **`src/lib/layout.ts` is still 625 lines** and still wants its own `chore/`
+  cycle. Untouched, as routed.
+- **A file whose name is not `.json` is now refused even if it holds JSON.**
+  That is D40's deliberate cost. If Task 09's schema page ever offers a
+  "paste JSON" box, that is where the escape hatch belongs.
+- **Nothing measures how long a large file takes through the panel.** A file
+  with 5,000 issues builds 5,000 message strings before ten are shown. It is
+  bounded work and the cap keeps the DOM small, but the mapping happens over
+  every issue. If a task ever needs it, capping before describing is a
+  three-line change.
