@@ -39,9 +39,20 @@
  * what intake 5.2 rules out. `fonts/robotoRegular.ts` explains the choice and
  * carries the licence; it is imported dynamically, with jsPDF and svg2pdf, so a
  * visitor who never exports a PDF never downloads any of it.
+ *
+ * **And what the font cannot draw is marked rather than dropped.** No face of a
+ * sensible size covers every script, and jsPDF's answer to a character it has
+ * no glyph for is to write nothing at all — in the picture and in the tables
+ * both, so no copy of it survives and the export still reports success. That
+ * reaches ordinary English designs, because the face has no arrow either. So
+ * the layout is run through `drawableText.ts` first: every character the font
+ * cannot draw becomes one visible mark, and the count comes back with the file
+ * for the page to say out loud.
  */
 
 import drawingStyles from '../styles/drawing.module.css';
+import { drawableLayout } from './drawableText';
+import { readFontCoverage } from './fontCoverage';
 import type { DesignLayout } from './layout';
 import type { PdfDocumentPlan, PdfItem } from './pdfPlan';
 import { PAGE_HEIGHT, PAGE_WIDTH, pdfPlan } from './pdfPlan';
@@ -49,6 +60,28 @@ import { renderDrawing } from './renderDrawing';
 
 /** What a `.pdf` is, for the browser that is about to save one. */
 export const PDF_MEDIA_TYPE = 'application/pdf';
+
+/**
+ * The language the file declares, for a viewer and for a screen reader.
+ *
+ * The document's own furniture — its headings, its column names and the
+ * sentence an empty design gets — is English whatever language the design is
+ * written in, and the page that built it says `lang="en"` too. A design in
+ * another language is not a reason to claim otherwise for the wrapper around
+ * it; a file that declares nothing at all is announced with no language, which
+ * is worse than one that names the language of its own words.
+ */
+const DOCUMENT_LANGUAGE = 'en';
+
+/** One exported file, and what the font could not draw while writing it. */
+export interface PdfExport {
+  readonly blob: Blob;
+  /**
+   * How many characters were replaced with `UNDRAWABLE_MARK`, for the page to
+   * say so afterwards. Zero means the font drew the whole design.
+   */
+  readonly undrawable: number;
+}
 
 /** The name the embedded font is filed and asked for under. */
 const FONT_FILE = 'Roboto-Regular.ttf';
@@ -111,17 +144,19 @@ interface OpenDrawing {
  * @param layout - the design as the preview drew it, from `layoutDesign`
  * @param doc - the document to build and resolve the drawing in; nothing of it
  *   is left behind
- * @returns the whole file, ready for `downloadBlob`
- * @throws if the document has no window to resolve styles with, or if jsPDF or
- *   svg2pdf fails; the page catches it and says so in its own words (D43)
+ * @returns the whole file, ready for `downloadBlob`, and how many characters
+ *   the font could not draw, for the page to say so afterwards
+ * @throws if the document has no window to resolve styles with, if the embedded
+ *   font cannot be read, or if jsPDF or svg2pdf fails; the page catches it and
+ *   says so in its own words (D43)
  *
  * @example
  * ```typescript
  * const file = await toPdf(layoutDesign(design), document);
- * downloadBlob(file, fileNameFor(layout.title, 'pdf'), document);
+ * downloadBlob(file.blob, fileNameFor(layout.title, 'pdf'), document);
  * ```
  */
-export async function toPdf(layout: DesignLayout, doc: Document): Promise<Blob> {
+export async function toPdf(layout: DesignLayout, doc: Document): Promise<PdfExport> {
   const [{ jsPDF }, { svg2pdf }, { ROBOTO_REGULAR_BASE64 }] = await Promise.all([
     import('jspdf'),
     import('svg2pdf.js'),
@@ -135,12 +170,26 @@ export async function toPdf(layout: DesignLayout, doc: Document): Promise<Blob> 
   pdf.setFont(FONT_FAMILY, 'normal');
   pdf.setTextColor(INK);
 
-  const plan = pdfPlan(layout, (text, size) => {
+  // The title as the file gave it, and not the marked one below: metadata is
+  // written into a dictionary rather than drawn with a font, so it carries
+  // every character whatever the face can draw. A viewer shows this in its
+  // window bar and a screen reader announces it, and a file without it is
+  // known to both by its file name alone.
+  pdf.setProperties({ title: layout.title });
+  pdf.setLanguage(DOCUMENT_LANGUAGE);
+
+  // Everything below draws with the embedded face, so everything below works
+  // from the marked layout: what the font cannot draw is replaced with a mark
+  // the reader can see, once, before the document is measured or the drawing
+  // is built, so the tables wrap around what is actually written.
+  const drawable = drawableLayout(layout, readFontCoverage(ROBOTO_REGULAR_BASE64));
+  const plan = pdfPlan(drawable.layout, (text, size) => {
     pdf.setFontSize(size);
 
     return pdf.getTextWidth(text);
   });
-  const drawing = layout.nodes.length === 0 ? null : openDrawing(layout, doc);
+  const drawing =
+    drawable.layout.nodes.length === 0 ? null : openDrawing(drawable.layout, doc);
 
   try {
     await writePages(pdf, plan, drawing?.svg ?? null, svg2pdf);
@@ -148,7 +197,10 @@ export async function toPdf(layout: DesignLayout, doc: Document): Promise<Blob> 
     drawing?.close();
   }
 
-  return new Blob([pdf.output('arraybuffer')], { type: PDF_MEDIA_TYPE });
+  return {
+    blob: new Blob([pdf.output('arraybuffer')], { type: PDF_MEDIA_TYPE }),
+    undrawable: drawable.undrawable,
+  };
 }
 
 /** Every page of the plan, in order, on the pages of the PDF. */

@@ -7,10 +7,12 @@
  * while the export looks like it worked. That cannot be checked by eye and it
  * cannot be checked by looking at what went in. It has to be read back out.
  *
- * **Why this is thirty lines here rather than a package.** Reading these files
- * needs two things and no more: the `BT … ET` blocks a page's content stream is
- * made of, and the `/ToUnicode` CMap that says which glyph is which character.
- * jsPDF writes both uncompressed and plainly, so a parser that handles what
+ * **Why this is a page of code here rather than a package.** Reading these
+ * files needs three things and no more: the `BT … ET` blocks a page's content
+ * stream is made of, the `/ToUnicode` CMap that says which glyph is which
+ * character, and the two literal strings the file carries as metadata — its
+ * title and its language. jsPDF writes them all uncompressed and plainly, so a
+ * parser that handles what
  * jsPDF writes is short enough to read in one sitting. A PDF library would be a
  * third-party dependency added for the test suite alone, and the gate on this
  * task was deliberate about which packages get added.
@@ -104,6 +106,91 @@ export function pdfFonts(bytes: Buffer): readonly string[] {
   );
 
   return [...new Set(used.map((face) => face ?? 'unknown'))].sort();
+}
+
+/**
+ * The title the file carries as metadata, rather than as ink on page 1.
+ *
+ * This is what a viewer puts in its window bar and what a screen reader
+ * announces the document as, and it is written in the Info dictionary rather
+ * than drawn, so no font is involved: a title jsPDF cannot spell in Latin-1 it
+ * writes as UTF-16 with a byte-order mark instead, which is what the decoding
+ * below is for.
+ *
+ * @param bytes - the file exactly as it was downloaded
+ * @returns the title, or an empty string when the file carries none
+ *
+ * @example
+ * ```typescript
+ * expect(pdfTitle(await readFile(file.path))).toBe('Order intake');
+ * ```
+ */
+export function pdfTitle(bytes: Buffer): string {
+  const literal = literalAfter(bytes.toString('latin1'), '/Title');
+
+  return literal === null ? '' : fromPdfString(literal);
+}
+
+/**
+ * The language the file declares, which is the `/Lang` entry of its catalog.
+ *
+ * @param bytes - the file exactly as it was downloaded
+ * @returns the language tag, or an empty string when the file declares none
+ */
+export function pdfLanguage(bytes: Buffer): string {
+  return literalAfter(bytes.toString('latin1'), '/Lang') ?? '';
+}
+
+/**
+ * The literal string that follows one key, with its escapes left in place.
+ *
+ * It is read a character at a time rather than with one expression, because a
+ * `)` inside the string is escaped and a regular expression that stops at the
+ * first one would cut a title in half.
+ */
+function literalAfter(raw: string, key: string): string | null {
+  const opens = raw.indexOf(`${key} (`);
+
+  if (opens === -1) {
+    return null;
+  }
+
+  let text = '';
+
+  for (let at = opens + key.length + 2; at < raw.length; at += 1) {
+    const character = raw[at] ?? '';
+
+    if (character === '\\') {
+      text += raw[at + 1] ?? '';
+      at += 1;
+      continue;
+    }
+
+    if (character === ')') {
+      break;
+    }
+
+    text += character;
+  }
+
+  return text;
+}
+
+/** One PDF text string as the characters it stands for. */
+function fromPdfString(literal: string): string {
+  if (!literal.startsWith('þÿ')) {
+    return literal;
+  }
+
+  let text = '';
+
+  for (let at = 2; at + 1 < literal.length; at += 2) {
+    text += String.fromCharCode(
+      (literal.charCodeAt(at) << 8) + literal.charCodeAt(at + 1),
+    );
+  }
+
+  return text;
 }
 
 /** Each `/F…` resource on the page, pointing at the face behind it. */

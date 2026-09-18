@@ -101,6 +101,7 @@ const pageTitle = 'MapDataStructures';
       } from '../lib/describeLoadError';
       import { describeUpload } from '../lib/describeUpload';
       import { downloadBlob, fileNameFor } from '../lib/download';
+      import { describeUndrawable } from '../lib/drawableText';
       import { looksLikeJsonFile } from '../lib/jsonFile';
       import type { DesignLayout } from '../lib/layout';
       import { layoutDesign } from '../lib/layout';
@@ -120,6 +121,21 @@ const pageTitle = 'MapDataStructures';
       /** Said in the status region if an export ever fails to build. */
       const EXPORT_FAILED =
         'Sorry — that design could not be exported. Choose the file again, and if it keeps happening the design is one this app cannot write out.';
+
+      /**
+       * One built export, and anything the page should say about it.
+       *
+       * Only the PDF has ever had something to say: its font cannot draw every
+       * script, and a character it has no glyph for is marked in the file, so
+       * the person who exported it is told how many and which formats still
+       * carry them. The two text formats hand back `null` and the page stays
+       * quiet, because announcing a finished download is a separate live-region
+       * question parked for all four exports at once (D41).
+       */
+      interface ExportedFile {
+        readonly blob: Blob;
+        readonly note: string | null;
+      }
 
       interface PageElements {
         readonly fileInput: HTMLInputElement;
@@ -169,23 +185,25 @@ const pageTitle = 'MapDataStructures';
         });
 
         elements.exportMarkdown.addEventListener('click', () => {
-          void exportDesign(
-            elements,
-            'md',
-            (layout) => new Blob([toMarkdown(layout)], { type: MARKDOWN_MEDIA_TYPE }),
-          );
+          void exportDesign(elements, 'md', (layout) => ({
+            blob: new Blob([toMarkdown(layout)], { type: MARKDOWN_MEDIA_TYPE }),
+            note: null,
+          }));
         });
 
         elements.exportHtml.addEventListener('click', () => {
-          void exportDesign(
-            elements,
-            'html',
-            (layout) => new Blob([toHtml(layout, document)], { type: HTML_MEDIA_TYPE }),
-          );
+          void exportDesign(elements, 'html', (layout) => ({
+            blob: new Blob([toHtml(layout, document)], { type: HTML_MEDIA_TYPE }),
+            note: null,
+          }));
         });
 
         elements.exportPdf.addEventListener('click', () => {
-          void exportDesign(elements, 'pdf', (layout) => toPdf(layout, document));
+          void exportDesign(elements, 'pdf', async (layout) => {
+            const exported = await toPdf(layout, document);
+
+            return { blob: exported.blob, note: describeUndrawable(exported.undrawable) };
+          });
         });
 
         watchForDroppedFiles(elements);
@@ -374,8 +392,9 @@ const pageTitle = 'MapDataStructures';
        * One function for every format, because the parts that are not the
        * format — the guard, the naming, the failure sentence — are the same
        * four lines each time and four copies of them is four places for one of
-       * them to be forgotten. `build` is the only difference, and it hands back
-       * a `Blob` because two of the four formats are bytes rather than text.
+       * them to be forgotten. `build` is the only difference: it hands back the
+       * bytes, because two of the four formats are not text, and a sentence to
+       * say afterwards when the format has one.
        *
        * It is awaited because the PDF cannot be built in one tick: it fetches
        * its library and its font, and converts the drawing. The design is taken
@@ -393,7 +412,7 @@ const pageTitle = 'MapDataStructures';
       async function exportDesign(
         elements: PageElements,
         extension: string,
-        build: (layout: DesignLayout) => Blob | Promise<Blob>,
+        build: (layout: DesignLayout) => ExportedFile | Promise<ExportedFile>,
       ): Promise<void> {
         const design = drawn;
 
@@ -404,7 +423,14 @@ const pageTitle = 'MapDataStructures';
         try {
           const file = await build(design);
 
-          downloadBlob(file, fileNameFor(design.title, extension), document);
+          downloadBlob(file.blob, fileNameFor(design.title, extension), document);
+
+          // After the file is in the user's hands, not before: the sentence is
+          // about a download that happened, and an export that throws on its
+          // way there says so instead.
+          if (file.note !== null) {
+            elements.status.textContent = file.note;
+          }
         } catch {
           elements.status.textContent = EXPORT_FAILED;
         }

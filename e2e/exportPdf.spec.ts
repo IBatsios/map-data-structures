@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 
 import type { SavedFile } from './pages/uploadPage';
 import { UploadPage } from './pages/uploadPage';
-import { pdfFonts, pdfText } from './pdfText';
+import { pdfFonts, pdfLanguage, pdfText, pdfTitle } from './pdfText';
 
 /**
  * Exporting what is on screen as a PDF: click the button, get a file, and read
@@ -33,6 +33,16 @@ import { pdfFonts, pdfText } from './pdfText';
  * matters: an export that has stopped finishing at all.
  */
 const PDF_BUDGET_MS = 15_000;
+
+/**
+ * What the export draws where its font has no glyph, written out here.
+ *
+ * Deliberately a literal rather than an import from `src/`: these tests say
+ * what a reader would see in the file, the same way the empty design's sentence
+ * is written out below, so the walk is a second opinion rather than an echo of
+ * the module under test.
+ */
+const MARK = '■';
 
 /** Every piece of text the PDF draws, in the order it draws it. */
 async function pdfRuns(file: SavedFile): Promise<readonly string[]> {
@@ -170,6 +180,127 @@ test.describe('Exporting the design as PDF', () => {
     // jsPDF fell back to, which is how a label stops being the text it says
     // without the export ever failing.
     expect(pdfFonts(await readFile(file.path))).toEqual(['Roboto']);
+  });
+
+  test('writes a visible mark where its font has no glyph, never nothing', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('undrawable-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const written = (await pdfRuns(file)).join('\n');
+
+    // The round-two defect, as the user meets it. Every one of these came out
+    // of the file with the character simply gone: `Gateway → Queue` as
+    // `Gateway  Queue`, and `API gateway (東京)` as `API gateway ()`, which
+    // reads as a finished label and is the one outcome intake 5.2 rules out.
+    expect(written).toContain(`Gateway ${MARK} Queue`);
+    expect(written).toContain(`API gateway (${MARK}${MARK})`);
+    expect(written).toContain(`check ${MARK} cross ${MARK}`);
+    expect(written).toContain(`double arrow ${MARK} element ${MARK}`);
+    expect(written).toContain(`left ${MARK} updown ${MARK}`);
+
+    // And nothing anywhere in the file is a label emptied of the thing it
+    // named, whatever the script it was named in.
+    expect(written).not.toContain('API gateway ()');
+    expect(written).not.toContain('Cache ()');
+    expect(written).not.toContain('Gateway  Queue');
+  });
+
+  test('marks the drawing as well as the tables, so the two halves agree', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('undrawable-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const written = await pdfRuns(file);
+
+    // Twice: once in the picture and once in the table. A fix that marked only
+    // the text `pdfPlan` writes would leave the drawing above it still losing
+    // the arrow, which is exactly how the `550normal` defect hid in round one.
+    expect(written.filter((run) => run === `Gateway ${MARK} Queue`)).toHaveLength(2);
+  });
+
+  test('keeps every character its font does carry, marking none of them', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('undrawable-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const written = (await pdfRuns(file)).join('\n');
+
+    // The mark is for what the font cannot draw and nothing else: signs and
+    // punctuation that Roboto does carry are still themselves.
+    expect(written).toContain('keeps ≥ ± € … •');
+    expect(written).toContain('keeps ≥ and —');
+  });
+
+  test('says how many characters it could not draw, in the app’s own words', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('undrawable-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.downloadPdf();
+
+    // The second half of the fix: the person who exported it is told, in the
+    // status region the page already speaks in (D43), and is pointed at the
+    // two exports that do carry every character.
+    await expect(upload.status).toContainText('cannot draw');
+    await expect(upload.status).toContainText(MARK);
+    await expect(upload.status).toContainText('Markdown');
+    await expect(upload.status).toContainText('HTML');
+  });
+
+  test('says nothing about the font when it drew the whole design', async ({ page }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('order-intake.json');
+    await expect(upload.svg).toBeVisible();
+
+    await upload.downloadPdf();
+
+    // A clean export leaves the line describing the upload where it was.
+    // Announcing a finished download is a live-region question parked for all
+    // four exports at once (D41), and this is not the place to answer it.
+    await expect(upload.status).toContainText('order-intake.json is drawn below');
+    await expect(upload.status).not.toContainText('cannot draw');
+  });
+
+  test('carries its title and its language as metadata, not only as ink', async ({
+    page,
+  }) => {
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('undrawable-labels.json');
+    await expect(upload.svg).toBeVisible();
+
+    const file = await upload.downloadPdf();
+    const bytes = await readFile(file.path);
+
+    // Without these a viewer shows the file name in its window bar and a
+    // screen reader has no document title or language to announce. The title
+    // is metadata rather than ink, so no font is involved and it carries the
+    // characters the page itself had to mark.
+    expect(pdfTitle(bytes)).toBe('Regions → 東京');
+    expect(pdfLanguage(bytes)).toBe('en');
   });
 
   test('carries the drawing as text and lines, not as a picture of a drawing', async ({
