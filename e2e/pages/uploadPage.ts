@@ -15,6 +15,12 @@ export interface DrawnBox extends DrawnPoint {
   readonly height: number;
 }
 
+/** A file the page handed to the browser: what it was called, and what is in it. */
+export interface DownloadedFile {
+  readonly name: string;
+  readonly text: string;
+}
+
 /**
  * The upload page, as the end-to-end tests talk to it.
  *
@@ -24,12 +30,6 @@ export interface DrawnBox extends DrawnPoint {
  * page keeps on purpose, unlike the hashed CSS Module class names, which change
  * whenever the stylesheet does.
  */
-/** A file the page handed to the browser: what it was called, and what is in it. */
-export interface DownloadedFile {
-  readonly name: string;
-  readonly text: string;
-}
-
 export class UploadPage {
   readonly fileInput: Locator;
   readonly dropZone: Locator;
