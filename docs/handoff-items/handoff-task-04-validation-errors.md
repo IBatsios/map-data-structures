@@ -989,6 +989,8 @@ for the reason given: the short-file case defeats a phrase-only fix.
 `bun run dev`: serves 200 at `localhost:4321` with both live regions in the
 initial HTML; no errors in the log; stopped cleanly.
 Secret scan: **clean**.
+CI: **green** on `fb2791e`, both jobs — typecheck, 179 unit, 31 end to end on
+Linux. Run 35364244186. PR #7, still a draft; Sam marks it ready and merges.
 
 ### Adversarial pass beyond the checklist
 
