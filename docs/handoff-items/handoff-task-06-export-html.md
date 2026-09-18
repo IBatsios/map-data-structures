@@ -252,3 +252,261 @@ being schedulable and becomes blocking — say so then.
 
 Every acceptance criterion above is checked in the task file, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+**`toHtml` — the design as one standalone `.html` file.** A title, the
+preview's own SVG inlined, and the same two tables `toMarkdown` writes. Every
+style travels inside the file; nothing is fetched from anywhere. It opens in any
+browser, from any folder, with nothing beside it, and it is laid out to print.
+
+**An "Export HTML" button** beside "Export Markdown", in a row that is now a
+named group — `role="group"`, `aria-label="Export the design"` (D59). Both
+buttons are switched together by `holdDrawing`, so neither offers the design
+before last while an error panel is on screen (D53).
+
+**The verdict on `straightLine`:** proven unreachable, and parked with the proof
+rather than with a count of designs that missed it. Details under "Decisions
+recorded".
+
+Four things worth naming, because they are where the thinking went:
+
+1. **The signature.** `toHtml(layout, doc)` — the layout D48 settled, plus the
+   `Document` D52's pattern passes in — and beside it a pure
+   `htmlPage(layout, drawing)`, the whole page given the drawing already
+   serialised. That second function is not a test-only door; it is the half this
+   project's Vitest can reach at all, and the split is D55.
+2. **The drawing is serialised, not rebuilt.** `renderDrawing`'s element is
+   appended to a detached holder and its `innerHTML` is *read*. That read is the
+   escaping — the browser writes a text node out as the text it is — which is
+   why the SVG half needs no sanitiser and why there is no second SVG renderer
+   to keep in agreement with the first.
+3. **Escaped, never stripped.** `&` first, then `<`, `>`, `"`, in one
+   `escapeHtml`, for the `<title>`, the `<h1>` and every table cell. A label
+   that is literally `</style><script>` is shown as the text it says, runs
+   nothing, and leaves exactly one `</style>` in the file — the one this app
+   wrote.
+4. **The stylesheet is a string, and a test is what keeps it honest.** The
+   drawing's colours could not be imported: `?raw` and `?inline` both come back
+   empty under this project's Vitest, and a plain import is rewritten to a URL
+   by Astro, which is the fetch the criterion forbids. So they are written out
+   twice, and `exportStyles.test.ts` reads `drawing.module.css` off disk and
+   fails the day the two disagree.
+
+### Files added or changed
+
+| Path | What changed |
+|---|---|
+| `src/lib/toHtml.ts` | New. `toHtml(layout, doc)` and the pure `htmlPage(layout, drawing)`; the escaping and the two tables. |
+| `src/lib/toHtml.test.ts` | New, written first. Sixteen tests on the pure half. |
+| `src/lib/exportStyles.ts` | New. `EXPORT_STYLES`: the stylesheet the exported file carries, including its print rules. |
+| `src/lib/exportStyles.test.ts` | New, written first. Reads `drawing.module.css` off disk and compares every colour against it. |
+| `src/pages/index.astro` | The second button, the group's name, its listener, and `holdDrawing` switching both. `exportMarkdown` became one `exportDesign(elements, extension, mediaType, write)` serving both formats. |
+| `src/lib/layout.ts` | Comment only, no behaviour: the proof that `straightLine` is unreachable, written beside it. |
+| `e2e/export.spec.ts` | A second `describe` of thirteen tests for the HTML export, beside Markdown's. |
+| `e2e/pages/uploadPage.ts` | `exports`, `exportHtml`, `downloadHtml(saveAs?)`, `nodeFill(index)`; `downloadMarkdown` now goes through a shared `exportUsing`. `DownloadedFile` gained `path`. |
+| `e2e/fixtures/markup-labels.json` | New. Labels that are markup, an `&`, quotes, and text that is not plain ASCII. |
+| `docs/DECISIONS.md` | Appended D55–D60. Nothing rewritten. |
+| `README.md` | The HTML export exists now; "still to come" is PDF and Word. Commands unchanged. |
+| `docs/tasks/06-export-html.md` | Status line only. Boxes left unchecked — they are yours. |
+
+`src/lib/download.ts` needed no change, as predicted. `Blob` carried the text
+and `fileNameFor(title, 'html')` gave `Order-intake.html` from the same rule
+that gives `Order-intake.md`. **No finding to report there.**
+
+`src/styles/exports.module.css` needed no change either: the row was already
+built as a row, and the group's name is an attribute rather than a style.
+
+### Tests written
+
+**Unit — `src/lib/toHtml.test.ts` (16).** All through `layoutDesign`, so nothing
+is asserted about a shape nothing produces.
+
+- It is a whole document: doctype, `<html lang="en">`, a closing `</html>`.
+- The design's name is the page's `<title>` and its `<h1>`.
+- The drawing it is handed lands on the page.
+- Every node, in file order, with its id, label and type; the same for edges.
+- Every table has `<th scope="col">` headings; the page has an `<h2>` for
+  Drawing, Nodes and Edges.
+- A label of `<script>alert(1)</script>` becomes a cell reading
+  `&lt;script&gt;…&lt;/script&gt;`, and the page holds no `<script`.
+- A title of `<img src=x onerror=go>` is escaped in both `<title>` and `<h1>`.
+- `&` is escaped first: `&lt;b&gt; & "quoted"` survives as what it said rather
+  than being decoded back into an entity.
+- A label of `"  Public API  "` keeps both spaces (D39).
+- A design with no nodes gets the sentence and no `<svg>`; both tables keep
+  their headings and have no rows.
+- The styles are in the page; no `<link>`, `<script>`, `<img>`, `@import`,
+  `src=` or absolute URL is.
+
+**Unit — `src/lib/exportStyles.test.ts` (9).** One per node kind plus the shared
+parts: every `--shape-*` band and every route, arrowhead, plate and edge-label
+colour in the export equals the one in `drawing.module.css`; the stylesheet
+imports nothing, fetches nothing, and cannot close the `<style>` element it is
+written into.
+
+**End to end — `e2e/export.spec.ts`, "Exporting the design as HTML" (13).**
+
+- Present and disabled from the first paint; enabled once a drawing appears.
+- Named `Order-intake.html`, the same stem the `.md` uses.
+- Every label the preview draws is in the file; both tables have the right
+  number of rows.
+- The drawing is the preview's own: `routePath(0)` read off the screen appears
+  verbatim in the file, and the node and edge counts match.
+- The SVG keeps its Task 03 `<title id="drawing-title">` and its `role="img"`.
+- Nothing is fetched: no `<link>`, `<script>`, `<img>`, `@import`, no `url(`
+  that does not point inside the page, and the one absolute URL in the file is
+  the SVG namespace.
+- **It opens alone from another folder.** Saved to a directory of its own,
+  opened over `file://`, and asserted: the `<h1>`, a visible drawing, seven
+  nodes, thirteen table rows — and zero requests to anything that is not the
+  file itself. That is step 4 of the task file, automated.
+- **The colours survive the copy.** The computed `fill` of a node in the
+  reopened file equals the computed `fill` of the same node in the preview.
+- **A markup label is text, and runs nothing.** Every label the preview drew is
+  found as text on the reopened page; no `script` or `img` element exists; no
+  dialog fires; exactly one `</style>` is in the file.
+- **Encoding.** A Greek label and a `«…»` edge label read back correctly off the
+  disk, where there is no header to say how the bytes are encoded and the file's
+  own `<meta charset>` is the only thing between them and question marks.
+- A design with nothing in it: the sentence, no `<svg>`, both tables empty.
+- The export stops being offered when the next file fails.
+- The row is a group of two buttons; Tab goes from Markdown to HTML and Enter
+  downloads `Order-intake.html`.
+
+### Local results
+
+`bun run test`: **pass** — 17 files, 265 tests (was 15 files, 240 tests).
+
+`bun run test:e2e`: **pass** — 53 tests (was 39).
+
+`bun run check`: **pass** — 0 errors, 0 warnings, 0 hints.
+
+`bun run build`: **pass** — 1 page, static output in `dist/`.
+
+Accessibility, best effort, on both surfaces:
+
+- The exported page: `lang="en"`, a `<title>`, `<h1>` then `<h2>` with no level
+  skipped, a `<main>`, the SVG's own `<title>`/`<desc>` behind `role="img"`,
+  `<th scope="col">` and a `<caption>` on each table, and no inline `style`
+  attribute anywhere. Its own text measures 15.5:1 for body text, 6.3:1 for the
+  quiet text, and 5.7:1 for a table heading on its band — all past AA's 4.5:1,
+  measured with the project's own `contrastRatio`.
+- The upload page: `role="group"` is a valid role, the group has a name, both
+  buttons have visible text, and the second is reachable by Tab from the first.
+
+`.env.example`: confirmed rather than assumed. Nothing under `src/` reads
+`import.meta.env` or `process.env`, this task added no variable, and the file
+still holds none. Criterion 7 is vacuously true.
+
+### Decisions recorded
+
+Six rows appended to `docs/DECISIONS.md`. Nothing existing was rewritten.
+
+- **D55** — `toHtml(layout, doc)` plus the pure `htmlPage(layout, drawing)`, and
+  where each half is tested. Resolves the task file's `toHtml(design, layout)`
+  sketch in D48's favour.
+- **D56** — escaped, never stripped, `&` first, in one function; and the SVG
+  half made safe by serialising rather than rebuilding.
+- **D57** — the exported stylesheet is a string constant, and the test that
+  reads `drawing.module.css` off disk is what makes the duplicate acceptable.
+- **D58** — `straightLine` parked as **proven unreachable**, and kept as a
+  guard.
+- **D59** — the export row is a `role="group"` named "Export the design".
+- **D60** — the drawing leads and the tables follow; a design with no nodes gets
+  D51's sentence in place of an empty `<svg>`.
+
+On **D58**, since it was the open question of the cycle. The fallback's inputs
+cannot occur, and here is why rather than how many designs missed it:
+
+1. Dagre ends its own layout with `assignNodeIntersects`, which unconditionally
+   unshifts the source border's intersection onto every edge's points and pushes
+   the target border's. No edge comes back with fewer than two points, and both
+   ends are already on a border.
+2. `buildGraph` adds one dagre edge per design edge, keyed by its index in the
+   file, and `readRoutedEdges` reads back with the same key — so the lookup
+   never misses and `routed` is never `undefined`.
+3. Self-edges never reach the branch: `selfLoopSlots` gives a slot to every one
+   of them, so a loop is drawn by `selfLoops.ts` and never read from dagre.
+4. Probing agreed. Ten shaped graphs — parallel edges, two-cycles, self-loops, a
+   complete graph, a fifty-node chain — and four hundred fuzzed ones came back
+   with three points at the fewest, never two and never fewer.
+
+So the arrowhead-inside-a-box exposure does not exist, on screen or in the
+export, and the HTML export embeds only border-to-border routes. It is kept
+rather than deleted because it guards a library this module does not own, and
+deleting it would turn a future dagre change into an edge drawn with an empty
+`d`, which is invisible rather than visibly wrong. It is left centre to centre
+rather than corrected because a correction to code nothing can reach could not
+be tested, and you asked me not to fix it blind. The proof is written beside the
+function as well as in the log.
+
+### Known gaps
+
+- **`toHtml`'s three DOM lines are not unit-tested, by construction.** Vitest
+  has no DOM here, so `serialiseDrawing` — create a holder, append the drawing,
+  read `innerHTML` — is covered only by Playwright. It is covered there
+  thoroughly, including the route read off the screen appearing verbatim in the
+  file. A Vitest-level assertion on it would need a DOM environment, which is a
+  dependency and a decision this task did not have.
+- **The RED step is in the transcript, not in a commit of its own.** The
+  pre-commit hook runs `astro check` over the whole tree, so a commit holding a
+  test that imports a module which does not exist yet cannot be made at all. I
+  ran both new test files and watched them fail on exactly those missing
+  modules, then implemented; the first feature commit carries both.
+- **`countOf` in `e2e/export.spec.ts` counts substrings, not elements.** Fine
+  for what it does — `data-part="node"` and `</style>` — but it should not be
+  reached for on anything that could appear inside a label.
+- **The exported page is styled here, not in Task 09.** Task 09 owns the app's
+  own pages; this stylesheet is the artifact's own and lives in
+  `exportStyles.ts`. If Task 09 sets a project-wide visual direction, that file
+  is the one place to bring into line — and Task 07 will already be inheriting
+  it.
+- **The drawing's `max-height: 75vh` was deliberately not copied** into the
+  export. A standalone page scrolls and a printed one needs the whole drawing,
+  so a very large design gives a tall page rather than a shrunken picture. If
+  that reads wrong on a 300-node design, it is one rule to change.
+
+### Out-of-scope notes for Jared
+
+**1. A valid design can make `layoutDesign` throw. Found while probing
+`straightLine`; not touched.**
+
+Some graph shapes make dagre throw `Not possible to find intersection inside of
+the rectangle` out of its own `intersectRect`, which happens when two boxes it
+is routing between share a centre. Seven of four hundred fuzzed shapes hit it. A
+minimal case that still throws, every node `type: "service"`:
+
+```
+nodes: n0, n2, n3, n4, n5, n6
+edges: n2→n5, n0→n6, n0→n4, n3→n4, n6→n3, n4→n0, n0→n4
+```
+
+No edge can be removed from it without the crash going away; it needs both the
+two-cycle (`n0→n4`, `n4→n0`) and the parallel duplicate of `n0→n4`. A two-cycle
+alone is fine, a parallel pair alone is fine, a three-cycle is fine.
+
+It fails safely rather than breaking the page: `showDrawing` throws before
+anything on screen changes, `drawOrExplain` catches it, and the panel says
+"Something went wrong while reading that file: Not possible to find intersection
+inside of the rectangle." So the user is told, the page is intact, and no
+previous drawing is left behind — but a legal design cannot be drawn, and the
+sentence is the engine's words rather than the app's, which is what D43
+otherwise avoids. It is reachable by any file a user can write, which is what
+makes it worth a cycle of its own. I did not open it: it is outside Task 06 and
+a fix touches `layout.ts`'s routing, which every task from here reads.
+
+**2. `e2e/fixtures/empty.json` is still the confusing name** — a file with
+nothing in it, sitting beside `empty-design.json`, a design with nothing in it.
+Already on your list; noting only that the HTML suite now reads the second of
+them too, so the rename touches one more spec than it did.
+
+**3. The three loader-module items were left closed**, as gated:
+`describeLoadError.ts:191`/`:193`, `loadDesign.ts`'s doc comment, and
+`loadDesign.test.ts:146`. I did not open those files. Note that finding 1 above
+lands in the same region — the panel's wording for an engine message — so if the
+crash gets a cycle, that chore is its natural neighbour.
