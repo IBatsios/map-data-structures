@@ -289,3 +289,265 @@ edited — that proposal is still with the user. Do not edit agent config.
   untested.
 - **Sam:** docs and merge. Route the documentation refresh through its own
   `chore/…` branch and its own pull request, as with the previous cycles.
+
+## Work completed by Amon — round 1
+
+### What was built
+
+One opt-in command, `bun run docx:libreoffice`. It exports five fixtures
+through the app's own **Export Word** button in a real browser, converts each
+produced `.docx` with the LibreOffice installed on this machine, and reads the
+converted file back through `e2e/docxText.ts` to confirm the design's title and
+every node and edge label are still in it. It reports a pass or a fail per
+fixture. A conversion that exits 0 and loses the document is a **fail**.
+
+Four things about its shape, each one a criterion kept by construction rather
+than by care:
+
+- **It cannot run in CI or in the default walk.** Its Playwright run lives in a
+  second config, `playwright.libreoffice.config.ts`, whose `testDir` is
+  `scripts/libreoffice/`. `playwright test` — which is what `bun run test:e2e`
+  and CI run — reads `playwright.config.ts`, whose `testDir` is `./e2e`, and
+  cannot reach it. No tag, no skip, nothing that has to fire correctly.
+- **The verdict is pure.** `judgeConversion` is a function of three facts —
+  timed out, exit code, output file written — and stderr is carried as
+  diagnostic text that no branch reads. So finding 6 is pinned by a Vitest test
+  that passes on a machine with no LibreOffice at all.
+- **Presence is answered by the file, never by running the binary.**
+  `--version` is not used anywhere. Every invocation that does run is bounded
+  by a 120-second timeout, reported as a timeout naming the command.
+- **Nothing is written inside the repository.** The export, the conversion and
+  the LibreOffice profile all live in a room per fixture under the system
+  temporary directory. The room is removed when its fixture passes and kept
+  when it fails, with the path in the failure message.
+
+### Files added or changed
+
+- **`scripts/libreoffice/check.ts`** — new. The `bun run` entry point. Finds
+  LibreOffice, prints one line and exits 0 if there is none, otherwise starts
+  the Playwright run with the binary passed down. Carries the canonical "what
+  this buys and does not buy" comment (criterion 12).
+- **`scripts/libreoffice/soffice.ts`** — new, pure. `MAPDS_SOFFICE` first, then
+  per-platform full paths; on Windows `soffice.com`, never `soffice.exe`, and
+  never the Maintenance Service directory. `describeMissingSoffice` is the one
+  line the absent case prints.
+- **`scripts/libreoffice/verdict.ts`** — new, pure. The three facts, and the
+  rule that stderr never decides.
+- **`scripts/libreoffice/survivingText.ts`** — new, pure. What the converted
+  document must still carry, derived from the fixture's own JSON through the
+  export's `safeDocxText`, and what it lost.
+- **`scripts/libreoffice/convert.ts`** — new, impure. Spawns LibreOffice with a
+  profile directory of its own, collects what it says, kills it on the clock,
+  and hands the three facts to `judgeConversion`. Its argument list is a pure
+  function so a test can pin the profile flag.
+- **`scripts/libreoffice/docxRoundTrip.spec.ts`** — new. The five fixtures,
+  through the browser, through LibreOffice, and back.
+- **`playwright.libreoffice.config.ts`** — new. Extends the default config so
+  the served `dist/` cannot drift, overrides `testDir`, `testMatch`
+  (`**/*.spec.ts`, so the Vitest files beside the spec are not collected),
+  workers, retries and timeout.
+- **`vitest.config.ts`** — now also collects `scripts/**/*.test.ts`.
+- **`package.json`** — one new script, `docx:libreoffice`.
+- **`README.md`** — the command in the run block; a `### bun run
+  docx:libreoffice` section with the search order, the override's name, and
+  what this does and does not buy; and a paragraph in **Configuration** saying
+  why `MAPDS_SOFFICE` is not in `.env.example`.
+- **`docs/DECISIONS.md`** — D104 to D110.
+- **`.github/workflows/ci.yml`** — **not changed.** `git diff main -- .github/`
+  is empty (criterion 11).
+- **`.gitignore`** — **not changed**, and did not need to be: nothing the check
+  makes can land in the tree.
+
+### Tests written
+
+**33 new Vitest tests**, all of which pass with no LibreOffice installed.
+
+`scripts/libreoffice/verdict.test.ts` — 11:
+
+- a clean exit with a file on disk is a conversion
+- the platform-libraries warning on stderr is still a conversion (finding 6)
+- **`never lets stderr decide the verdict`** — five stderr samples, including
+  `Error: source file could not be loaded` and `Fatal exception: Signal 11`,
+  all still `converted` when the exit code is 0 and the file is there. This is
+  the test that goes red the day someone softens the rule
+- what the run said is carried as diagnostics
+- a non-zero exit fails, and the reason names the code
+- exit 0 with no file fails — the shape a document LibreOffice cannot parse
+  produces
+- a failure names the command, so it can be repeated by hand
+- a run killed without a code reads as killed, not as "code null"
+- a timeout is a timeout and not a failure
+- a timeout names the command and the seconds (criterion 7)
+- a timeout outranks an exit code that arrived late
+
+`scripts/libreoffice/soffice.test.ts` — 9:
+
+- the override comes ahead of any install
+- an override pointing nowhere does **not** fall back — this is what makes
+  criterion 10 demonstrable on a machine that has LibreOffice
+- Windows resolves the `.com`, and nothing searched ends in `.exe`
+- nothing searched is in the Maintenance Service directory
+- macOS looks inside the application bundle
+- Linux looks in four usual places
+- it says where it looked when it found nothing
+- the absent line is one line and carries what, where and how
+- the override's failure is blamed on the override, still in one line
+
+`scripts/libreoffice/survivingText.test.ts` — 9: the title and every label are
+asked for; a control character is asked for in its **marked** form (D76), not
+its raw one; a two-line label is asked for line by line; a blank line inside a
+label is not asked for, because every document contains an empty string; the
+same label twice is asked for once; a design with no nodes asks for D51's
+sentence; a file that is not a design throws rather than quietly asking for
+nothing; and `missingFrom` names what is gone and comes back empty when
+nothing is.
+
+`scripts/libreoffice/convert.test.ts` — 4: exactly one
+`-env:UserInstallation=` argument, given as a `file://` URL; a headless
+conversion to `docx` into a directory of its own; and no `--version` anywhere.
+
+**5 Playwright checks**, one per fixture, in the opt-in run.
+
+**The content check was falsified before it was believed.** With one impossible
+string added to the expected list, `order-intake` went red with the expected
+message, naming the fixture, the temporary room (which was kept, as designed)
+and what LibreOffice printed. The probe was reverted and is not in any commit.
+
+### Local results
+
+`bun run test`: **pass — 482 tests in 31 files** (449 in 27 before this cycle).
+
+`bun run check`: **pass — 0 errors, 0 warnings, 0 hints across 93 files.**
+
+`bun run build`: **pass — 2 pages in 774 ms.**
+
+`bun run test:e2e`: **pass — 124 tests in 6 files**, the same six specs as
+before. `playwright test --list` collects `drawing`, `export`, `exportPdf`,
+`exportWord`, `schema` and `validation` and does not collect
+`docxRoundTrip.spec.ts` (criterion 2).
+
+`bun run docx:libreoffice` (criterion 4), verbatim:
+
+```
+$ bun scripts/libreoffice/check.ts
+Converting the Word exports with C:\Program Files\LibreOffice\program\soffice.com
+[WebServer] $ astro build
+
+Running 5 tests using 1 worker
+
+  ok 1 [chromium] › scripts\libreoffice\docxRoundTrip.spec.ts:63:2 › order-intake.json survives a LibreOffice round trip (6.4s)
+  ok 2 [chromium] › scripts\libreoffice\docxRoundTrip.spec.ts:63:2 › control-labels.json survives a LibreOffice round trip (5.3s)
+  ok 3 [chromium] › scripts\libreoffice\docxRoundTrip.spec.ts:63:2 › empty-design.json survives a LibreOffice round trip (5.2s)
+  ok 4 [chromium] › scripts\libreoffice\docxRoundTrip.spec.ts:63:2 › markup-labels.json survives a LibreOffice round trip (5.4s)
+  ok 5 [chromium] › scripts\libreoffice\docxRoundTrip.spec.ts:63:2 › estate-sweep.json survives a LibreOffice round trip (6.8s)
+
+  5 passed (32.8s)
+```
+
+`git status --porcelain` immediately after that run: **clean** (only the two
+documentation files that were staged at the time). No `mapds-libreoffice-*`
+room was left in the temporary directory — all five passed and cleaned up after
+themselves (criterion 8).
+
+The absent case (criterion 10), demonstrated by pointing the override at a path
+that does not exist, verbatim:
+
+```
+$ MAPDS_SOFFICE="D:\nowhere\soffice.com" bun run docx:libreoffice
+$ bun scripts/libreoffice/check.ts
+LibreOffice was not found, so the .docx check did not run and nothing failed. MAPDS_SOFFICE points at D:\nowhere\soffice.com, which is not there. Unset MAPDS_SOFFICE to search the usual install locations instead, or point it at a binary that exists.
+exit=0
+```
+
+One line, exit 0, no browser started, no spec run, nothing red.
+
+### Decisions recorded
+
+D104 to D110 in `docs/DECISIONS.md`:
+
+- **D104** — one opt-in command, and its Playwright run in a second config
+  rather than a project or a tagged spec; `vitest.config.ts` also collects
+  `scripts/**/*.test.ts`.
+- **D105** — the verdict is a pure function of three facts; stderr never
+  decides.
+- **D106** — presence by the file, never by `--version`; every invocation
+  bounded, and a timeout reported as one.
+- **D107** — the override first, then per-platform full paths; the Windows
+  `.com`; an override pointing nowhere is an answer, not a fallback.
+- **D108** — a profile directory per run, under the system temporary
+  directory.
+- **D109** — expectations from the fixture's JSON through `safeDocxText`, not
+  from `docxPlan`.
+- **D110** — `MAPDS_SOFFICE` documented in `README.md` and deliberately **not**
+  in `.env.example`, with the reason.
+
+D110 is the one worth arguing with. `CLAUDE.md` says every new environment
+variable gets a placeholder line in `.env.example`, and I did not add one.
+`.env.example` is generated from `docs/intake.md`, its text says the app reads
+nothing from the environment, and that stays true — this variable is read by
+one local developer command and by nothing the site ships. A line there would
+be lost on the next regenerate and would tell a reader the browser reads an
+environment it never sees. Overturn it if you disagree; it is one line either
+way.
+
+### Known gaps
+
+1. **Criterion 2, read literally, is not quite met and I think that is
+   correct.** `bun run test` does not run "the same Vitest suite it runs
+   today": it runs 33 more tests. That is criterion 6 arriving —
+   the pure halves have to be in Vitest for the stderr rule to be checkable in
+   CI. What criterion 2 protects is met exactly: `bun run test` starts no
+   LibreOffice and no browser, gains no dependency on any binary, and passes
+   with LibreOffice unreachable.
+2. **The timeout path has never fired for real.** No invocation hung during
+   this cycle, because every one of them passes the profile flag. The verdict
+   side is unit-tested, but the Windows `taskkill /T /F` kill and the POSIX
+   `process.kill(-pid)` kill have not been exercised end to end. If you want to
+   see it, set `CONVERSION_TIMEOUT_MS` in `docxRoundTrip.spec.ts` to something
+   like `500` and run one fixture; it should report a timeout naming the
+   command rather than a failure.
+3. **macOS and Linux are unit-tested, not run.** `findSoffice`'s paths for both
+   are pinned against a fake filesystem. Nobody here has either platform, so
+   the paths themselves are the usual install locations rather than measured
+   ones, and the POSIX kill has never run.
+4. **The metadata title is not asserted after conversion.** `docxTitle` reads
+   `docProps/core.xml`, and whether LibreOffice carries that through a round
+   trip is its business rather than the export's. Criterion 5's title is
+   checked as the title the document *prints*, which is the design's title in
+   the body text and in `textThatMustSurvive`'s list. Asserting the metadata
+   too would be a stronger check of something the criterion does not ask about
+   and LibreOffice does not owe us — see out-of-scope note 3.
+5. **Five fixtures, not all of them.** Criterion 4's five, and no more.
+   `platform-overview.json` — the one whose drawing tiles across several sheets
+   — is the obvious sixth and is not in the list; adding it is one line in
+   `FIXTURES`.
+6. **The LibreOffice version is not recorded by the check.** It cannot ask:
+   `--version` hangs. It is LibreOffice 26 on this machine, read out of
+   `C:\Program Files\LibreOffice\program\version.ini` by hand.
+
+### Out-of-scope notes for Jared
+
+1. **The CI follow-on, in a sentence, as you asked.** Enabling this in CI is
+   one job with `sudo apt-get install -y libreoffice-writer` and
+   `bun run docx:libreoffice` as its step — the check already exits 0 when the
+   binary is absent, so a misconfigured runner would be silently green, which
+   means the CI version would want `MAPDS_SOFFICE` set explicitly so a missing
+   install fails loudly instead. Worth its own cycle and its own decision, not
+   a line added to `ci.yml` here.
+2. **`version.ini` is a presence probe that does not hang.** `program/version.ini`
+   sits beside `soffice.com` and holds the build id and `UpdateID=LibreOffice_26_…`.
+   I did not use it — file existence is enough for presence and needs no
+   parsing — but if anyone ever wants the version in the output, that is where
+   it is, and it costs nothing to read.
+3. **Whether LibreOffice preserves `docProps/core.xml` on a round trip is an
+   open question worth an hour.** If it does, asserting the metadata title
+   after conversion is a free strengthening of this check. If it does not, that
+   is worth knowing about the format rather than about our export — D71 is why
+   the title metadata is there at all.
+4. **`e2e/exportWord.spec.ts` is 731 lines** against the 800-line ceiling. You
+   already flagged it; it is still true, and the next thing added to the Word
+   export will have to go somewhere else.
+5. **Nothing in this cycle touched the Word question.** The `.docx` is still
+   unverified against Microsoft Word, that item still belongs to the owner, and
+   the README now says so where a reader will find it rather than in a handoff
+   document.
