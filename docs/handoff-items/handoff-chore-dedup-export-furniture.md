@@ -783,3 +783,65 @@ Nothing. There was nothing to correct.
    on `'en'` and the `Nodes` / `Edges` section names is right: the section names
    are arguments at each call site, so unifying them is a shape change and not a
    move. Worth a line in whichever cycle next opens those files.
+
+---
+
+## Verification and merge by Sam — round 1
+
+### Re-earning the merge
+
+Independently, not on Jahmyr's word: `git branch --show-current` reads
+`chore/dedup-export-furniture`, working tree clean. `bun run test` — **449
+passed, 27 files**, matching the report. `gh pr checks 25` — both `test` jobs
+`pass`. `gitleaks detect --source . --no-banner` — **no leaks found**, 35
+commits scanned (two more than Jahmyr's 33, from the two docs commits recording
+round 1). PR #25 is `MERGEABLE`, `mergeStateStatus: CLEAN`, draft.
+
+I also re-checked the diff against `main` directly rather than reading it off
+the report: `git diff --stat main...HEAD` shows exactly the 14 files the
+"Files added or changed" section names, `git diff -M --name-status main --
+e2e/fixtures/` shows one `R100`, and the two comment-only diffs
+(`loadDesign.ts`, `layout.ts`) add prose and change no executable line, read in
+full. `pdfPlan.ts` and `docxPlan.ts` import `EDGE_COLUMNS, NODE_COLUMNS,
+NOTHING_TO_DRAW` from `./exportFurniture`; `pdfPlan.ts` re-exports
+`NOTHING_TO_DRAW` rather than re-declaring it; `toHtml.ts` and `toMarkdown.ts`
+import `EDGE_HEADINGS, NODE_HEADINGS, NOTHING_TO_DRAW`. All of it matches what
+the criteria claim.
+
+### The wording question — settled
+
+**The reading that stands is "one declaration, not two," not "private" taken
+literally.** `exportFurniture.ts:44` is `export interface Column`, and it has
+to be: `pdfPlan.ts` and `docxPlan.ts` both need the type, and a type two
+modules import cannot be private to a third. The criterion was written when
+the duplicate lived as an identical private interface in each of the two
+planners — "private" described where it was, not a constraint on where it had
+to end up once merged. Read as "the interface exists in one file, not two,"
+which is what the sentence is actually checking for, it passes cleanly and
+Jahmyr's check stands as correct, not fudged. Recording this so a later reader
+who greps for `private interface Column` and finds `export interface Column`
+does not conclude a box was checked wrongly.
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| This handoff doc | Jared's assignment, Amon's round-1 work, Jahmyr's round-1 report all present and legible; all 28 acceptance-criteria boxes checked | Appended this section |
+| `docs/tasks/` | No task file for this cycle, correctly — `docs/` is generated from `docs/intake.md`, none of this is in the intake, and the doc says so. Tasks 10 and 11 confirmed still `**Status:** ready` | None needed |
+| `README.md` | Run/test/build/deploy commands present and correct, match `CLAUDE.md`, use `bun run test` throughout. Nothing in this cycle changes how the app is run, tested, built or deployed, so no README change was owed | None needed |
+| `CLAUDE.md` | Status section describes export behaviour, which is unchanged byte-for-byte; nothing in it references the old four-copy structure of the furniture, so nothing reads stale | None needed |
+| `docs/DECISIONS.md` | D102 and D103 present, dated, numbered from D102 as required (D101 was highest on `main`), and both match what Amon's and Jahmyr's sections describe — D102 records D66's guarantee as structural now rather than asserted, D103 the fixture-naming rule | None needed |
+| `.env.example` | Still declares no variables; code reads none — confirmed by grepping `process.env` / `import.meta.env` across `src/`, `scripts/`, `astro.config` | None needed |
+| `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md` | Checked for now-stale references to the old per-file furniture (`Column`, `NOTHING_TO_DRAW`, `exportFurniture`) — none found, so none of these generated docs is made wrong by this cycle | None needed (would not have edited these regardless) |
+
+### Gates
+
+`bun run test`: **pass — 449/449 across 27 files**, independently re-run.
+CI: **green** — both `test` checks on PR #25, `gh pr checks` confirms `pass`/`pass`.
+Secret scan: **gitleaks — no leaks found**, 35 commits, ~2.12 MB scanned, `.env.example` holds only the documented placeholder-free line.
+
+### Merge
+
+Pending — recorded in the post-merge handoff-doc refresh, since the merge SHA
+is not known until after `gh pr merge` runs and this branch is deleted
+immediately after.
