@@ -792,7 +792,7 @@ Secret scan: `gitleaks detect --source . --no-banner` — no leaks found, 30 com
 
 ### Merge
 
-Squashed into `main`. Branch `fix/drawing-label-size` deleted. PR https://github.com/IBatsios/map-data-structures/pull/19. Squash commit SHA is in the post-merge refresh, `docs/handoff-items/handoff-next-phase.md`.
+Squashed as `7524cc4` into `main`. Branch `fix/drawing-label-size` deleted (confirmed gone from `origin` via `git ls-remote`). PR https://github.com/IBatsios/map-data-structures/pull/19.
 
 The two documentation fixes above (`CLAUDE.md`, `docs/DECISIONS.md` D89) and this section were committed to `fix/drawing-label-size` before the merge, so CI re-ran green against them prior to squashing.
 
