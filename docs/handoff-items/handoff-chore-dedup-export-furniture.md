@@ -286,7 +286,7 @@ written to be falsifiable by comparison against `main`, not by assertion.**
       today, across 26 files. A lower count means something was deleted.
 - [x] `bun run test:e2e` passes all **124**.
 - [x] `bun run check` is clean.
-- [ ] CI is green on the pull request, on both jobs.
+- [x] CI is green on the pull request, on both jobs.
 - [x] `docs/DECISIONS.md` records this cycle, numbered from **D102** (D101 is the
       highest today): one decision for where the shared export text and columns
       now live and what keeps them from drifting, one for the fixture naming
@@ -617,8 +617,9 @@ Four commits, one per chore plus one for the comments.
 
 ### Verdict
 
-**Pass**, pending CI. 27 of 28 criteria verified and checked; the 28th, CI green,
-is recorded below once the pull request's runs report.
+**Pass.** All 28 criteria verified and checked. CI is green on both runs of
+[PR #25](https://github.com/IBatsios/map-data-structures/pull/25), which is open
+as a draft for Sam to mark ready and merge.
 
 This cycle's whole warrant is that nothing changed, so I did not take Amon's MD5
 on report. I wrote my own capture harness, ran it on `main` and on this branch,
@@ -656,7 +657,7 @@ falsified the probe to prove it was not vacuous.
 | `bun run test` passes at least 441 across 26 files | **pass** | **449 passed across 27 files.** The baseline was observed rather than assumed: I checked out `main` and ran it — **441 across 26**. The delta is exactly the one new file and its eight tests, and no test file was deleted; `name-status` shows one `A` and one `M`. |
 | `bun run test:e2e` passes all 124 | **pass** | **124 passed, 21.6s.** Port 4321 was confirmed free before the run, so no stale server served a pre-change `dist/`. |
 | `bun run check` is clean | **pass** | `astro check`: **0 errors, 0 warnings, 0 hints across 82 files** — 80 on `main`, plus the two new ones. |
-| CI green on the pull request, on both jobs | see the CI section below | Branch pushed and the pull request opened as a draft; the result is recorded there. |
+| CI green on the pull request, on both jobs | **pass** | [PR #25](https://github.com/IBatsios/map-data-structures/pull/25), draft. Both event-triggered runs of the `test` job are green: the push run [35418897534](https://github.com/IBatsios/map-data-structures/actions/runs/35418897534) in 1m50s and the pull_request run [35418912466](https://github.com/IBatsios/map-data-structures/actions/runs/35418912466) in 1m33s. Each run does `bun run check`, `bun run test` and `bun run test:e2e` on ubuntu-latest. No repeat of D101's flaky-runner timeout. |
 | `docs/DECISIONS.md` records the cycle, numbered from D102 | **pass** | D102 on where the furniture lives and that D66's guarantee is now structural rather than asserted, D103 on a fixture name saying *no bytes* or *no nodes* and never both. D101 was the highest on `main`. |
 | No new dependency, no new environment variable, `.env.example` unchanged | **pass** | `package.json` and `bun.lock` are absent from the diff. `.env.example` is unchanged and still declares no variables. Grepping `process.env` and `import.meta.env` across `src/`, `scripts/` and `astro.config` finds **nothing**; the only reads are `playwright.config.ts`'s `CI` checks, which are test infrastructure and pre-date this branch. |
 
@@ -751,6 +752,7 @@ surface this branch moves.
   `GET /schema` both returned 200 (27,194 and 26,530 bytes), and the dev log
   shows no error and no overlay. Stopped afterwards.
 - Secret scan: **gitleaks — no leaks found**, 33 commits, 2.10 MB scanned
+- CI: **green on both runs**, push in 1m50s and pull_request in 1m33s, on PR #25
 
 ### Defects for Amon
 
