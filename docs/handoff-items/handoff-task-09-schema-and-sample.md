@@ -458,3 +458,145 @@ Eight rows appended to `docs/DECISIONS.md`, D90 to D97:
   announcement** were both left exactly as they are, as instructed. So were the
   loader wording, the dagre `intersectRect` crash, D51's sentence in four files
   and the export column headings in four.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** All six acceptance criteria verified by exercise, CI green on the
+pull request. No defects for Amon. Three low-severity observations below, none
+blocking.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| As a user, I can read the JSON schema and a sample file: demonstrated end to end | pass | Loaded `/schema` in Chromium against the built site, screenshotted it full-page, read the field ledger (all nine paths), both prose rules, the two-pass note, the sample block and the schema-file link. Clicked **Copy the sample**, read the clipboard back, navigated to `/`, uploaded the copied bytes as a file: **7/7 nodes, 8/8 edges drawn, every label present**. Printed sample and clipboard both byte-identical to `public/sample.json` |
+| The sample uploads without errors and renders a drawing with every node and edge visible (14.1) | pass | 7 nodes, 8 edges, zero node or edge labels missing from the SVG; three distinct shape primitives (`polygon`, `rect`, `path`) covering all six canonical kinds — hexagon, rect, diamond, folded-corner, rounded, cylinder, confirmed visually. **0 console errors and 0 page errors across the entire verification run** |
+| Tests cover the behavior, as a user would observe it, and pass | pass | `bun run test` 416 passed / 25 files; `bun run test:e2e` 123 passed. The drift test was proven to **bite in both directions** rather than taken on report (see below) |
+| Every earlier test still passes; CI is green | pass | Full suites run locally, not just the new files. CI green on **both** runs (push event and pull_request event) on PR #21: typecheck 0/0/0, 123 e2e passed in 58.6s |
+| Best-effort accessibility: the schema page reads in order with headings, and the copy button is labeled | pass | `/schema`: `lang="en"`, exactly one `h1` ("The design format") followed by four `h2`s, **no heading-level skips**, landmarks `header,nav,main,footer`, **zero controls without an accessible name**. Copy button is a real `<button type="button">` named "Copy the sample", writing to a `role="status"` region present and empty from first paint. `/` measured the same way and also clean |
+| Any new environment variable is in `.env.example` with a placeholder | pass | Verified on a fact, not an absence: grepping `process.env`, `import.meta.env`, `Deno.env` and `Bun.env` over `src/`, `scripts/`, `e2e/` and both configs returns **only `process.env.CI` in `playwright.config.ts`**, which this branch does not touch. `git diff main -- .env.example` is empty. `gitleaks detect`: no leaks found |
+
+### The three things Amon flagged
+
+1. **The drift test bites — confirmed independently, both directions.**
+   Mutating the Zod side (`requiredText` `min(1)` to `min(2)`) turns
+   `publishedSchema.test.ts` red with "public/design.schema.json is stale. Run
+   `bun run schema` to write it again." Mutating the artifact on disk
+   (`"minLength": 1` to `3`) turns the same test red. Both restored; tree clean.
+   The failure message names the fix, which is what makes the test worth having.
+2. **The published schema really does accept a file with an extra key.**
+   Checked with **ajv against draft 2020-12**, not by reading the document: an
+   extra key is accepted at the top level, inside a node, and inside an edge.
+   A 13-case corpus was then run through *both* `public/design.schema.json` and
+   the app's own `loadDesign`, and they agree on every case except the two
+   cross-field rules — which is exactly the gap `RULES_THE_FILE_CANNOT_STATE`
+   carries in prose. D19 and D91 hold: extra keys are accepted and stripped.
+3. **The page styling, both screens.** Screenshotted both at 1280x900. They now
+   read as one product: shared masthead with `aria-current`, warm paper against
+   the drawing's cool plate, hairlines rather than cards, monospace reserved for
+   field paths and file content. The direction is specific rather than a default
+   template. One cosmetic note below.
+
+### Judgements Amon left to me
+
+- **`e2e/staticServer.ts` (D97) — sound, and I judge it an improvement.**
+  Probed the running server directly rather than trusting the walk: `/schema`
+  and `/schema/` serve 200, while **`/_astro` — a real directory in `dist/` with
+  no `index.html` — still 404s**, as do `/nothing-here`, `/schema/nope`, and
+  `/../package.json`, `/%2e%2e%2fpackage.json`, `/..%2f..%2fpackage.json` (no
+  bytes leaked; containment in `resolveWithin` is untouched). This is a
+  directory index, not the SPA fallback the file's comment refuses, and it makes
+  the walk a *more* faithful simulation of the static host, not less.
+- **`e2e/fixtures/empty.json` — leave it; it stays its own chore.** Jared's
+  condition was "if your sample work happens to land inside `validation.spec.ts`
+  anyway"; it did not — `git diff main..HEAD -- e2e/validation.spec.ts` is
+  empty. Renaming it here would put an unrelated change in this PR. For whoever
+  takes the chore, the collision is real and worth naming precisely: the file is
+  **0 bytes** and `validation.spec.ts:84` correctly uses it to mean *a file with
+  no bytes*, but `describeUpload.test.ts:50` uses the same name to mean *a valid
+  design with 0 nodes and 0 edges*, and `export.spec.ts:182` needs a comment to
+  disambiguate the two. One name, two opposite meanings.
+
+### Command results
+
+`bun run test`: **416 passed, 25 files, 0 failed**
+
+`bun run test:e2e`: **123 passed**
+
+`bun run check`: **0 errors, 0 warnings, 0 hints across 78 files**
+
+`bun run build`: **pass, 2 pages** (`/schema/index.html`, `/index.html`)
+
+`bun run dev`: **pass** — serves `/`, `/schema`, `/sample.json`,
+`/design.schema.json`; `/schema` renders its `h1` and all three controls, which
+also confirms D96's `?raw` fix works in dev as well as in the build. Stopped
+cleanly with `astro dev stop`
+
+Secret scan: **gitleaks, 28 commits scanned, no leaks found**
+
+CI: **green** — both the push-event and pull_request-event runs on PR #21
+
+Port 4321: **confirmed free before every local e2e run** (TIME_WAIT entries
+only, no LISTENING). The standing trap did not bite this round
+
+### Adversarial pass on "upload JSON, get a drawing back"
+
+Fifteen inputs through the real file input against the built site. Every bad
+input was refused with a specific, field-naming message; **nothing failed
+silently and nothing threw**.
+
+Refused: empty file, whitespace-only, malformed JSON, `null`, a bare array, a
+bare string, an object with no `nodes` key, duplicate node ids
+(`nodes[1].id: Two nodes share the id "a"`), an edge naming a missing node
+(`edges[0].to: This edge's "to" is "ghost", which no node defines`), and
+200-deep nested junk (`nodes[0] has to be an object, but it is a list`).
+
+Drew correctly: an empty design (0 nodes, 0 edges — valid per D19), the sample
+with extra keys (D19, still 7/8), **a UTF-8 BOM followed by the sample**, two
+identical edges (the format gives edges no id, so identical edges are legal and
+drawing them is right), and a **400-node / 399-edge design**.
+
+The download link was exercised for real: **1174 bytes on disk, byte-identical
+to `public/sample.json`, and it parses** — not a zero-byte stub. Both clipboard
+failure paths were driven (rejected promise, and `navigator.clipboard` absent
+entirely) and both say "This browser would not let the page copy it. Select the
+sample and copy it yourself, or use Download sample.json."
+
+### Defects for Amon
+
+**None.** Nothing found that changes behavior, structure or design.
+
+### Observations, not defects
+
+1. **`bun run schema` leaves the working tree dirty on a clean checkout.** The
+   generator writes `JSON.stringify(..., null, 2)`, which expands `required`
+   arrays across lines, while the committed artifact is Prettier-collapsed by
+   lint-staged — so running the script produces a whitespace-only diff that the
+   pre-commit hook reverts on the way in. Harmless and **already decided**: D90
+   records that the comparison is of parsed JSON "because the formatter owns the
+   whitespace and the whitespace is not the promise". Noting it only so the next
+   person to run the script is not surprised by a dirty `git status`.
+2. **Cosmetic, both pages at wide viewports.** At 1280px the content column is
+   capped and left-aligned, leaving roughly 40% of the width empty on the right,
+   and on `/schema` the table runs wider than the prose so the right edge is
+   ragged between sections. It reads fine and is a defensible measure choice —
+   raising it as a design judgement for Sam, not a defect.
+3. **`CLAUDE.md` says "Tasks 01 to 09 are done" and was written before
+   verification.** Per D54 `done` marks verification, so the sentence is true as
+   of this report. No action needed; flagged only because it was ahead of itself
+   when committed.
+
+### Fixed in place
+
+None. Nothing needed correcting — no typos, wrong imports, bad assertions or
+flaky waits found in anything I read or ran.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/21 — opened as a **draft**
+against `main`. Sam marks it ready and merges; I did not merge and did not
+force-push.
