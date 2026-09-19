@@ -22,6 +22,8 @@ bun run test:e2e  # run the Playwright walk in a real browser
 bun run check     # type-check with astro check
 bun run build     # build the static site into dist/
 bun run schema    # regenerate public/design.schema.json from the Zod schema
+
+bun run docx:libreoffice  # opt-in, local: open the Word exports in LibreOffice
 ```
 
 `bun run test` runs Vitest. Plain `bun test` runs bun's own test runner instead
@@ -34,6 +36,46 @@ the site and serves `dist/` itself, so it tests what Netlify would serve.
 
 `bun run schema` writes `public/design.schema.json` from `src/lib/design.schema.ts`.
 Run it whenever the schema changes; `bun run test` fails until you do.
+
+### `bun run docx:libreoffice`
+
+An opt-in local check on the Word export. It exports five fixtures through the
+app's own Export Word button, converts each one with the LibreOffice installed
+on your machine, and reads the converted file back to confirm the design's
+title and every node and edge label are still in it. A conversion that exits
+cleanly and loses the document is a failure, not a pass.
+
+Nothing else runs it. `bun run test` does not, `bun run test:e2e` does not, and
+CI does not — it has its own Playwright config, `playwright.libreoffice.config.ts`,
+with its own `testDir`, so `playwright test` cannot reach it. Its pure half —
+what an exit code means, where the binary is, what text has to survive — is in
+`bun run test` like everything else, and needs no LibreOffice to run.
+
+It finds LibreOffice by looking at `MAPDS_SOFFICE` first, and then at the usual
+install locations:
+
+- **`MAPDS_SOFFICE`**, when it is set: the full path of the binary. If it is set
+  and nothing is there, the check says so and stops rather than falling back —
+  which is also how you rehearse the no-LibreOffice case on a machine that has
+  one.
+- **Windows:** `%ProgramFiles%\LibreOffice\program\soffice.com`, then the
+  `Program Files (x86)` equivalent. The `.com`, never the `.exe`: the `.exe` is
+  the GUI binary, has no console attached, and anything it prints goes nowhere.
+- **macOS:** `/Applications/LibreOffice.app/Contents/MacOS/soffice`
+- **Linux:** `/usr/bin/soffice`, `/usr/local/bin/soffice`,
+  `/opt/libreoffice/program/soffice`, `/snap/bin/soffice`
+
+With no LibreOffice anywhere it prints one line saying so and exits 0. It is a
+check you can run, not a check you have to have.
+
+**What it buys, and what it does not.** A `.docx` is a zip of XML and every way
+it can go wrong is on the way out, so a second, unrelated implementation being
+able to open the file is worth knowing. **It is not a verified Word export.**
+LibreOffice is an independent implementation of OOXML, not Word's renderer: a
+file it opens cleanly can still behave differently in Word, and the reverse.
+Opening a produced `.docx` in real Microsoft Word, once, remains an open item
+and belongs to the owner — no machine that has touched this project has Word on
+it.
 
 Astro 7 runs `bun run dev` and `bun run preview` as background servers, whether
 or not `--background` is passed. `bunx astro dev status`, `bunx astro dev logs`
@@ -187,6 +229,12 @@ docs/         PRD, architecture, decisions, runbook, and one file per task
 None. MapDataStructures reads nothing from the environment, so `.env.example`
 holds no variables. Add any new variable there with a placeholder before the
 code reads it.
+
+One variable exists outside that rule and is deliberately not in
+`.env.example`: `MAPDS_SOFFICE`, which points `bun run docx:libreoffice` at a
+LibreOffice install. It is read by that command and by nothing the site ships,
+so listing it beside the app's variables would say the browser reads an
+environment it never sees. It is documented above instead.
 
 ## Contributing
 
