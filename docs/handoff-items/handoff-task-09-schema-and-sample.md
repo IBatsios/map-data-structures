@@ -600,3 +600,55 @@ flaky waits found in anything I read or ran.
 https://github.com/IBatsios/map-data-structures/pull/21 — opened as a **draft**
 against `main`. Sam marks it ready and merges; I did not merge and did not
 force-push.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| `docs/tasks/09-schema-and-sample.md` | All six acceptance-criteria boxes checked, `**Status:** done` | Verified only, no edit needed |
+| `README.md` | `bun run schema` listed alongside the other commands, matches `CLAUDE.md`; `bun run test` (never `bun test`) correct throughout; the `/schema` page, sample, and "Load the sample design" button all described; `scripts/` and the new layout/styles entries present in the Layout section | Verified only, no edit needed |
+| `CLAUDE.md` | Status section covers the published format, `io: 'input'`, the two cross-field rules living in prose, and the shared layout/tokens (D90–D94 referenced); commands match README | Verified only, no edit needed |
+| `docs/DECISIONS.md` | D90–D97 present, dated 2026-09-18, each with its reason; append-only, no earlier row edited | Verified only, no edit needed |
+| `.env.example` | Unchanged (`git diff main -- .env.example` empty), correctly still holding no variables since the code reads none | Verified only, no edit needed |
+| Handoff doc (this file) | Jared's assignment, Amon's work, and Jahmyr's report all present and legible | Verified only; appended this section |
+| `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md` | Untouched by this branch (`git diff main..HEAD --stat` confirms) | Not edited, per the standing rule; nothing wrong found to report |
+
+Also checked and left alone as historical, not stale: the "was deliberately
+plain until now" comment at the top of `src/styles/upload.module.css` reads
+correctly in the past tense about the decision this task resolved — not a
+leftover claim that the file is still plain.
+
+### Gates
+
+`bun run test`: **pass** — 416 tests, 25 files, re-run independently rather
+than taken on report.
+
+CI: **green** — `gh pr checks 21` showed both `test` jobs (push event and
+pull_request event) passing before the merge; `gh pr view 21` reported
+`mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`. Marking the PR ready for
+review (it was opened as a draft) did not trigger a new run — the same two
+green checks stood before and after.
+
+Secret scan: **gitleaks 8.30.1, no leaks found**, 29 commits scanned.
+
+### Merge
+
+Squashed as `1cddb7d0232c960995337f142dfcb4680c14fdfb` into `main`. Branch
+`feature/schema-and-sample` deleted (confirmed 404 on the GitHub API after
+merge). PR https://github.com/IBatsios/map-data-structures/pull/21.
+
+### Left for a person
+
+- Microsoft Word is still unverified against the `.docx` export — no machine
+  that has touched this project has Word installed.
+- Task 10's Netlify/GitHub account linkage is a Phase-0-style step reserved
+  for a person.
+- The cosmetic wide-viewport layout observation Jahmyr routed to Sam (roughly
+  40% empty width at 1280px on both pages, and `/schema`'s table running
+  wider than its prose) is recorded as a polish candidate in
+  `docs/handoff-items/handoff-next-phase.md`, not fixed — it reads fine and
+  is a defensible measure choice, not a defect.
