@@ -353,3 +353,221 @@ Not yours to solve — recorded here so it is not lost.
 
 Every acceptance criterion above is checked in this document, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+**Item 1 — the repro draws.** Outcome (1), not the floor. The six-node design
+lays out, and a real browser renders six boxes and seven arrows from it.
+
+The diagnosis first, because it changes what the defect is. Dagre's ordering
+pass has a special case for two parallel dummy chains between the same pair of
+nodes, and it merges them when one of the two is a *reversed* edge — which is
+what a two-cycle becomes after dagre's own acyclic pass. That merge drops one
+chain out of the ordering, so its dummy node is never given a position and comes
+back holding `NaN`.
+
+**`intersectRect` is not throwing because two centres coincide.** It throws
+because `point.x - rect.x` is `NaN`, and `!NaN` is `true`, so the guard
+`if (!dx && !dy)` fires. That matters, because it means the fault has a second
+face: where the `NaN` is *not* an edge's first or last point,
+`assignNodeIntersects` never touches it, dagre returns normally, and the `NaN`
+lands in the SVG path's `d`, which voids the whole path. **An edge disappears
+with nothing said at all.** I found this while fuzzing for the crash — 2 cases
+in 20,000 at one seed, and one inside the 2500-graph Vitest run. It is the same
+defect and the worse half of it, because nothing announces it.
+
+The remedy is in the wall, not in dagre. `layoutDesign` now asks dagre twice:
+
+1. **`'per-edge'`** — one dagre edge per edge in the file, exactly what it has
+   always been asked. Provably unchanged: every group holds one member, so the
+   reserved plate is that edge's own plate, the route comes back as given and
+   the label centre comes back as given. No existing drawing moves.
+2. **`'per-pair'`** — taken only when the first ask does not come back whole.
+   One dagre edge per pair of nodes, which removes the shape the special case
+   fires on; `parallelEdges.ts` then fans the duplicates apart, keeping both
+   ends on their borders and stacking the label plates.
+
+"Whole" is deliberately stricter than "did not throw": every coordinate has to
+be finite. That is what closes the silent half.
+
+**The floor is there too, as required either way.** If neither keying places a
+graph, `layoutDesign` throws `DesignLayoutError` and `describeLoadError` words
+it in this app's own sentence. Dagre's words never reach the screen.
+
+**To answer the criterion directly: no such design remains that I can find.**
+Per-pair keying failed zero times in 60,000 fuzzed multigraphs across three
+seeds, where per-edge failed 36 times. But "none I can produce" is a smaller
+claim than "none", so the wording exists and is tested rather than argued away.
+
+**Item 2 — Firefox is told where.** `describeSyntaxFault` reads a second engine
+clause and resolves either one to a `LineAndColumn`, so both reach `atPosition`
+unchanged. Both clauses live in one ordered list that `placeIn` and
+`engineDetail` both walk, which makes the invariant structural: the position
+that is printed and the position that is stripped from the detail cannot come
+from different clauses. `ENGINE_POSITION_CLAUSE` is untouched, still first and
+still end-anchored.
+
+Firefox now gets:
+
+> That file is not valid JSON. Line 5, column 1: JSON.parse: expected
+> double-quoted property name.
+
+### Where the SpiderMonkey message text came from
+
+**Read out of Firefox, not out of documentation.** Firefox 156.0 is installed on
+this machine (`Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:156.0)
+Gecko/20100101 Firefox/156.0`). Headless `--screenshot` failed on the software
+compositor, so I started it with `--marionette` against a throwaway profile and
+ran `JSON.parse` on the exact file texts the test file already uses, over the
+Marionette protocol, reading `error.message` back. Every SpiderMonkey string in
+`describeLoadError.test.ts` is a verbatim capture. The browser was stopped
+afterwards; nothing was installed and `playwright.config.ts` is untouched.
+
+Three things that came out of it and are now recorded in the code:
+
+- Every SpiderMonkey `JSON.parse` message ends `… at line N column M of the
+  JSON data`, so the new clause is end-anchored like V8's.
+- SpiderMonkey **never quotes the file**. Asked about a file whose own text
+  reads `position 900`, it answers `JSON.parse: unexpected character at line 1
+  column 1 of the JSON data` and quotes no byte of it. So D32's trap has no
+  SpiderMonkey equivalent; the end anchor there is insurance, not a measured
+  need, and the comment says exactly that rather than over-claiming.
+- On the trailing comma, V8 and SpiderMonkey both land on line 5, column 1 —
+  which is now a test.
+
+### Files added or changed
+
+- `src/lib/parallelEdges.ts` — **new.** Which edges share one dagre edge under
+  each keying, and the geometry that fans them back apart.
+- `src/lib/parallelEdges.test.ts` — **new.** Its unit tests, led by the
+  "per-edge keying changes nothing" property.
+- `e2e/fixtures/two-cycle-duplicate-edge.json` — **new.** The repro, named for
+  what it is. Title "Settlement mesh"; six `service` nodes and seven edges.
+- `src/lib/layout.ts` — `DesignLayoutError`; `placeWithDagre` and its
+  finite-coordinate gate; `buildGraph` and `readRoutedEdges` reworked onto
+  shared routes; `straightLine`'s doc comment corrected.
+- `src/lib/layout.test.ts` — the repro block and the seeded fuzz.
+- `src/lib/describeLoadError.ts` — the `DesignLayoutError` branch and its
+  wording; `ENGINE_LINE_AND_COLUMN_CLAUSE`; `ENGINE_POSITION_CLAUSES` and
+  `placeIn`; rule 1 of the module comment rewritten for three engine shapes.
+- `src/lib/describeLoadError.test.ts` — the three SpiderMonkey constants with
+  their provenance, five SpiderMonkey cases, two layout-failure cases.
+- `src/lib/loadDesign.ts` — the `DesignSyntaxError` doc comment only. No
+  behaviour change.
+- `src/lib/loadDesign.test.ts` — line 146's guard removed, assertion kept.
+- `e2e/drawing.spec.ts` — the browser walk over the new fixture.
+- `docs/DECISIONS.md` — D98 and D99 appended.
+
+### Tests written
+
+**Layout (`layout.test.ts`)**
+
+- `accepts the fixture as a design before any of this is about layout` — D20's
+  two passes; pins that the crash is downstream of the loader.
+- `draws all six nodes and all seven edges instead of throwing` — the criterion.
+- `gives every node and every point of it a number a renderer can draw` — the
+  silent half.
+- `routes the two parallel edges apart, so a reader can see both` — distinct
+  routes, non-overlapping plates.
+- `keeps each parallel edge's own label on its own plate` — no label swapped.
+- `lays out 2500 random multigraphs without one failure` — seed `20260918`,
+  generator `randomNumbers` in the file, 2 to 8 nodes, 0 to 2n edges. It counts
+  both throws and non-finite coordinates.
+
+**Parallel edges (`parallelEdges.test.ts`)** — 12 tests. The first block is the
+safety argument: the plate reserved for a group of one is that edge's own plate
+to the pixel, `fanOutRoute` returns the very same array, `stackedLabelCentre`
+returns the same centre. Then: duplicates merge, a two-cycle's two directions do
+not, self-edges never merge, ends stay on borders, a two-point route gains a
+middle, plates stack in file order, and `EDGE_KEYINGS` is ordered safe-first.
+
+**Messages (`describeLoadError.test.ts`)** — `names the line and column an
+engine gives without giving a position`; `reads an engine's line and column out
+at most once`; `puts two engines reading one broken file at the same line and
+column`; `still names the line when SpiderMonkey puts its fault after the JSON`;
+`trusts SpiderMonkey's own line, which never quotes the file back`; plus `says
+it in the app's own words rather than the graph library's` and `never repeats
+the graph library's own words back to the user`.
+
+**Browser (`drawing.spec.ts`)** — `draws a two-cycle with a duplicate edge that
+dagre alone cannot place`: nine labels present, 6 nodes, 7 edges, different `d`
+attributes on the parallel pair, plates not overlapping.
+
+### Local results
+
+`bun run test`: **pass** — 26 files, 441 tests (baseline on `main` was 25 files,
+416 tests).
+`bun run build`: **pass** — 2 pages.
+`bun run check`: **pass** — 0 errors, 0 warnings, 0 hints.
+`bun run test:e2e`: **pass** — 124/124 against a freshly built `dist/`.
+
+On the standing trap: I checked `netstat` before the run and **nothing was
+LISTENING on 4321** (only `TIME_WAIT` remnants of the run itself afterwards), and
+the `webServer` command begins with `bun run build`, so the build was fresh.
+`playwright.config.ts` is unchanged — I did not close the trap, deliberately, as
+that was not this cycle's scope.
+
+### Decisions recorded
+
+- **D98** — the dagre fault, both of its faces, the two-keying remedy, the
+  measurements (60,000 fuzzed graphs, three seeds) and the rejected alternatives
+  (`acyclicer: "greedy"`, which left 17 of 20 failures in place; patching or
+  forking dagre; a second graph library; making the merged keying the only one).
+  It also records that D58's reasoning is corrected in place.
+- **D99** — the second engine clause, the single shared clause list that makes
+  the `placeIn`/`engineDetail` invariant structural, why taking SpiderMonkey's
+  own line does not break rule 1, and where the message text came from.
+
+### Known gaps
+
+- **No RED-only commit.** The repo's pre-commit hook runs `bun run check` and
+  `bun run test`, so a commit with a failing test is refused. I watched each
+  test fail for the right reason before writing any implementation — the
+  fixture threw out of `assignNodeIntersects`, the fuzz reported `run 1050:
+  Not possible to find intersection…` and `run 1749: a coordinate was not
+  finite`, and the five SpiderMonkey tests each returned the literal
+  contradicting sentence — and the evidence is in the commit bodies. I did not
+  use `--no-verify` to manufacture a red commit.
+- **`layout.ts` grew** from 369 to roughly 470 lines. Within the 800 ceiling but
+  above the 200–400 band, which is why the new logic went into
+  `parallelEdges.ts` rather than inline. If it grows again, `placeWithDagre` and
+  its gate are the next thing to lift out.
+- **The `'per-pair'` path is exercised by exactly one hand-written fixture** plus
+  whatever the fuzz happens to route through it. Its geometry constants
+  (`PARALLEL_ROUTE_SPREAD = 18`, `PARALLEL_LABEL_GAP = 4`) are chosen, not
+  tuned against a designer's eye. They only ever affect a drawing that would
+  otherwise not exist, so I would rather they were looked at than changed on a
+  hunch.
+- **SpiderMonkey was measured on one version**, Firefox 156.0 on Windows. The
+  clause has been stable across Firefox's history as far as I can tell, but I
+  only verified the one, and the comments say so rather than claiming more.
+- **JavaScriptCore is still unmeasured by me.** Its constant is D32's, unchanged
+  and untouched. No Safari on this machine.
+
+### Out-of-scope notes for Jared
+
+- **`loadDesign.ts`'s module header still says "whatever evidence Task 04 has to
+  work with"** (line 8). Not the `DesignSyntaxError` comment you scoped, so I
+  left it. It is the same lagging Task-04 reference, one comment up.
+- **Dagre's ordering bug is upstream and reportable.** Minimal repro: a
+  multigraph with a two-cycle and a parallel duplicate between the same pair,
+  needing more than three nodes. `@dagrejs/dagre` 3.1.1. Someone may want to
+  file it; the app no longer needs them to.
+- **`readPlacedNodes`'s throw is now unreachable by a different route.**
+  `placeWithDagre` already checks every node has finite coordinates before it
+  returns, so that guard can only fire if the two disagree about what a node is.
+  Its comment still reads as though it is the only check. Harmless, but it is a
+  comment that will drift.
+- **The e2e fixture folder now has 22 files and one naming convention it does
+  not follow consistently.** I named mine for what it is, as you asked. The
+  `empty.json` / `empty-design.json` collision you routed to the next cycle is
+  the sharper case, and it is still there.
+- **`describeLoadError.ts` now imports `layout.ts`**, which pulls dagre into
+  anything that imports it. Only `index.astro` imports it as a value today, and
+  that page already imports `layout`, so there is no bundle cost. If a page ever
+  wants the messages without the drawing, `DesignLayoutError` should move to a
+  module of its own that `layout.ts` re-exports.
