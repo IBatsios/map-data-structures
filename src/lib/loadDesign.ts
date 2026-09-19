@@ -40,16 +40,25 @@ export class DesignLoadError extends Error {
  * The file is not JSON at all.
  *
  * The message is the one `JSON.parse` produced, kept word for word, and the
- * original error is kept as `cause`. What that message contains is the
- * engine's business, not this app's, and it is not the same everywhere: V8
- * names a position and often a line and column, while JavaScriptCore — Safari,
- * a browser this desktop app plainly targets — names none of the three. So
- * what this class promises is the message and the cause, not a position.
+ * original error is kept as `cause`. What that message contains is the engine's
+ * business, not this app's, and it is not the same everywhere. Three shapes are
+ * known, and they agree on nothing:
  *
- * Task 04 has to say where the fault is, and on some engines there will be
- * nothing here to say it from. That is Task 04's second acceptance criterion
- * and its design work; this class's job is to hand over whatever there was
- * without flattening or inventing it.
+ * - **V8** — Chrome and Edge, and the Node that Vitest runs on — names a
+ *   character position, and for some faults a line and column beside it. For a
+ *   file that ends early it names none of them.
+ * - **SpiderMonkey** — Firefox — names a line and a column and never a
+ *   position. Measured on Firefox 156.0 in the cycle that recorded D99.
+ * - **JavaScriptCore** — Safari — names none of the three (D32).
+ *
+ * So what this class promises is the message and the cause, and not a position:
+ * a caller that wants one has to read it out of the message itself, knowing
+ * that on some engines there is nothing there to read.
+ *
+ * Which is what `describeSyntaxFault` in `describeLoadError.ts` does, and where
+ * the reading is tested — one engine's phrasing at a time, as a string, so that
+ * Safari's and Firefox's cases are tests that run on Node. This class's own job
+ * is only to hand over whatever there was without flattening or inventing it.
  */
 export class DesignSyntaxError extends DesignLoadError {
   constructor(cause: SyntaxError) {
