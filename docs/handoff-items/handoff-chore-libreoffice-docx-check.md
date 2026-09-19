@@ -956,3 +956,161 @@ line" filter would repeat that mistake.
    Unchanged this round and still true.
 4. **Nothing in this round touched the Word question.** The `.docx` is still
    unverified against Microsoft Word, and that item still belongs to the owner.
+
+## Test report from Jahmyr — round 2
+
+### Verdict
+
+**Pass.** The round 1 defect is closed, verified three independent ways, and
+nothing that passed in round 1 has moved. All fourteen boxes stay checked; none
+needed unchecking. CI is green on the pushed head.
+
+One correction, and it runs the other way from a defect: **Amon's finding that
+the `docx` library refuses to serialise a raw control character is wrong.** It
+does not refuse. I measured it, and the conclusion drawn from it — that
+`control-labels` now defends a file the export can no longer produce — should
+not be acted on. Details under "The `control-labels` judgment" below. Nothing
+to fix in the code; the record needed fixing before Jared read it.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| 1. One opt-in `bun run` command, documented in `README.md` | pass | `bun run docx:libreoffice` ran to `5 passed (32.3s)`; README section present and extended this round |
+| 2. `bun run test` unchanged, no LibreOffice or browser; `test:e2e` specs unchanged | pass | 491 passed / 32 files with `MAPDS_SOFFICE` pointed at a path that is not there; `playwright test --list` = 124 tests in 6 files, `docxRoundTrip` collected **zero** times |
+| 3. The `.docx` is the browser's own export; none committed | pass | `git ls-files` finds no `.docx`; the spec obtains bytes through `UploadPage.downloadWord` |
+| 4. Five named fixtures convert and pass on this machine | pass | `order-intake` 5.5s, `control-labels` 5.6s, `empty-design` 5.3s, `markup-labels` 5.3s, `estate-sweep` 7.0s — 5 passed (32.3s) |
+| 5. Each converted file read back for title and every node and edge label | pass | green run passes through `missingFrom` / `textThatMustSurvive`; unchanged this round |
+| 6. stderr-only output on a success is reported as a success | pass | **measured directly**: a clean file converted with `verdict.kind: 'converted'` while stderr held `Could not find platform independent libraries <prefix>`; `verdict.test.ts` pins it in CI where no LibreOffice exists |
+| 7. No `--version` probe; every invocation bounded; a timeout reported as a timeout | pass | `convert.ts` untouched this round (diff confirms); round 1 verification stands |
+| 8. `-env:UserInstallation=` outside the repository; `git status` clean after a full run | pass | `git status --short` empty after both a **green** run and a deliberately **red** five-failure run |
+| 9. Override first, then per-platform paths; `soffice.com` on Windows; documented | pass | resolved to `C:\Program Files\LibreOffice\program\soffice.com`; README documents the name and the order |
+| 10. LibreOffice absent, exits 0, one clear line, nothing turns red | pass | override at `C:\Nope\...\soffice.com` exits 0 with one line naming what was not found, where it looked, and how to point it at an install |
+| 11. `.github/workflows/ci.yml` unchanged | pass | `git diff main -- .github/` is empty |
+| 12. What this buys and does not buy, in the code and in `README.md` | pass | `check.ts` module comment and README both carry it, including "not Word's renderer" and the open Word question |
+| 13. Decisions recorded from D104 | pass | D104 to D111 present, table shape and voice intact |
+| 14. `bun run test`, `bun run check`, and CI green on the PR | pass | 491/32, 0 errors across 95 files, and both CI jobs green on `3b06e51` |
+
+### The defect from round 1 — closed, three ways
+
+**1. The refusal, against the installed binary.** A zip built by hand with a raw
+U+0001 in `word/document.xml`, through `convertToDocx`:
+
+```
+kind        : failed
+STDOUT      : ""
+diagnostics : "Could not find platform independent libraries <prefix>\r\nError: source file could not be loaded"
+```
+
+Round 2's message ends:
+
+```
+LibreOffice printed nothing on stdout.
+LibreOffice said on stderr:
+Could not find platform independent libraries <prefix>
+Error: source file could not be loaded
+```
+
+Round 1's `failureOf`, rebuilt from that same verdict, ends on *"LibreOffice
+printed nothing on stdout."* — the diagnosis collected and discarded. The
+measurement reported in the round 2 section reproduces exactly.
+
+**2. The spawn case, end to end through the real command.** `MAPDS_SOFFICE`
+pointed at `C:\Program Files\LibreOffice`, a directory. All five fixtures
+failed, each printing the command, the kept room, `LibreOffice printed nothing
+on stdout.`, then:
+
+```
+LibreOffice said on stderr:
+Executable not found in $PATH: "C:\Program Files\LibreOffice"
+```
+
+This run is worth more than its own criterion: it is the only way to check what
+gap 3 above says cannot be checked — that the **spec's call site** actually
+passes `diagnostics`. It does. The required field is the guarantee going
+forward; this is the observation that it is wired up today.
+
+**3. The RED, reproduced.** I put round 1's logic back behind round 2's
+signature and ran the nine tests against it: **7 failed, 2 passed**, every
+failure the missing diagnosis. The tests fail against the bug, not against a
+missing file. The RED gate was real.
+
+### The `control-labels` judgment — the premise does not hold
+
+Asked to weigh whether the fixture still earns its place, I tried to reproduce
+the finding that judgment rests on, and it does not reproduce. Identical
+construction, one clean and one carrying a raw U+0001, both through `Packer`
+and then the installed LibreOffice:
+
+| Text | `Packer.toBuffer` | LibreOffice |
+|---|---|---|
+| `StockLevel` | serialised, 8491 bytes | **converted** |
+| `Stock` + U+0001 + `Level` | **serialised, 8494 bytes — no refusal** | **failed**: `Error: source file could not be loaded` |
+
+`docxText` reads the dirty package back as `Stock`, U+0001, `Level`: the raw
+character goes straight into `word/document.xml`. So:
+
+- The `docx` library does **not** refuse a raw control character.
+- D76 does **not** have a second independent guard underneath it.
+- A `safeDocxText` regression **does** reach LibreOffice and **is** refused,
+  which is precisely the failure `control-labels` exists to catch.
+
+**`control-labels` earns its place in full**, and it is the only one of the five
+fixtures that would catch that regression. The comment at
+`docxRoundTrip.spec.ts` lines 36-43 is accurate about the present as well as the
+history and wants no softening. Out-of-scope note 2 above should be treated as
+withdrawn; whatever made that export die at `waitForEvent` was something other
+than the library refusing the character, and it is not this cycle's business.
+
+The claim reached no committed file — grepping the repository finds it only in
+this document — so nothing in `DECISIONS.md`, `README.md` or the source needs
+correcting. D111 is unaffected: its reasoning is about streams, not fixtures.
+
+### The `exitPhrase` wording — acceptable to ship
+
+`exitPhrase` still says "was killed before it finished" for a binary that never
+started. Having now read the real output as a reader would, I am content to ship
+it. The wrong sentence is corrected three lines below it by `Executable not
+found in $PATH`, which answers the only question the reader actually has, and
+the cost of being precise is a fourth fact in `ConversionAttempt`'s contract
+plus a rewrite of a verdict test that pins real behaviour. That is a design
+change to buy a second of confusion rather than an afternoon — the wrong trade
+for this cycle. **A follow-on, not a blocker**, and it belongs to whoever next
+opens `verdict.ts` for a reason of its own.
+
+### Command results
+
+`bun run test`: **491 passed in 32 files** — and the same 491/32 with
+`MAPDS_SOFFICE` pointed at nothing.
+`bun run check`: **0 errors, 0 warnings, 0 hints across 95 files.**
+`bun run build`: **2 pages in 749 ms.**
+`bun run docx:libreoffice`: **5 passed (32.3s)**, exit 0.
+`bunx playwright test --list`: **124 tests in 6 files**, `docxRoundTrip` zero.
+Secret scan: **clean — `gitleaks detect --source . --no-banner` reports "no
+leaks found" over 38 commits.** Worth recording: `gitleaks` **is** installed on
+this machine, at the WinGet package path. The round 2 section reports it absent
+and used `RUNBOOK` 0.2's grep fallback; the stronger gate has now been run and
+passes.
+CI: **green** — both `test` jobs on `3b06e51`, the pushed head.
+
+### Defects for Amon
+
+None. The code is correct as delivered.
+
+### Fixed in place
+
+None. Nothing needed correcting; the probes ran outside the working tree and the
+tree is clean.
+
+### Housekeeping
+
+`git status --porcelain` clean after every run, red and green alike. No
+`mapds-libreoffice-*` room survives — the five my red run kept by D108's design
+were read and then removed, along with my own probe rooms. The only `soffice`
+processes on the machine are pid 9224 and 35576, both started 2026-09-18 at
+18:26:50, predating this work; my runs orphaned nothing.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/27 — draft, `3b06e51`
+pushed, CI green. Left as a draft for Sam to mark ready and merge.
