@@ -31,7 +31,8 @@ import { describeDrawing } from './describeDrawing';
 import { UNDRAWABLE_MARK } from './drawableText';
 import type { DrawingRegion, DrawingSheet } from './drawingSheets';
 import { MAX_DRAWING_SHEETS, planDrawingSheets } from './drawingSheets';
-import { NOTHING_TO_DRAW } from './exportFurniture';
+import type { Column } from './exportFurniture';
+import { EDGE_COLUMNS, NODE_COLUMNS, NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 import type { MarkedText } from './markLayout';
 import { markLayout } from './markLayout';
@@ -238,26 +239,6 @@ export interface SafeDocxText {
   readonly lines: readonly string[];
   readonly marked: number;
 }
-
-/** One column of a table: what it is called and how much of the width it takes. */
-interface Column {
-  readonly heading: string;
-  readonly share: number;
-}
-
-/** The table of nodes, with the columns the other three exports print. */
-const NODE_COLUMNS: readonly Column[] = [
-  { heading: 'Id', share: 0.26 },
-  { heading: 'Label', share: 0.46 },
-  { heading: 'Type', share: 0.28 },
-];
-
-/** The table of edges, likewise. */
-const EDGE_COLUMNS: readonly Column[] = [
-  { heading: 'From', share: 0.26 },
-  { heading: 'To', share: 0.26 },
-  { heading: 'Label', share: 0.48 },
-];
 
 /** Every way a line may end in a file someone typed. */
 const LINE_BREAKS = /\r\n|\r|\n/u;

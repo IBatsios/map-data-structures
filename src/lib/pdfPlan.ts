@@ -36,7 +36,8 @@
 
 import type { DrawingRegion, DrawingSheet } from './drawingSheets';
 import { planDrawingSheets } from './drawingSheets';
-import { NOTHING_TO_DRAW } from './exportFurniture';
+import type { Column } from './exportFurniture';
+import { EDGE_COLUMNS, NODE_COLUMNS, NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 
 /**
@@ -156,26 +157,6 @@ export interface PdfDocumentPlan {
   readonly height: number;
   readonly pages: readonly PdfPage[];
 }
-
-/** One column of a table: what it is called and how much of the width it takes. */
-interface Column {
-  readonly heading: string;
-  readonly share: number;
-}
-
-/** The table of nodes, with the same columns `toMarkdown` and `toHtml` print. */
-const NODE_COLUMNS: readonly Column[] = [
-  { heading: 'Id', share: 0.26 },
-  { heading: 'Label', share: 0.46 },
-  { heading: 'Type', share: 0.28 },
-];
-
-/** The table of edges, likewise. */
-const EDGE_COLUMNS: readonly Column[] = [
-  { heading: 'From', share: 0.26 },
-  { heading: 'To', share: 0.26 },
-  { heading: 'Label', share: 0.48 },
-];
 
 /**
  * Plans the whole document for a laid-out design.

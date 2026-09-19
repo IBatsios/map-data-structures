@@ -29,14 +29,8 @@
  * it keeps them (D39): the file shows what the design said.
  */
 
-import { NOTHING_TO_DRAW } from './exportFurniture';
+import { EDGE_HEADINGS, NODE_HEADINGS, NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
-
-/** The columns of the table of nodes. */
-const NODE_HEADINGS = ['Id', 'Label', 'Type'] as const;
-
-/** The columns of the table of edges. */
-const EDGE_HEADINGS = ['From', 'To', 'Label'] as const;
 
 /**
  * Dagre is laid out with `rankdir: 'TB'` in `layout.ts`, so top-to-bottom is
