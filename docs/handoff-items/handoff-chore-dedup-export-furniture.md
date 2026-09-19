@@ -842,6 +842,23 @@ Secret scan: **gitleaks — no leaks found**, 35 commits, ~2.12 MB scanned, `.en
 
 ### Merge
 
-Pending — recorded in the post-merge handoff-doc refresh, since the merge SHA
-is not known until after `gh pr merge` runs and this branch is deleted
-immediately after.
+Squashed as `4718d91` into `main`. Branch `chore/dedup-export-furniture`
+deleted. PR [#25](https://github.com/IBatsios/map-data-structures/pull/25),
+merged 2026-09-19T03:44:27Z. `main` was fast-forwarded to `4718d91` locally and
+confirmed with `git log -1 --oneline`.
+
+### Left for a person
+
+- **Task 10, `docs/tasks/10-deploy.md`, is the frontier now that this is
+  merged.** Its step 1 needs the Netlify and GitHub accounts: `netlify login`
+  then `netlify init` in the repository (or the Netlify console's GitHub
+  import), build command `bun run build`, publish directory `dist`, and
+  confirming on the first build log that Netlify installs bun from the
+  committed lockfile. `.env.example` still declares no variables, so nothing
+  needs setting in the site's environment settings.
+- **Microsoft Word is still unverified** against the `.docx` export — no
+  machine that has touched this project has Word installed. Unchanged by this
+  cycle; the `.docx` bytes it produces are byte-identical to `main`'s for
+  every fixture checked, so nothing here altered what Word would see.
+- **The 1280px cosmetic content-column width** stays routed to Task 11's v2
+  handoff doc, per Jared, untouched by this cycle.
