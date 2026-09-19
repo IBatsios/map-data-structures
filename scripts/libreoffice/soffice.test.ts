@@ -110,7 +110,7 @@ describe('the line a machine without LibreOffice gets', () => {
     const line = describeMissingSoffice(findSoffice(BARE));
 
     expect(line).not.toContain('\n');
-    expect(line).toContain('LibreOffice');
+    expect(line).toContain('LibreOffice was not found');
     expect(line).toContain('C:\\Program Files\\LibreOffice\\program\\soffice.com');
     expect(line).toContain(SOFFICE_OVERRIDE);
   });
@@ -123,6 +123,11 @@ describe('the line a machine without LibreOffice gets', () => {
       }),
     );
 
+    // Still one line, and still all three of what, where and how — the reader
+    // of this one has a variable set wrongly rather than nothing installed,
+    // and needs to be told which of the two they are looking at.
+    expect(line).not.toContain('\n');
+    expect(line).toContain('LibreOffice was not found');
     expect(line).toContain('D:\\nowhere\\soffice.com');
     expect(line).toContain(SOFFICE_OVERRIDE);
   });

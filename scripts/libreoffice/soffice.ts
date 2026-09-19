@@ -102,13 +102,15 @@ export function findSoffice(search: SofficeSearch): SofficeLocation {
  * @returns one line, with no newline in it
  */
 export function describeMissingSoffice(location: SofficeLocation): string {
+  const notFound =
+    'LibreOffice was not found, so the .docx check did not run and nothing failed.';
   const howToSet = `Set ${SOFFICE_OVERRIDE} to the full path of the soffice binary — on Windows the .com, not the .exe — and run it again.`;
 
   if (location.override !== null) {
-    return `${SOFFICE_OVERRIDE} points at ${location.override}, which is not there, so the LibreOffice .docx check did not run and nothing failed. Unset it to search the usual install locations, or set it to a binary that exists.`;
+    return `${notFound} ${SOFFICE_OVERRIDE} points at ${location.override}, which is not there. Unset ${SOFFICE_OVERRIDE} to search the usual install locations instead, or point it at a binary that exists.`;
   }
 
-  return `LibreOffice was not found, so the .docx check did not run and nothing failed. Looked at: ${location.searched.join('; ')}. ${howToSet}`;
+  return `${notFound} Looked at: ${location.searched.join('; ')}. ${howToSet}`;
 }
 
 /** Every full path worth trying on this platform, in the order to try them. */
