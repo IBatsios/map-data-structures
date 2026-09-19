@@ -8,6 +8,7 @@ import {
   describeSyntaxFault,
   describeUnsupportedFile,
 } from './describeLoadError';
+import { DesignLayoutError } from './layout';
 import { DesignSyntaxError, loadDesign } from './loadDesign';
 
 /**
@@ -495,6 +496,48 @@ describe('describeLoadError, for JSON that is not a design', () => {
 
     // Assert
     expect(holdsControlCharacters(problems.join(' '))).toBe(false);
+  });
+});
+
+describe('describeLoadError, for a design that could not be laid out', () => {
+  /** What dagre says when its own layout fails; a user has never heard of it. */
+  const DAGRE_MESSAGE = 'Not possible to find intersection inside of the rectangle';
+
+  it('says it in the app’s own words rather than the graph library’s', () => {
+    // No design is known to reach this any more (D98), which is exactly why it
+    // is tested here rather than provoked: a floor nobody can stand on is still
+    // a floor, and this is the wording under it.
+    // Act
+    const report = describeLoadError({
+      error: new DesignLayoutError(new Error(DAGRE_MESSAGE)),
+      fileName: 'settlement-mesh.json',
+      fileText: '{ "title": "Settlement mesh", "nodes": [], "edges": [] }',
+    });
+
+    // Assert
+    expect(report.summary).toBe('settlement-mesh.json was not drawn:');
+    expect(report.problems).toEqual([
+      'That file is a valid design, but this app could not work out where to put the boxes. ' +
+        'Nothing is wrong with the file itself. Try splitting it into smaller designs, ' +
+        'or removing an edge that repeats one already running between the same two boxes.',
+    ]);
+  });
+
+  it('never repeats the graph library’s own words back to the user', () => {
+    // D43's rule, and the reason this branch exists at all: before it, this
+    // error fell through to the last branch and the panel printed dagre's
+    // sentence about a rectangle, attached to a file that was correct.
+    // Act
+    const report = describeLoadError({
+      error: new DesignLayoutError(new Error(DAGRE_MESSAGE)),
+      fileName: 'settlement-mesh.json',
+      fileText: '{}',
+    });
+
+    // Assert
+    expect(report.problems[0]).not.toContain('intersection');
+    expect(report.problems[0]).not.toContain('rectangle');
+    expect(report.problems[0]).not.toContain('Something went wrong');
   });
 });
 

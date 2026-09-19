@@ -3,10 +3,12 @@
  *
  * `loadDesign` throws structured errors and flattens nothing (D22): a syntax
  * error carries the engine's own message, a schema error carries Zod's issues
- * with the path of every field at fault. This module is where that evidence
- * becomes sentences a person can act on, and it is pure — text in, text out —
- * so every message in the app is covered by `bun run test` rather than by
- * reading the page and hoping.
+ * with the path of every field at fault. A design that loads and then cannot be
+ * placed throws a `DesignLayoutError` instead, which carries no evidence for a
+ * user at all, because there is nothing in the file to point at. This module is
+ * where all three become sentences a person can act on, and it is pure — text
+ * in, text out — so every message in the app is covered by `bun run test`
+ * rather than by reading the page and hoping.
  *
  * Four rules hold it together:
  *
@@ -39,6 +41,7 @@
 
 import type { z } from 'zod';
 
+import { DesignLayoutError } from './layout';
 import { DesignSchemaError, DesignSyntaxError } from './loadDesign';
 
 /** What the panel shows: one heading, a bounded list, and what it left out. */
@@ -82,6 +85,22 @@ const NOT_A_DESIGN_MESSAGE =
   'The file has to be a JSON object with a title, a list of nodes and a list of edges';
 
 /**
+ * The one failure here that is the app's own and not the file's.
+ *
+ * A design only reaches the layout once `loadDesign` has passed it, so there is
+ * nothing in the file to point at and nothing for the user to correct. Saying
+ * so first is the honest part; the two suggestions are the actionable part, and
+ * they are the two shapes D98 found the graph library struggling with. What
+ * this deliberately does not do is quote the library — a sentence about an
+ * intersection inside a rectangle is about a graph internal the user has never
+ * heard of, attached to a file that is correct.
+ */
+const LAYOUT_FAILED_MESSAGE =
+  'That file is a valid design, but this app could not work out where to put the boxes. ' +
+  'Nothing is wrong with the file itself. Try splitting it into smaller designs, ' +
+  'or removing an edge that repeats one already running between the same two boxes.';
+
+/**
  * Turns a failed load into what the panel shows.
  *
  * @param failure - the error, the file's name, and the text that was read
@@ -102,6 +121,10 @@ export function describeLoadError(failure: LoadFailure): LoadErrorReport {
 
   if (error instanceof DesignSchemaError) {
     return describeSchemaFaults(error.issues, fileName, fileText);
+  }
+
+  if (error instanceof DesignLayoutError) {
+    return oneProblem(fileName, LAYOUT_FAILED_MESSAGE);
   }
 
   // Not a failure this app knows about, which is exactly when saying nothing

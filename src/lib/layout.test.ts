@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+// The repro design is read from the fixture the e2e walk uploads, as its own
+// bytes, rather than written out a second time here. Two copies of a design
+// that has to stay exactly shaped to reproduce a bug are two that drift.
+import twoCycleWithDuplicateEdgeFile from '../../e2e/fixtures/two-cycle-duplicate-edge.json?raw';
 import type { Design } from './design.types';
 import {
   DRAWING_MARGIN,
@@ -9,7 +13,8 @@ import {
   SELF_LOOP_EXTENT,
   layoutDesign,
 } from './layout';
-import type { LayoutBox, LayoutEdge, LayoutNode } from './layout';
+import type { DesignLayout, LayoutBox, LayoutEdge, LayoutNode } from './layout';
+import { loadDesign } from './loadDesign';
 import { DEFAULT_SHAPE } from './shapes';
 
 /** The README's own example: the smallest design that has a flow in it. */
@@ -480,5 +485,173 @@ describe('layoutDesign', () => {
 
   it('lays the same design out the same way twice', () => {
     expect(layoutDesign(orderIntake)).toEqual(layoutDesign(orderIntake));
+  });
+});
+
+/** Whether every number in a laid-out drawing is a number a renderer can use. */
+function allCoordinatesAreFinite(layout: DesignLayout): boolean {
+  const numbers = [
+    layout.width,
+    layout.height,
+    ...layout.nodes.flatMap((node) => [node.x, node.y, node.width, node.height]),
+    ...layout.edges.flatMap((edge) => [
+      edge.labelBox.x,
+      edge.labelBox.y,
+      ...edge.points.flatMap((point) => [point.x, point.y]),
+    ]),
+  ];
+
+  return numbers.every((value) => Number.isFinite(value));
+}
+
+/** The two routes of a pair of parallel edges, as strings that can be compared. */
+function routeOf(edge: LayoutEdge): string {
+  return edge.points.map((point) => `${point.x},${point.y}`).join(' ');
+}
+
+/**
+ * A seeded generator, so "no failures in 2500 graphs" names a set of graphs
+ * somebody else can produce. `mulberry32`: thirty-two bits of state, uniform
+ * enough for picking node pairs and short enough to read.
+ */
+function randomNumbers(seed: number): () => number {
+  let state = seed;
+
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 2 ** 32;
+  };
+}
+
+/** One random multigraph: a few nodes, and edges drawn between them at random. */
+function randomDesign(next: () => number): Design {
+  const nodeCount = 2 + Math.floor(next() * 7);
+  const nodes = Array.from({ length: nodeCount }, (_, index) => ({
+    id: `n${index}`,
+    label: `Node ${index}`,
+    type: 'service',
+  }));
+  const edgeCount = Math.floor(next() * nodeCount * 2);
+  const pick = (): string => `n${Math.floor(next() * nodeCount)}`;
+  const edges = Array.from({ length: edgeCount }, (_, index) => ({
+    from: pick(),
+    to: pick(),
+    label: `edge ${index}`,
+  }));
+
+  return { title: 'Fuzzed', nodes, edges };
+}
+
+/**
+ * The graphs dagre cannot lay out by itself, and what this module does instead.
+ *
+ * Dagre 3.1.1 drops a dummy node out of its own ordering when a pair of nodes
+ * carries both a two-cycle and a parallel duplicate, which leaves that dummy
+ * with no coordinates at all (D98). The design below is the smallest case of it
+ * anybody on this project has found, and it is a design a user may legitimately
+ * write: unique ids, every edge naming a node that exists, no blank field.
+ */
+describe('layoutDesign, on a graph dagre cannot lay out on its own', () => {
+  const twoCycleWithDuplicateEdge = loadDesign(twoCycleWithDuplicateEdgeFile);
+
+  it('accepts the fixture as a design before any of this is about layout', () => {
+    // D20's two passes: the cross-field rules are only reached once every field
+    // has passed, so a fixture that fails either pass is not a layout repro at
+    // all. This is the test that says the crash is downstream of the loader.
+    expect(twoCycleWithDuplicateEdge.nodes.map((node) => node.id)).toEqual([
+      'n0',
+      'n2',
+      'n3',
+      'n4',
+      'n5',
+      'n6',
+    ]);
+    expect(twoCycleWithDuplicateEdge.edges).toHaveLength(7);
+  });
+
+  it('draws all six nodes and all seven edges instead of throwing', () => {
+    // Act
+    const layout = layoutDesign(twoCycleWithDuplicateEdge);
+
+    // Assert
+    expect(layout.nodes.map((node) => node.id)).toEqual([
+      'n0',
+      'n2',
+      'n3',
+      'n4',
+      'n5',
+      'n6',
+    ]);
+    expect(layout.edges.map((edge) => `${edge.from}→${edge.to}`)).toEqual([
+      'n2→n5',
+      'n0→n6',
+      'n0→n4',
+      'n3→n4',
+      'n6→n3',
+      'n4→n0',
+      'n0→n4',
+    ]);
+  });
+
+  it('gives every node and every point of it a number a renderer can draw', () => {
+    // The quieter half of the same dagre fault: where the dropped dummy is not
+    // an edge's first or last point, dagre returns rather than throwing, and a
+    // `NaN` in a path's `d` voids the whole path. An invisible edge is a
+    // dropped edge, which is the thing intake 5.2 forbids.
+    // Act
+    const layout = layoutDesign(twoCycleWithDuplicateEdge);
+
+    // Assert
+    expect(allCoordinatesAreFinite(layout)).toBe(true);
+  });
+
+  it('routes the two parallel edges apart, so a reader can see both', () => {
+    // Act
+    const layout = layoutDesign(twoCycleWithDuplicateEdge);
+    const first = edgeAt(layout.edges, 2);
+    const second = edgeAt(layout.edges, 6);
+
+    // Assert
+    expect(routeOf(first)).not.toBe(routeOf(second));
+    expect(overlaps(first.labelBox, second.labelBox)).toBe(false);
+  });
+
+  it('keeps each parallel edge’s own label on its own plate', () => {
+    // Act
+    const layout = layoutDesign(twoCycleWithDuplicateEdge);
+
+    // Assert
+    expect(edgeAt(layout.edges, 2).label).toBe('requests settlement');
+    expect(edgeAt(layout.edges, 6).label).toBe('retries settlement');
+  });
+
+  it('lays out 2500 random multigraphs without one failure', () => {
+    // 2500 is the scale at which this fault was caught twice by hand, so a
+    // clean run at it is the number that means something. The seed is fixed:
+    // `randomNumbers(FUZZ_SEED)` above regenerates exactly these graphs.
+    // Arrange
+    const FUZZ_SEED = 20260918;
+    const FUZZ_RUNS = 2500;
+    const next = randomNumbers(FUZZ_SEED);
+    const failures: string[] = [];
+
+    // Act
+    for (let run = 0; run < FUZZ_RUNS; run += 1) {
+      const design = randomDesign(next);
+
+      try {
+        if (!allCoordinatesAreFinite(layoutDesign(design))) {
+          failures.push(`run ${run}: a coordinate was not finite`);
+        }
+      } catch (error) {
+        failures.push(`run ${run}: ${error instanceof Error ? error.message : 'threw'}`);
+      }
+    }
+
+    // Assert
+    expect(failures).toEqual([]);
   });
 });
