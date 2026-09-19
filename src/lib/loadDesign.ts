@@ -4,10 +4,11 @@
  *
  * Nothing downstream re-checks what comes out of here, so nothing may leave
  * here half-validated. A file that is not a design does not return a partial
- * one; it throws a `DesignLoadError`, and the error carries whatever evidence
- * Task 04 has to work with — `JSON.parse`'s own message and error, or the field
- * paths Zod reported. Neither is flattened into a sentence on the way out,
- * because a sentence cannot be pointed at a line.
+ * one; it throws a `DesignLoadError`, and the error carries every piece of
+ * evidence `describeLoadError` needs to point at the fault — `JSON.parse`'s
+ * own message and error, or the field paths Zod reported. Neither is flattened
+ * into a sentence on the way out, because a sentence cannot be pointed at a
+ * line.
  */
 
 import type { z } from 'zod';

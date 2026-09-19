@@ -36,7 +36,18 @@
 
 import type { DrawingRegion, DrawingSheet } from './drawingSheets';
 import { planDrawingSheets } from './drawingSheets';
+import type { Column } from './exportFurniture';
+import { EDGE_COLUMNS, NODE_COLUMNS, NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
+
+/**
+ * What stands in for the drawing when the design holds nothing to draw (D51).
+ *
+ * Re-exported rather than declared, because the sentence belongs to every
+ * export and not to this one. `exportFurniture.ts` owns it; this is the door
+ * callers already came through and it stays open.
+ */
+export { NOTHING_TO_DRAW };
 
 /** US Letter, in points: the size the owner is most likely to print or attach. */
 export const PAGE_WIDTH = 612;
@@ -44,9 +55,6 @@ export const PAGE_HEIGHT = 792;
 
 /** The margin on every side, in points — two thirds of an inch. */
 export const PAGE_MARGIN = 48;
-
-/** What stands in for the drawing when the design holds nothing to draw (D51). */
-export const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
 
 /** The design's name, at the top of the first page. */
 const TITLE_SIZE = 20;
@@ -149,26 +157,6 @@ export interface PdfDocumentPlan {
   readonly height: number;
   readonly pages: readonly PdfPage[];
 }
-
-/** One column of a table: what it is called and how much of the width it takes. */
-interface Column {
-  readonly heading: string;
-  readonly share: number;
-}
-
-/** The table of nodes, with the same columns `toMarkdown` and `toHtml` print. */
-const NODE_COLUMNS: readonly Column[] = [
-  { heading: 'Id', share: 0.26 },
-  { heading: 'Label', share: 0.46 },
-  { heading: 'Type', share: 0.28 },
-];
-
-/** The table of edges, likewise. */
-const EDGE_COLUMNS: readonly Column[] = [
-  { heading: 'From', share: 0.26 },
-  { heading: 'To', share: 0.26 },
-  { heading: 'Label', share: 0.48 },
-];
 
 /**
  * Plans the whole document for a laid-out design.

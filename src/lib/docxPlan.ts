@@ -31,6 +31,8 @@ import { describeDrawing } from './describeDrawing';
 import { UNDRAWABLE_MARK } from './drawableText';
 import type { DrawingRegion, DrawingSheet } from './drawingSheets';
 import { MAX_DRAWING_SHEETS, planDrawingSheets } from './drawingSheets';
+import type { Column } from './exportFurniture';
+import { EDGE_COLUMNS, NODE_COLUMNS, NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 import type { MarkedText } from './markLayout';
 import { markLayout } from './markLayout';
@@ -150,16 +152,6 @@ export const MAX_SHEET_RASTER_PIXELS =
 export const MAX_RASTER_PIXELS = MAX_SHEET_RASTER_PIXELS * MAX_DRAWING_SHEETS;
 
 /**
- * What stands in for the drawing when the design holds nothing to draw (D51).
- *
- * The same sentence is written out in `pdfPlan.ts` (exported), `toHtml.ts`
- * (private) and `toMarkdown.ts`, with nothing holding the four together the way
- * `exportStyles.test.ts` holds the palette. Unifying them is its own cycle;
- * this pointer is here so whoever does it can find all four.
- */
-const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
-
-/**
  * The language the file declares, for Word's spell-checker and a screen reader.
  *
  * The document's own furniture — its column names and the sentence an empty
@@ -247,26 +239,6 @@ export interface SafeDocxText {
   readonly lines: readonly string[];
   readonly marked: number;
 }
-
-/** One column of a table: what it is called and how much of the width it takes. */
-interface Column {
-  readonly heading: string;
-  readonly share: number;
-}
-
-/** The table of nodes, with the columns the other three exports print. */
-const NODE_COLUMNS: readonly Column[] = [
-  { heading: 'Id', share: 0.26 },
-  { heading: 'Label', share: 0.46 },
-  { heading: 'Type', share: 0.28 },
-];
-
-/** The table of edges, likewise. */
-const EDGE_COLUMNS: readonly Column[] = [
-  { heading: 'From', share: 0.26 },
-  { heading: 'To', share: 0.26 },
-  { heading: 'Label', share: 0.48 },
-];
 
 /** Every way a line may end in a file someone typed. */
 const LINE_BREAKS = /\r\n|\r|\n/u;

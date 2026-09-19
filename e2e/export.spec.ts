@@ -179,9 +179,8 @@ test.describe('Exporting the design as Markdown', () => {
     const upload = new UploadPage(page);
     await upload.goto();
 
-    // A design with no nodes and no edges is valid (D19). `empty.json` beside
-    // this fixture is a *file* with nothing in it, which is a syntax error;
-    // this one is a design with nothing in it, which draws an empty picture.
+    // A design with no nodes and no edges is valid (D19), and draws an empty
+    // picture rather than failing to load.
     await upload.choose('empty-design.json');
     await expect(upload.svg).toBeVisible();
 
