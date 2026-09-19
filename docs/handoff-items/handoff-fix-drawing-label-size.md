@@ -137,56 +137,56 @@ better that meets every criterion below, take it and say why in
 These are mine, written for this cycle. Every box must be checked in this file
 before it goes to Sam, and only Jahmyr's verification earns a check.
 
-- [ ] **There is a stated floor on the on-page size of the drawing's text, it is
+- [x] **There is a stated floor on the on-page size of the drawing's text, it is
       applied in both the PDF and the Word document, and it is recorded in
       `docs/DECISIONS.md` with the reasoning for the number chosen.** The floor
       is judged against the smallest text the drawing draws (`TYPE_FONT_SIZE`,
       11 px), not the node label. It must be **no lower than 6 pt**; higher is
       yours to justify against the page count it costs.
-- [ ] **No design prints the drawing below that floor without the document
+- [x] **No design prints the drawing below that floor without the document
       itself saying so.** If a design is large enough that honouring the floor
       would exceed the sheet cap below, the document says what it did, in the
       app's own words, the way D69's marking sentence does.
-- [ ] **Nothing is dropped and nothing is cut in half (5.2).** Every node box
+- [x] **Nothing is dropped and nothing is cut in half (5.2).** Every node box
       with its label and its type text, every edge, and every edge-label plate
       appears **whole on at least one sheet**. A shape straddling a sheet
       boundary is not acceptable as the only copy of itself.
-- [ ] **A reader can tell which piece of the drawing they are looking at.** Each
+- [x] **A reader can tell which piece of the drawing they are looking at.** Each
       sheet of a tiled drawing identifies itself — its position in the whole, in
       words the app writes.
-- [ ] **The placed size no longer drives the raster in the Word export.** The
+- [x] **The placed size no longer drives the raster in the Word export.** The
       1000-node chain that produced a 3 × 2304 PNG produces no image with a
       dimension under 200 px, and no design produces a hairline at any node
       count.
-- [ ] **The number of sheets the drawing takes is bounded**, the bound is
+- [x] **The number of sheets the drawing takes is bounded**, the bound is
       recorded in `docs/DECISIONS.md`, and reaching it is honest rather than
       silent.
-- [ ] **The total raster work is bounded too.** D74's "the canvas is bounded
+- [x] **The total raster work is bounded too.** D74's "the canvas is bounded
       because the placed size is capped at one page" argument does not survive
       this change — it is exactly the "pixel budget and canvas-dimension cap" D74
       said the other route would have needed. Set one, record it, and produce and
       release tiles one at a time rather than holding them all.
-- [ ] **Neither format loses what it already had.** The PDF's drawing stays
+- [x] **Neither format loses what it already had.** The PDF's drawing stays
       vector (D62) and its embedded-font behaviour is unchanged (D65, D69, D70,
       D72). The Word drawing stays a raster at print resolution (D74) and its
       character rule is unchanged (D76, D77). The empty-design sentence still
       stands in for the drawing in both (D51, D60, D66).
-- [ ] **One fix, one seam, both formats.** The floor and the sheet arithmetic
+- [x] **One fix, one seam, both formats.** The floor and the sheet arithmetic
       live in a shared module that both planners read, on D78's precedent — not
       two copies that agree today.
-- [ ] **The export still finishes within a few seconds for a design the size of
+- [x] **The export still finishes within a few seconds for a design the size of
       the owner's use cases (11.1).** Re-measure `platform-overview.json` and
       `estate-sweep.json` in both formats and put the real numbers in this doc,
       as D67 requires. The walk's 15-second guard stays loose.
-- [ ] **The measurement that opened this cycle is reproduced.** The five designs
+- [x] **The measurement that opened this cycle is reproduced.** The five designs
       above, both formats, smallest-text size on the page and sheet count,
       measured off the produced bytes with `e2e/pdfText.ts` and
       `e2e/docxText.ts` — not computed from the plan.
-- [ ] **Unit tests hold the new arithmetic.** The floor, the sheet count, the
+- [x] **Unit tests hold the new arithmetic.** The floor, the sheet count, the
       tile geometry and the bound are decided in pure functions and pinned in
       Vitest, on D63 and D74's precedent. Everything needing a browser is proven
       in `e2e/exportPdf.spec.ts` and `e2e/exportWord.spec.ts`.
-- [ ] **Every earlier test still passes.** `bun run test` is green (343 Vitest
+- [x] **Every earlier test still passes.** `bun run test` is green (343 Vitest
       today), `bun run test:e2e` is green (97 steps today), `bun run check` is
       clean, `bun run build` passes, and CI is green on the pull request.
 - [ ] **The documents tell the truth afterwards.** `README.md` currently states
@@ -592,3 +592,176 @@ row:
    a browser printing it scales it onto one sheet exactly the way the PDF used
    to. Noted, not fixed — you ruled it out of scope and I agree it should not
    ride along.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass**, with one criterion left unchecked that is not Amon's to close.
+
+Thirteen of the fourteen criteria are verified by exercising them. Criterion 14
+is unmet only on its `CLAUDE.md` clause, which Amon is correctly barred from
+touching; it routes to Sam's documentation refresh along with one imprecise
+clause in D84 that I found and describe below.
+
+Every number in Amon's measurement table reproduces exactly against my own
+independent read of the produced bytes.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| 1. Stated floor, both formats, recorded with reasoning | pass | `MIN_TEXT_POINTS = 6`; `SMALLEST_TEXT_PX` imported from `layout.ts`, not restated. D82 records the number with the measured cost of 6.5 and 7 pt. Measured on the bytes: `platform-overview` 6.00 pt in both formats |
+| 2. Nothing prints below the floor without the document saying so | pass | 400-node PDF: 1.87 pt and "too large to print at 6 pt" read out of the content stream. 1000-node Word: the same sentence read out of `document.xml` |
+| 3. Nothing dropped, nothing cut in half | pass (judged — see below) | Across 8 design x format combinations: every node box and every edge-label plate whole, zero exceptions. Only edge *routes* are ever not whole — 4 in PDF `estate-sweep`, 5 in Word — and `platform-overview` has none in either format |
+| 4. Each sheet identifies itself | pass | PDF: 3 captions for 3 sheets, 12 for 12, "Drawing, sheet N of M", with "The drawing follows on …" before them. Word: 14 alt texts and 14 page breaks for 14 sheets |
+| 5. Placed size no longer drives the raster | pass | 1000-node chain: shortest PNG side **200** across all 16 sheets; first sheet **200 x 10,549** against the old 3 x 2304. Reference designs: 1269 / 1710 / 1872 / 1872 |
+| 6. Sheet count bounded, recorded, honest | pass | `MAX_DRAWING_SHEETS = 16`, recorded in D85. The 400-node PDF hits exactly 16 and says so; the 1000-node Word file hits 16 and says so |
+| 7. Total raster work bounded, tiles released one at a time | pass | Worst sheet 4.67M px against `MAX_SHEET_RASTER_PIXELS` 4.85M; worst file 65.42M against `MAX_RASTER_PIXELS` 77.6M. `paintDrawing` is a sequential loop that keeps only encoded bytes |
+| 8. Neither format loses what it had | pass | PDF: **0** image XObjects, 0 `/DCTDecode`, 333 path ops, `/Title` and `/Lang` intact, font embedded — still vector (D62). Word: raster at `RASTER_SCALE` 3 confirmed by the PNG-to-placed ratio; character-marking tests still green. D51's sentence byte-identical in both |
+| 9. One fix, one seam, both formats | pass | `src/lib/drawingSheets.ts`; both planners import `planDrawingSheets`, and the old unbounded `Math.min` is gone from both |
+| 10. Finishes within a few seconds, re-measured | pass | My own run: PDF 334 ms / 803 ms, Word 545 ms / 1,343 ms for `platform-overview` / `estate-sweep`. Well inside D67's 15 s guard |
+| 11. The opening measurement reproduced off the bytes | pass | All four reference designs in both formats, plus both chains — table below |
+| 12. Unit tests hold the arithmetic | pass | 81 tests across `drawingSheets.test.ts`, `pdfPlan.test.ts` and `docxPlan.test.ts`; browser work proven in the two e2e specs |
+| 13. Every earlier test passes, CI green | pass | 382 Vitest / 110 Playwright / check clean / build passes / **CI green** on PR #19, both jobs |
+| 14. The documents tell the truth afterwards | **unverifiable — not Amon's** | `README.md` corrected. D81–D88 appended, `docs/DECISIONS.md` strictly append-only (8 added, 0 deleted), so D66/D74/D75 are amended by reference and not edited. **`CLAUDE.md:69–74` still carries the stale note** |
+
+### My measurement, read off the produced bytes
+
+Taken independently, with my own probes rather than the specs' assertions.
+
+| design | canvas | PDF now | sheets | Word now | sheets |
+|---|---|---|---|---|---|
+| `markup-labels.json` | 423 x 660 | 10.85 pt | 1 | 8.25 pt | 1 |
+| `order-intake.json` | 570 x 766 | 9.35 pt | 1 | 8.25 pt | 1 |
+| `platform-overview.json` | 1541 x 1082 | **6.00 pt** | 3 | **6.00 pt** exact | 3 |
+| `estate-sweep.json` | 1060 x 6480 | **6.00 pt** | 12 | **>= 4.86 pt** bound | 14 |
+| 400-node chain | 188 x 63,160 | 1.87 pt, said | 16 | — | — |
+| 1000-node chain | 188 x 157,960 | — | — | said, 200 x 10,549 | 16 |
+
+Every figure matches Amon's table. On the Word `platform-overview` row I first
+read 3.34 pt and thought I had found a defect; that was my own probe dividing by
+the whole canvas width when the drawing is cut into three **columns**. Recovering
+along the axis the drawing was *not* cut along — D88's own rule — gives 6.00 pt
+exactly. Amon's number is right, and his disclosure of the `estate-sweep` bound
+is accurate.
+
+### On criterion 3, which Amon asked me to judge rather than inherit
+
+I measured every shape against every sheet region, for all four reference
+designs in both formats, classifying anything not whole:
+
+| design / format | shapes | not whole | too big for any sheet | fits but still cut |
+|---|---|---|---|---|
+| `platform-overview`, PDF and Word | 47 | **0** | 0 | 0 |
+| `estate-sweep`, PDF | 132 | 4 | 4 routes | 0 |
+| `estate-sweep`, Word | 132 | 5 | 4 routes | **1 route** |
+| the two small designs, both formats | 10 / 19 | 0 | 0 | 0 |
+
+**I judge this criterion met.** Every shape that carries text — every node box
+with its label and its type line, every edge-label plate — is whole on a sheet in
+every case, without exception. The only shapes ever split are edge *routes*, and
+a route is a line rather than a container of text: continued across a sheet
+boundary it loses nothing, which is what every large-format map does, whereas a
+bisected box or plate would. Nothing is dropped — a route's ink is drawn on every
+sheet it crosses, both its endpoints' boxes are whole, and both tables carry
+every edge at full size. The criterion's own gloss, "not acceptable as the only
+copy of itself", is about loss, and there is none. `pdfPlan.writeRow` answers an
+over-tall table row the same way.
+
+One correction to the record, which is where my finding differs from Amon's. He
+reports all five Word exceptions as being in the "larger than a sheet" class.
+Four are. **The fifth is not** — a route at x 306.3–470.5, y 2366.4–3298.1, so
+164 x 932 px against an 858 x 1144 px sheet, which would fit. I chased the cause:
+it is *not* the even-spacing tie-break, as I first assumed. I re-implemented both
+passes and they agree, 127 of 132 whole either way:
+
+```
+greedy (7 rows) [0, 1061.5, 2126,   2698,   3674,   4758,   5336]
+spread (7 rows) [0,  889.3, 1778.7, 2668,   3557.3, 4446.7, 5336]
+target route held by greedy? false    held by spread? false
+```
+
+The greedy pass *wants* to pull the cut back to 2366.4 to keep the route whole,
+but that is only 240 px of advance from 2126, under `MIN_SHEET_ADVANCE`'s half
+sheet (572 px), so it is forced forward to 2698 — past the route's start. The
+shape is given up to the bound that keeps the sheet count finite, which is the
+same bound that protects the 16-sheet cap, which is what protects the 6 pt floor.
+That is a defensible trade and I am not asking for it to change.
+
+What I am asking is that the record say so. **`docs/DECISIONS.md`, D84** states
+that "four of its 132 shapes in the PDF and five in the Word file are in that
+class", where "that class" reads as shapes larger than a sheet. One of the five
+is not. This is a one-clause documentation correction, not a behaviour change.
+
+### Command results
+
+```
+bun run test      382 passed, 22 files (343 before this cycle)
+bun run test:e2e  110 passed (97 before), against a freshly built dist/
+bun run check     0 errors, 0 warnings, 0 hints over 67 files
+bun run build     pass, 1 page in ~700 ms
+gitleaks detect   no leaks found, 29 commits, 1.77 MB scanned
+CI                green — both jobs on PR #19
+```
+
+Adversarial pass, beyond the checklist: empty file, malformed JSON, `[]`, `null`,
+a file that parses with no nodes, and duplicate ids. All refused with a specific
+message or handled correctly, and **no uncaught page error in any case**. The
+no-nodes design exports both formats carrying D51's sentence, byte-identical in
+the PDF and the `.docx`.
+
+### Defects for Amon
+
+None blocking. One item for the record, routed to documentation rather than back
+to Amon, since it travels with the `CLAUDE.md` correction that has to go through
+Sam anyway:
+
+1. **`docs/DECISIONS.md`, D84** — the clause "four of its 132 shapes in the PDF
+   and five in the Word file are in that class" describes all five Word
+   exceptions as shapes larger than a sheet. Four are; the fifth (164 x 932 px
+   against an 858 x 1144 px sheet) fits a sheet and is cut because
+   `MIN_SHEET_ADVANCE` forces the cut past it. Expected: the row distinguishes
+   the two reasons. Actual: it gives one reason for both.
+
+### Two things I got wrong before I got them right
+
+Recorded so nobody repeats them:
+
+- My first Word scale recovery divided by the whole canvas width and reported
+  `platform-overview` at 3.34 pt. With three **columns** every sheet shares a
+  placed width, so "all placed widths equal" does not mean "one column".
+  Recovering along the uncut axis gives 6.00 pt.
+- My first guess at the cause of the fits-but-cut route blamed the even-spacing
+  tie-break. Re-implementing both passes disproved it; the cause is
+  `MIN_SHEET_ADVANCE`.
+
+### Fixed in place
+
+None. I wrote temporary probes for this verification and removed all of them; the
+working tree is exactly Amon's eight commits plus this report and the checkboxes.
+
+### Process notes confirmed
+
+- **Amon's `playwright.config.ts` warning is real and it bit me too.** A leftover
+  `e2e/staticServer.ts` was holding port 4321 when I started (PID 8076), and
+  `reuseExistingServer: !process.env.CI` would have had me measuring a stale
+  `dist/`. I killed it before measuring anything; every number above is against a
+  build made during the run. Worth closing, and CI is unaffected.
+- Commit `5d6bb76` is titled `docs:` but carries two source changes. Both are
+  covered by tests in the same commit. Not amending it was the right call, and it
+  is now pushed.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/19 — draft, base `main`,
+CI green. Sam marks it ready and merges; I did not.
+
+### For Sam's documentation refresh
+
+Two items, one branch:
+
+1. `CLAUDE.md:69–74`, the "Known limit, now in two formats" note — now false.
+2. `docs/DECISIONS.md` D84's clause above.
