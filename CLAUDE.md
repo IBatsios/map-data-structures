@@ -66,16 +66,15 @@ disabled together the moment a file fails. `src/lib/download.ts`
 (`downloadBlob`, `fileNameFor`) is unchanged for the fourth format running.
 See `docs/RUNBOOK.md` for the frontier.
 
-**Known limit, now in two formats:** the drawing is scaled to fit one page and
-its on-page label size degrades much earlier than expected — readable at 7
-nodes (PDF 10.2pt, Word 10.5pt), unreadable without a magnifier at 15 nodes
-(PDF 4.0pt, Word 4.25pt, the scale the owner's designs actually run at). Task
-08 measured its own and the numbers match the PDF's, so this is one problem in
-two places rather than two problems. The tables still carry every label at full
-size regardless. Landscape pages or tiling the drawing across sheets is the
-fix; it is not built yet and has a `fix/…` cycle of its own scheduled before
-Task 09. Detail in `docs/handoff-items/handoff-task-07-export-pdf.md` and
-`docs/handoff-items/handoff-task-08-export-word.md`.
+**Drawing print size, now floored and tiled:** the drawing's smallest text —
+the 11px type line under every node — never prints below 6pt in either the PDF
+or the Word export. A design too large to hold at 6pt on one page is spread
+across up to 16 captioned sheets instead of shrinking further; a design too
+large to print at 6pt even across 16 sheets prints smaller and the document
+says so, in its own words, rather than shrinking silently. Both tables still
+carry every label at full size regardless. `src/lib/drawingSheets.ts` is the
+one shared module both planners read for the floor and the sheet arithmetic.
+Detail in `docs/handoff-items/handoff-fix-drawing-label-size.md`.
 
 ## Run and test
 

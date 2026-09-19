@@ -189,7 +189,7 @@ before it goes to Sam, and only Jahmyr's verification earns a check.
 - [x] **Every earlier test still passes.** `bun run test` is green (343 Vitest
       today), `bun run test:e2e` is green (97 steps today), `bun run check` is
       clean, `bun run build` passes, and CI is green on the pull request.
-- [ ] **The documents tell the truth afterwards.** `README.md` currently states
+- [x] **The documents tell the truth afterwards.** `README.md` currently states
       the label-size limit at ~15 nodes and `CLAUDE.md` carries the "known limit,
       now in two formats" note; both must be corrected rather than left. Every
       decision this cycle makes is a new row in `docs/DECISIONS.md`, and D66,
@@ -765,3 +765,42 @@ Two items, one branch:
 
 1. `CLAUDE.md:69–74`, the "Known limit, now in two formats" note — now false.
 2. `docs/DECISIONS.md` D84's clause above.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| This handoff doc | Jared's assignment, Amon's work, Jahmyr's report all present and legible | Checked criterion 14's box now that both its items are closed |
+| `CLAUDE.md:69–78` | "Known limit, now in two formats" note was false — described the pre-fix behaviour | Rewrote the paragraph: 6pt floor on the 11px type line in both formats, tiling to 16 captioned sheets, honest overflow past the cap, pointer to `drawingSheets.ts` and this handoff doc |
+| `README.md` | Already correct — Amon's round-1 edit states the 6pt floor and tiling, matches `CLAUDE.md`, uses `bun run test` throughout | None needed |
+| `docs/DECISIONS.md` | D84's clause described all five Word exceptions as shapes too large for a sheet; one is not | Appended **D89**, amending D84 by reference — the append-only convention D81-D88 already used for D66/D74/D75. No existing row edited |
+| `.env.example` | Still no variables; code still reads none | None needed |
+| `docs/tasks/09-schema-and-sample.md` | `**Status:** ready`, unchanged | Confirmed correct — this cycle does not touch Task 09 |
+| No `docs/tasks/` file for this fix | Deliberate — this handoff doc is the whole contract, per "Why this has no task file" above | Nothing to mark `done`; all 14 acceptance-criteria boxes in this file are now checked |
+
+Not touched, per the gate's own rule: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `docs/intake.md`. None of them were found to be wrong by this audit.
+
+### Gates
+
+`bun run test`: pass, 382 tests, 22 files.
+CI: green on both jobs, PR #19 (re-confirmed independently, not taken on Jahmyr's word).
+Secret scan: `gitleaks detect --source . --no-banner` — no leaks found, 30 commits, 1.79 MB scanned.
+
+### Merge
+
+Squashed into `main`. Branch `fix/drawing-label-size` deleted. PR https://github.com/IBatsios/map-data-structures/pull/19. Squash commit SHA is in the post-merge refresh, `docs/handoff-items/handoff-next-phase.md`.
+
+The two documentation fixes above (`CLAUDE.md`, `docs/DECISIONS.md` D89) and this section were committed to `fix/drawing-label-size` before the merge, so CI re-ran green against them prior to squashing.
+
+### Left for a person
+
+Carried forward from Amon's and Jahmyr's reports, unchanged by this gate:
+
+- Microsoft Word is not installed on any machine that has touched this project. Word's own renderer is unverified against the `.docx`; opening `order-intake.docx` once closes it.
+- `playwright.config.ts`'s `reuseExistingServer: !process.env.CI` lets `bun run test:e2e` silently test a stale `dist/` locally. CI is unaffected. Left as config by both Amon and Jahmyr; worth a fix in the small-fixes cycle.
+- The exported HTML has the printing cousin of this cycle's problem — noted, not fixed.
+- `estate-sweep`'s Word figure is a bound (>= 4.86pt), not the exact number, because a `.docx` drawing is a raster with no font size. The PDF measures the same design at 6.00pt exactly.
