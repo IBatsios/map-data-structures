@@ -532,7 +532,7 @@ that was not this cycle's scope.
   finite`, and the five SpiderMonkey tests each returned the literal
   contradicting sentence — and the evidence is in the commit bodies. I did not
   use `--no-verify` to manufacture a red commit.
-- **`layout.ts` grew** from 369 to roughly 470 lines. Within the 800 ceiling but
+- **`layout.ts` grew** from 369 to 503 lines. Within the 800 ceiling but
   above the 200–400 band, which is why the new logic went into
   `parallelEdges.ts` rather than inline. If it grows again, `placeWithDagre` and
   its gate are the next thing to lift out.
