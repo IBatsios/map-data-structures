@@ -31,6 +31,7 @@ import { describeDrawing } from './describeDrawing';
 import { UNDRAWABLE_MARK } from './drawableText';
 import type { DrawingRegion, DrawingSheet } from './drawingSheets';
 import { MAX_DRAWING_SHEETS, planDrawingSheets } from './drawingSheets';
+import { NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 import type { MarkedText } from './markLayout';
 import { markLayout } from './markLayout';
@@ -148,16 +149,6 @@ export const MAX_SHEET_RASTER_PIXELS =
  * rather than sixteen.
  */
 export const MAX_RASTER_PIXELS = MAX_SHEET_RASTER_PIXELS * MAX_DRAWING_SHEETS;
-
-/**
- * What stands in for the drawing when the design holds nothing to draw (D51).
- *
- * The same sentence is written out in `pdfPlan.ts` (exported), `toHtml.ts`
- * (private) and `toMarkdown.ts`, with nothing holding the four together the way
- * `exportStyles.test.ts` holds the palette. Unifying them is its own cycle;
- * this pointer is here so whoever does it can find all four.
- */
-const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
 
 /**
  * The language the file declares, for Word's spell-checker and a screen reader.

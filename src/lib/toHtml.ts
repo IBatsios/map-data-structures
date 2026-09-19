@@ -42,6 +42,7 @@
  * them visible rather than collapsed.
  */
 
+import { NOTHING_TO_DRAW } from './exportFurniture';
 import { EXPORT_STYLES } from './exportStyles';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 import { renderDrawing } from './renderDrawing';
@@ -51,9 +52,6 @@ const NODE_HEADINGS = ['Id', 'Label', 'Type'] as const;
 
 /** The columns of the table of edges, as `toMarkdown` names them. */
 const EDGE_HEADINGS = ['From', 'To', 'Label'] as const;
-
-/** What stands in for the drawing when the design holds nothing to draw (D51). */
-const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
 
 /** The characters that would otherwise be read as markup, `&` first. */
 const ESCAPES: readonly (readonly [RegExp, string])[] = [

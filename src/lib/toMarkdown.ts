@@ -29,6 +29,7 @@
  * it keeps them (D39): the file shows what the design said.
  */
 
+import { NOTHING_TO_DRAW } from './exportFurniture';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 
 /** The columns of the table of nodes. */
@@ -66,9 +67,6 @@ const BRACKETS_BY_KIND: ReadonlyMap<string, MermaidBrackets> = new Map([
 
 /** The shape for a kind with no silhouette of its own: a plain rectangle. */
 const DEFAULT_BRACKETS: MermaidBrackets = ['[', ']'];
-
-/** What stands in for the diagram when the design holds nothing to draw. */
-const NOTHING_TO_DRAW = 'This design has no nodes, so there is nothing to draw.';
 
 /**
  * Renders a laid-out design as the text of a Markdown file.
