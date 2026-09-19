@@ -1,0 +1,250 @@
+---
+/**
+ * The page that publishes the format.
+ *
+ * Everything on it is derived rather than written twice. The field table comes
+ * from `designFields()`, which reads the generated JSON Schema, so a field
+ * added to `design.schema.ts` turns up here without anyone remembering. The
+ * sample is the bytes of `public/sample.json`, read at build time, so what a
+ * reader copies off the screen is exactly what the site serves and exactly what
+ * the Playwright walk uploads.
+ *
+ * The one thing the generated document cannot carry is the two cross-field
+ * rules, and the section that says so is the reason this page is not just a
+ * pretty print of the schema file.
+ */
+import PageLayout from '../layouts/PageLayout.astro';
+import {
+  EXTRA_KEYS_NOTE,
+  RULES_THE_FILE_CANNOT_STATE,
+  TWO_PASS_NOTE,
+  designFields,
+} from '../lib/publishedSchema';
+import { SAMPLE_FILE_NAME, SAMPLE_URL } from '../lib/sampleDesign';
+import styles from '../styles/schema.module.css';
+/**
+ * The sample's own bytes, inlined at build time.
+ *
+ * `?raw` rather than `readFileSync`, because a path built from
+ * `import.meta.url` resolves against the bundled chunk once the site is built
+ * and not against this file — the page rendered in `bun run dev` and then
+ * failed the build looking for `dist/public/sample.json`. Vite resolves this at
+ * compile time instead, so there is nothing left to resolve at run time.
+ *
+ * It is the same file the download link points at and the same file the app's
+ * own tests load, so the page cannot show something the site does not serve —
+ * and `e2e/schema.spec.ts` compares the two to make sure of it.
+ */
+import sampleFile from '../../public/sample.json?raw';
+
+const fields = designFields();
+
+/** The sample as the page prints it, without the file's trailing newline. */
+const sample = sampleFile.trimEnd();
+
+/** Where the generated JSON Schema is served from. */
+const SCHEMA_URL = '/design.schema.json';
+---
+
+<PageLayout
+  title="The design format — MapDataStructures"
+  description="Every field of the JSON MapDataStructures draws, the rules it enforces, and a sample design you can copy or download."
+  current="schema"
+>
+  <h1>The design format</h1>
+  <p class={styles.lede}>
+    A design is one JSON object with a title and two lists: the boxes to draw, and the
+    lines between them. Everything below is generated from the schema the app validates
+    against, so it cannot describe a rule the app does not keep.
+  </p>
+
+  <h2>Every field</h2>
+  <p>
+    Every field is required, and no string may be blank — a label of three spaces draws
+    the same empty box a missing one would. Spaces around text are kept exactly as
+    written, because the drawing shows what the file says.
+  </p>
+
+  <table class={styles.fields}>
+    <caption>The fields of a design, parents before the things they hold.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Field</th>
+        <th scope="col">Type</th>
+        <th scope="col">Required</th>
+        <th scope="col">What it is</th>
+      </tr>
+    </thead>
+    <tbody>
+      {fields.map((field) => (
+        <tr data-part="field">
+          <th class={styles.path} scope="row" data-part="path">
+            <code>{field.path}</code>
+          </th>
+          <td class={styles.type} data-part="type">
+            {field.type}
+          </td>
+          <td class={styles.required} data-part="required">
+            {field.isRequired ? 'Required' : 'Optional'}
+          </td>
+          <td class={styles.meaning}>
+            <p>{field.meaning}</p>
+            {field.rule === '' ? null : <p class={styles.constraint}>{field.rule}</p>}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+
+  <p>{EXTRA_KEYS_NOTE}</p>
+
+  <h2>Two rules the schema file cannot state</h2>
+  <p>
+    JSON Schema has no way to say that one field of a file has to agree with another, so
+    neither of these is in the published file. The app enforces both anyway, and a file
+    that breaks one is refused with the field named.
+  </p>
+
+  {/*
+   * A `<div>` per rule inside the `<dl>`, which HTML allows and which keeps a
+   * rule's name and its reason together as one thing rather than as two
+   * siblings that happen to be adjacent.
+   */}
+  <dl class={styles.rules}>
+    {RULES_THE_FILE_CANNOT_STATE.map((rule) => (
+      <div data-part="rule">
+        <dt>{rule.name}</dt>
+        <dd>{rule.detail}</dd>
+      </div>
+    ))}
+  </dl>
+
+  <p>{TWO_PASS_NOTE}</p>
+
+  <h2>A sample design</h2>
+  <p>
+    One design using every kind of node the app draws, with a label on every line. Copy
+    it, download it, or <a href="/">load it on the drawing page</a> without taking a copy
+    at all.
+  </p>
+
+  <figure class={styles.file}>
+    <figcaption class={styles.fileBar}>
+      <span class={styles.fileName}>{SAMPLE_FILE_NAME}</span>
+      <span class={styles.fileActions}>
+        <button id="copy-sample" class={styles.fileAction} type="button">
+          Copy the sample
+        </button>
+        <a
+          id="download-sample"
+          class={styles.fileAction}
+          href={SAMPLE_URL}
+          download={SAMPLE_FILE_NAME}
+        >
+          Download {SAMPLE_FILE_NAME}
+        </a>
+      </span>
+    </figcaption>
+    <pre class={styles.code}><code id="sample-json">{sample}</code></pre>
+  </figure>
+
+  {/*
+   * The copy control's own live region, in the page from the first paint and
+   * empty, because a region announces changes to itself and not its own
+   * arrival. It is this page's, not the upload page's: D41's two regions take
+   * turns because a file either drew or did not, and nothing here has a second
+   * voice to talk over. It holds its height whether or not it is saying
+   * something, so pressing the button does not move the page under the reader.
+   */}
+  <p id="copy-status" class={styles.copyStatus} role="status"></p>
+
+  <h2>The schema file</h2>
+  <p>
+    The published schema is a draft 2020-12 JSON Schema generated from the same definition
+    the app validates with, and the site serves it as{' '}
+    <a id="schema-file-link" href={SCHEMA_URL}>
+      design.schema.json
+    </a>
+    . Point a validator at it and it will accept exactly what this app accepts, including
+    the extra keys it ignores — but it cannot check the two rules above, which is what
+    this page is for.
+  </p>
+
+  <script>
+    /**
+     * The copy control, and what it says when it cannot copy.
+     *
+     * The Clipboard API can be missing, and it can be refused — a page without
+     * a secure context or without the permission gets a rejected promise, and
+     * `navigator.clipboard` is simply absent on some older browsers. A button
+     * that silently does nothing in either case is worse than no button, so
+     * every path here ends in a sentence, and the failure sentence names the
+     * two ways through that do not need the clipboard at all.
+     *
+     * The text copied is the text on the screen, read out of the same element
+     * a reader would select by hand, so the two cannot differ.
+     */
+
+    /** What the region says once the sample is on the clipboard. */
+    const COPIED = 'Copied. The sample is on your clipboard.';
+
+    /** And when it is not, with the two ways through that still work. */
+    const COPY_REFUSED =
+      'This browser would not let the page copy it. Select the sample and copy it yourself, or use Download sample.json.';
+
+    interface CopyControls {
+      readonly button: HTMLButtonElement;
+      readonly sample: HTMLElement;
+      readonly status: HTMLElement;
+    }
+
+    function startSchemaPage(): void {
+      const controls = findCopyControls();
+
+      controls.button.addEventListener('click', () => {
+        void copySample(controls);
+      });
+    }
+
+    function findCopyControls(): CopyControls {
+      const button = document.querySelector('#copy-sample');
+      const sample = document.querySelector('#sample-json');
+      const status = document.querySelector('#copy-status');
+
+      if (
+        !(button instanceof HTMLButtonElement) ||
+        !(sample instanceof HTMLElement) ||
+        !(status instanceof HTMLElement)
+      ) {
+        throw new Error('The schema page is missing one of its elements.');
+      }
+
+      return { button, sample, status };
+    }
+
+    /**
+     * Puts the sample on the clipboard, or says why it could not.
+     *
+     * The status is set after the attempt rather than before it, so the region
+     * never claims a copy that did not happen. It is not cleared on a timer
+     * either: a live region emptied a moment later can be announced twice, and
+     * a sentence that stays put is one a reader can go back to.
+     */
+    async function copySample(controls: CopyControls): Promise<void> {
+      try {
+        const clipboard = navigator.clipboard;
+
+        if (!clipboard) {
+          throw new Error('This browser has no clipboard API.');
+        }
+
+        await clipboard.writeText(controls.sample.textContent ?? '');
+        controls.status.textContent = COPIED;
+      } catch {
+        controls.status.textContent = COPY_REFUSED;
+      }
+    }
+
+    startSchemaPage();
+  </script>
+</PageLayout>

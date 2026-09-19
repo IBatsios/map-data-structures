@@ -260,7 +260,9 @@ function ruleOf(schema: JsonObject): string {
   const holdsVisibleText = textAt(schema, 'pattern') === '\\S';
 
   if (holdsSomething && holdsVisibleText) {
-    return 'At least one character that is not a space. Spaces around the text are kept exactly as the file wrote them.';
+    // Said once per field because it is the one rule most files trip over, and
+    // said this briefly because it is about to be said nine times on one page.
+    return 'At least one character that is not a space.';
   }
 
   return holdsSomething ? 'It may not be empty.' : '';

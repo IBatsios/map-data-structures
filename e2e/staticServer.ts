@@ -64,17 +64,24 @@ async function respond(
   }
 
   try {
+    // `astro build` writes `/schema` as `dist/schema/index.html`, and a host
+    // serving static files answers `/schema` with it, so this does too. That
+    // is a directory's own index, not the single-page fallback the comment
+    // above refuses: a URL naming nothing is still a 404, because the `stat`
+    // of a missing `index.html` throws straight into the catch below.
     const found = await stat(file);
+    const target = found.isFile() ? file : join(file, 'index.html');
+    const served = found.isFile() ? found : await stat(target);
 
-    if (!found.isFile()) {
+    if (!served.isFile()) {
       return send(response, 404, 'Not found');
     }
 
     response.writeHead(200, {
-      'content-type': CONTENT_TYPES[extname(file)] ?? 'application/octet-stream',
-      'content-length': found.size,
+      'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream',
+      'content-length': served.size,
     });
-    createReadStream(file).pipe(response);
+    createReadStream(target).pipe(response);
   } catch {
     // A missing file is the ordinary case here, not an incident: the test asked
     // for a URL the build did not produce, and 404 is the honest answer.

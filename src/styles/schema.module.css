@@ -1,0 +1,242 @@
+/*
+ * The page that publishes the format.
+ *
+ * It is documentation, so it is built to be looked things up in rather than
+ * read start to finish: a field table you can scan a column of, and the sample
+ * presented as what it is — a file, with its name on it and two ways to take a
+ * copy. The page's own surface, ink and type come from `page.module.css`;
+ * everything here is the two shapes that are only on this screen.
+ *
+ * Two ideas carry it:
+ *
+ * 1. **A ledger, not a card grid.** The field table has hairlines and nothing
+ *    else — no borders round the outside, no zebra stripes, no boxes. A
+ *    datasheet is the form this content already has, and drawing it as cards
+ *    would be decorating a lookup table.
+ * 2. **Monospace means "this is in your file".** Every field path, every type
+ *    and the sample itself are set in the page's mono face, and everything the
+ *    app is saying *about* them is in the body face. A reader can tell which
+ *    words they have to type by looking at them.
+ */
+
+.lede {
+  font-size: 1.1875rem;
+  line-height: 1.5;
+}
+
+/*
+ * The field table. `max-width` is wider than the page's prose measure because
+ * this is tabular rather than prose — four columns at 42rem would wrap the last
+ * one to two words a line.
+ */
+.fields {
+  width: 100%;
+  max-width: 58rem;
+  margin: 1.25rem 0 1rem;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.fields caption {
+  margin-bottom: 0.5rem;
+  color: var(--page-quiet);
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.fields th,
+.fields td {
+  padding: 0.6rem 1rem 0.6rem 0;
+  border-bottom: 1px solid var(--page-rule);
+  vertical-align: baseline;
+}
+
+.fields thead th {
+  border-bottom-color: var(--page-ink);
+  color: var(--page-quiet);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/*
+ * The field's own name, in the mono face and not wrapped: `nodes[].label` broken
+ * over two lines stops looking like something you can type.
+ */
+.path {
+  font-family: var(--page-font-mono);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.type {
+  color: var(--page-quiet);
+  font-family: var(--page-font-mono);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.required {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.meaning {
+  min-width: 22rem;
+}
+
+.meaning p {
+  max-width: none;
+  margin: 0;
+}
+
+/* What the published file allows, under what the field is for. */
+.constraint {
+  margin-top: 0.25rem;
+  color: var(--page-quiet);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/*
+ * The two rules the published file has no way to state. A definition list,
+ * because that is what they are, ruled down the left so the eye reads them as
+ * one block of things the file above does not cover.
+ */
+.rules {
+  max-width: var(--page-measure);
+  margin: 1.25rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--page-rule);
+}
+
+.rules dt {
+  font-weight: 650;
+}
+
+.rules dd {
+  margin: 0.25rem 0 0;
+  color: var(--page-quiet);
+}
+
+/* Space between the rules, and none after the last one. */
+.rules > div + div {
+  margin-top: 1rem;
+}
+
+/*
+ * The sample, shown as a file rather than as a code block: a bar with its name
+ * and the two ways to take it, and the text under it on the plate. The corners
+ * are concentric — the outer radius is the inner one plus the bar's padding —
+ * and `overflow: hidden` is what lets the plate reach the rounded edge.
+ */
+.file {
+  max-width: 58rem;
+  margin: 1.25rem 0 0;
+  border: 1px solid var(--page-rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.fileBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--page-rule);
+  background-color: var(--page-plate);
+}
+
+.fileName {
+  font-family: var(--page-font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.fileActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/*
+ * Both controls are the same size and the same shape, because they are two
+ * ways to do one thing. One is a button and one is a link, and each is the
+ * element it really is: the copy control acts on this page, the download
+ * control goes to a URL and a right-click on it should offer to save it.
+ */
+.fileAction {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--page-rule);
+  border-radius: 7px;
+  background-color: var(--page-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition-property: border-color, background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.fileAction:hover {
+  border-color: var(--page-quiet);
+  background-color: var(--page-surface);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.fileAction:active {
+  transform: translateY(1px);
+}
+
+/*
+ * The sample itself. It scrolls sideways rather than wrapping, because a
+ * wrapped line of JSON is a line somebody will copy wrong, and `tab-size` is
+ * set in case a reader's own file arrives here with tabs in it.
+ */
+.code {
+  max-width: 100%;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  background-color: var(--page-surface);
+  font-family: var(--page-font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+/*
+ * What the copy control did, in a region of its own. It keeps its height
+ * whether or not it is saying anything, so the page does not jump under a
+ * reader the moment they press the button.
+ */
+.copyStatus {
+  min-height: 1.5rem;
+  margin: 0.5rem 0 0;
+  color: var(--page-quiet);
+  font-size: 0.9375rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fileAction {
+    transition-duration: 0ms;
+  }
+
+  .fileAction:active {
+    transform: none;
+  }
+}

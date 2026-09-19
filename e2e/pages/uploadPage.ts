@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 import type { Download, JSHandle, Locator, Page } from '@playwright/test';
 
+import { shippedSamplePath } from './schemaPage';
+
 /** One position in the drawing, as the browser reports it. */
 export interface DrawnPoint {
   readonly x: number;
@@ -38,6 +40,7 @@ export interface DownloadedFile extends SavedFile {
  */
 export class UploadPage {
   readonly fileInput: Locator;
+  readonly loadSample: Locator;
   readonly dropZone: Locator;
   readonly status: Locator;
   readonly problems: Locator;
@@ -51,6 +54,7 @@ export class UploadPage {
 
   constructor(private readonly page: Page) {
     this.fileInput = page.locator('#design-file');
+    this.loadSample = page.locator('#load-sample');
     this.dropZone = page.locator('#drop-zone');
     this.status = page.locator('#upload-status');
     this.problems = page.locator('#upload-problems');
@@ -75,6 +79,22 @@ export class UploadPage {
   /** Chooses a file from `e2e/fixtures`, the way a user picks one off a disk. */
   async choose(fixture: string): Promise<void> {
     await this.fileInput.setInputFiles(fixturePath(fixture));
+  }
+
+  /**
+   * Chooses the sample the site ships, the way a user who downloaded it would.
+   *
+   * It comes from `public/` rather than from `e2e/fixtures/`, because that is
+   * the only place it exists: the same file is the download the schema page
+   * offers, the asset "Load the sample design" fetches, and this.
+   */
+  async chooseShippedSample(): Promise<void> {
+    await this.fileInput.setInputFiles(shippedSamplePath());
+  }
+
+  /** Asks the page for the design the site ships, without choosing a file. */
+  async loadTheSample(): Promise<void> {
+    await this.loadSample.click();
   }
 
   /**

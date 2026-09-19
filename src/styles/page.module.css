@@ -1,0 +1,287 @@
+/*
+ * The page itself: the surface both screens sit on, the type they are set in,
+ * and the masthead that joins them.
+ *
+ * This is the decision Tasks 03 and 06 parked here in their own comments. It is
+ * taken once, for both pages, now that there are two — and it is deliberately
+ * the smallest thing that answers the question rather than a visual system the
+ * app does not need.
+ *
+ * Direction: a technical document, not a product page. The reader is a
+ * developer with draw.io open in another tab (intake 2.1), and what they do
+ * here is upload a file, read a picture, and look up a field. So the page reads
+ * like a datasheet — warm paper, one ink, hairlines instead of boxes, and
+ * nothing that moves unless it is answering a pointer.
+ *
+ * Four rules hold it together:
+ *
+ * 1. **The page is paper and the drawing is the plate on it.** The surface is
+ *    warm (`#fbfaf8`) where the drawing's own neutral is cool (`#f2f4f7`), so a
+ *    drawing reads as something laid on the page rather than as part of it. The
+ *    ink is the drawing's own `--shape-text`, so the page and the picture are
+ *    written in the same colour rather than two near-blacks that almost match.
+ * 2. **Two faces, and both of them mean something.** The page is set in the
+ *    same system sans the drawing uses, so the words above a diagram and the
+ *    words in it are one voice. Monospace is not decoration: it marks the
+ *    things that are literally in the user's file — a field path, a type, a
+ *    snippet of JSON — and it is the same face the validation panel quotes
+ *    those things in. Nothing is fetched; a site that promises it never sends
+ *    your file anywhere should not be asking a font CDN who is reading it.
+ * 3. **Colour is measured, never eyeballed.** `page.module.test.ts` reads this
+ *    file and checks every ink against both surfaces with WCAG's own formula,
+ *    exactly as `drawing.module.test.ts` and `upload.module.test.ts` do. The
+ *    accent also underlines, because a link a reader cannot pick out by colour
+ *    still has to be findable.
+ * 4. **Hairlines, not cards.** Depth here comes from a rule and a tint, not a
+ *    shadow: the content is a document, and a document with drop-shadowed
+ *    panels floating over it is pretending to be an app.
+ */
+
+.page {
+  /*
+   * Every colour the two pages use. Declared on the body rather than on
+   * `:root`, so this stays an ordinary CSS Module with no global escape hatch
+   * (D1), and still inherits into `upload.module.css` and `exports.module.css`,
+   * which are its descendants in the DOM.
+   */
+  --page-surface: #fbfaf8;
+  --page-ink: #1f2430;
+  --page-quiet: #55607a;
+  --page-accent: #17537d;
+  --page-plate: #f1efe9;
+  --page-rule: #dcd7cf;
+
+  /* How wide a line of prose is allowed to get before it stops being readable. */
+  --page-measure: 42rem;
+
+  --page-font-body:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --page-font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', 'Cascadia Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  margin: 0;
+  background-color: var(--page-surface);
+  color: var(--page-ink);
+  font-family: var(--page-font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * The one thing on the page that is invisible until it is needed: a keyboard
+ * user's way past the masthead. It is the first focusable element, and it is
+ * positioned rather than hidden, so it is really in the tab order.
+ */
+.skipLink {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  padding: 0.5rem 0.875rem;
+  border-radius: 6px;
+  background-color: var(--page-ink);
+  color: var(--page-surface);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skipLink:focus-visible {
+  transform: none;
+}
+
+/*
+ * The masthead. A wordmark and two links, under one hairline — the page's
+ * whole navigation, because the site has two screens and a menu would be
+ * furniture. The rule is what separates it; there is no bar, no shadow and no
+ * second surface, so the paper runs from the top of the window to the bottom.
+ */
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  align-items: baseline;
+  justify-content: space-between;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 0.875rem;
+  border-bottom: 1px solid var(--page-rule);
+}
+
+.wordmark {
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.wordmark:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+/*
+ * Padded to a usable hit area rather than left as bare text, and pulled back
+ * out again with a negative margin so the row still sits on the baseline the
+ * wordmark does.
+ */
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  margin: -0.5rem 0;
+  padding: 0.5rem 0;
+  color: var(--page-quiet);
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition-property: color;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.navLink:hover {
+  color: var(--page-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+/*
+ * The page you are on, marked by weight and a rule under it as well as by
+ * colour — `aria-current` says it to a screen reader, and this says it to
+ * everyone else without relying on telling two greys apart.
+ */
+.navLink[aria-current='page'] {
+  color: var(--page-ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--page-ink);
+}
+
+.main {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.footer {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 2.5rem;
+  border-top: 1px solid var(--page-rule);
+  color: var(--page-quiet);
+  font-size: 0.875rem;
+}
+
+.footer a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/*
+ * Type, from here down. Set on the page rather than on each element's own
+ * module, because a heading should be the same size on both screens and
+ * because these are the page's own elements rather than any component's.
+ */
+
+.page h1 {
+  max-width: var(--page-measure);
+  margin: 0 0 0.75rem;
+  font-size: 2.125rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.page h2 {
+  max-width: var(--page-measure);
+  margin: 2.75rem 0 0.75rem;
+  font-size: 1.3125rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.page h3 {
+  max-width: var(--page-measure);
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.page p,
+.page li {
+  max-width: var(--page-measure);
+  text-wrap: pretty;
+}
+
+.page p {
+  margin: 0 0 0.875rem;
+}
+
+/*
+ * Links in the content are the accent and underlined, both. The offset keeps
+ * the line off the descenders; the thicker line on hover is the only answer the
+ * page gives a pointer, which is as much as a document needs.
+ *
+ * `:not([class])` rather than every link: a link that carries a class of its
+ * own — the masthead's, the skip link's, the download control on the schema
+ * page — is a control that happens to be a link, and painting it as prose on
+ * top of its own styling is how a download button ends up underlined. So a
+ * classed link owns its whole look, and this rule takes the rest.
+ */
+.main a:not([class]) {
+  color: var(--page-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition-property: text-decoration-thickness;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.main a:not([class]):hover {
+  text-decoration-thickness: 2px;
+}
+
+/*
+ * One focus ring for the whole page, visible against both surfaces, offset so
+ * it never sits on top of the border it is ringing.
+ */
+.page :focus-visible {
+  outline: 3px solid var(--page-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Monospace marks what is literally in the user's file. Sized down a touch
+ * because a mono face at the body size reads larger than the sans beside it.
+ */
+.page code,
+.page kbd,
+.page samp {
+  font-family: var(--page-font-mono);
+  font-size: 0.9375em;
+}
+
+/* Motion here is a nicety, not information; somebody who asked for less gets it. */
+@media (prefers-reduced-motion: reduce) {
+  .navLink,
+  .main a:not([class]) {
+    transition-duration: 0ms;
+  }
+}
