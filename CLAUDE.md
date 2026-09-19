@@ -101,6 +101,19 @@ already did. Detail, including the diagnosis and both fuzz measurements, in
 `docs/handoff-items/handoff-fix-layout-crash-and-loader-wording.md` and
 D98–D99.
 
+**The Word export now has a repeatable LibreOffice check**, `bun run
+docx:libreoffice`: opt-in and local, it exports five fixtures through the
+app's own Export Word button, converts each with the LibreOffice installed on
+the machine, and reads the result back to confirm the title and every node
+and edge label survived. It finds the binary itself (`MAPDS_SOFFICE`
+override, then per-platform paths) and exits 0 with one line when LibreOffice
+is absent, so `bun run test`, `bun run test:e2e` and CI are untouched by it —
+its own Playwright config, not a project the default run collects. It is not
+a verified Word export: LibreOffice is an independent OOXML implementation,
+not Word's renderer, and opening a produced `.docx` in real Microsoft Word
+once remains open and belongs to the owner. Detail in
+`docs/handoff-items/handoff-chore-libreoffice-docx-check.md` and D104–D111.
+
 ## Run and test
 
 ```
@@ -111,6 +124,8 @@ bun run test:e2e  # Playwright walk, in a real browser
 bun run check     # astro check
 bun run build     # static site into dist/
 bun run schema    # regenerate public/design.schema.json from the Zod schema
+
+bun run docx:libreoffice  # opt-in, local: check the Word export against LibreOffice
 ```
 
 `bun run test` runs Vitest. Plain `bun test` would run Bun's own runner instead, so always include `run`.
