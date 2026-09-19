@@ -748,3 +748,211 @@ bad assertion, and no `bun test` written where `bun run test` was meant.
 **https://github.com/IBatsios/map-data-structures/pull/27** — draft, base
 `main`, CI green. Opened by me, as this document's pipeline notes direct. I have
 not marked it ready and have not merged; both are Sam's.
+
+## Work completed by Amon — round 2
+
+### What was built
+
+The one defect from round 1 is fixed: **the conversion-failure message now
+carries what LibreOffice said on both of its streams.**
+
+`failureOf` left `docxRoundTrip.spec.ts` and became `describeFailure` in a pure
+module of its own. That move is the fix rather than tidying around it — the
+spec imports `@playwright/test` and needs an office suite to run, so nothing
+could reach the message where it lived, which is exactly how the one piece of
+this check that nobody reads until something is wrong shipped with no test on
+it. It is now nine Vitest tests that pass on any machine, LibreOffice or not.
+
+The message gained the stream it was missing, and a label on each:
+
+```
+order-intake.json: LibreOffice exited with code 1. The command was: …
+The exported and converted files are still in …\mapds-libreoffice-iP74G8.
+LibreOffice printed nothing on stdout.
+LibreOffice said on stderr:
+Could not find platform independent libraries <prefix>
+Error: source file could not be loaded
+```
+
+Three things about its shape:
+
+- **Both streams are required fields on one interface.** The original bug was
+  possible because `failureOf` simply had no parameter for stderr. A caller
+  that forgets `diagnostics` is now a type error, caught by `bun run check`,
+  rather than a quiet half-diagnosis.
+- **Neither stream is filtered or summarised.** Every successful conversion
+  writes the platform-libraries warning to stderr, so dropping it as noise is
+  tempting — and the refusal arrives directly underneath it. A filter that knew
+  which lines mattered would be D105's mistake in a smaller form, so both
+  streams go out whole, labelled so a reader can tell the warning from the
+  reason.
+- **Silence is reported rather than skipped.** A stream left out of the message
+  reads the same as a stream that was never collected, and telling those two
+  apart is most of what a reader is doing.
+
+### Files added or changed
+
+- **`scripts/libreoffice/failureMessage.ts`** — new, pure. `describeFailure`
+  and the `ConversionFailure` interface. Carries the "both streams, always"
+  reasoning and the measurement behind it.
+- **`scripts/libreoffice/failureMessage.test.ts`** — new. Nine tests, no
+  LibreOffice needed.
+- **`scripts/libreoffice/docxRoundTrip.spec.ts`** — `failureOf` deleted; both
+  call sites now go through one local `failed(reason)` closure that passes
+  `verdict.diagnostics` along with the rest.
+- **`docs/DECISIONS.md`** — D111.
+- **`README.md`** — what a red run prints, in the `bun run docx:libreoffice`
+  section.
+- **Not changed:** `.github/workflows/ci.yml` (`git diff main -- .github/` is
+  still empty), `verdict.ts`, `convert.ts`, `soffice.ts`, `survivingText.ts`,
+  `check.ts`, `package.json`, `.gitignore`, `.env.example`, and anything under
+  `src/` or `e2e/`.
+
+### Tests written
+
+**9 new Vitest tests** in `failureMessage.test.ts`, bringing the suite to 491.
+
+The refusal this check exists to catch:
+
+- carries what LibreOffice said on stderr, which is where a refusal is
+  explained — **this is the defect's own test**
+- says which stream the diagnosis came from
+- names the fixture and the room, so the files can be opened
+- says what was run, so the failure can be repeated by hand
+
+Both streams:
+
+- quotes stdout when that is where the run spoke
+- reads both streams when both of them spoke
+- says so plainly when neither stream said anything
+- treats a stream of whitespace as one that said nothing
+
+And the second misdiagnosed case:
+
+- carries the spawn error, so a start that failed is not read as a kill
+
+**The RED gate was real, and on the behaviour rather than on a missing file.**
+The module was created first holding round 1's logic verbatim, so the tests ran
+against the defect itself: **7 failed, 2 passed**, every failure being the
+diagnosis absent from the message. After the fix, 9 passed. The repository's
+pre-commit hook runs `astro check` and `vitest run`, and correctly refused to
+commit the red state — so RED is recorded here and in the fix commit rather
+than as a checkpoint commit of its own. I did not reach for `--no-verify`.
+
+### Local results
+
+`bun run test`: **pass — 491 tests in 32 files** (482 in 31 before this round).
+
+`bun run check`: **pass — 0 errors, 0 warnings, 0 hints across 95 files.**
+
+`bun run build`: **pass — 2 pages in 719 ms.**
+
+`bunx playwright test --list`: **124 tests in 6 files**, `docxRoundTrip`
+collected **zero** times — criterion 2 unmoved.
+
+`bun run docx:libreoffice`, after the change:
+
+```
+Converting the Word exports with C:\Program Files\LibreOffice\program\soffice.com
+Running 5 tests using 1 worker
+
+  ok 1 order-intake.json survives a LibreOffice round trip (5.7s)
+  ok 2 control-labels.json survives a LibreOffice round trip (5.5s)
+  ok 3 empty-design.json survives a LibreOffice round trip (5.2s)
+  ok 4 markup-labels.json survives a LibreOffice round trip (5.3s)
+  ok 5 estate-sweep.json survives a LibreOffice round trip (6.9s)
+
+  5 passed (32.2s)
+```
+
+**Falsified twice against the real LibreOffice on this machine, not only in
+unit tests.**
+
+1. *The refusal.* A zip built by hand with a raw U+0001 in `word/document.xml`
+   — D76's exact shape — put through `convertToDocx` with the installed binary:
+   `kind: failed`, a reason naming exit code 1, `STDOUT: ""`, and `diagnostics`
+   holding the platform-libraries warning with `Error: source file could not be
+   loaded` underneath it. Round 1's message, rebuilt from that same verdict,
+   ends on *"LibreOffice printed nothing on stdout."*; round 2's carries the
+   refusal. Your measurement reproduces exactly.
+2. *Through the real command, end to end.* With the exported `.docx` truncated
+   to half its bytes after the browser produced it, the Playwright output of
+   `bun run docx:libreoffice` itself is the block quoted at the top of this
+   section — the real command line, the kept room, and the diagnosis. The probe
+   was three lines in the spec, reverted with `git checkout --`; the tree is
+   clean and grepping for it finds nothing.
+
+I tried the stronger falsification first — injecting the regression into
+`safeDocxText` so the export itself produced an ill-formed document. Worth
+recording as a finding rather than a failed attempt: **it never reaches
+LibreOffice.** The `docx` library refuses to serialise a raw control character,
+so the browser export produces no download at all and the fixture fails at
+`waitForEvent` three minutes earlier. D76's marking is defended by two
+independent layers, not one. Reverted; line 347 is back to `UNDRAWABLE_MARK`.
+
+The spawn case, since it was the second half of the defect: `MAPDS_SOFFICE`
+pointed at `C:\Program Files\LibreOffice` (a directory) now prints
+`Executable not found in $PATH: "C:\Program Files\LibreOffice"` under the
+stderr label, instead of nothing at all.
+
+Secret scan: **clean.** No `gitleaks` here, so `docs/RUNBOOK.md` 0.2's grep
+fallback across `a59ebf4..HEAD`, plus a read of both new files. This round
+introduces **no new environment variable**, so D110 is untouched and
+`.env.example` still needs nothing.
+
+`git status --porcelain` after everything: clean. No `mapds-libreoffice-*` room
+survives, and `tasklist` shows the only `soffice` processes are two that
+started 2026-09-18 at 18:26 — the user's own session, predating this work. My
+runs left no orphan.
+
+### Decisions recorded
+
+**D111** in `docs/DECISIONS.md`: the failure message is a pure module of its
+own and carries both streams, each labelled, neither filtered — with the
+measurement, the promise in D105 it was breaking, and why a "drop the noisy
+line" filter would repeat that mistake.
+
+### Known gaps
+
+1. **`exitPhrase` still says "was killed before it finished" when a binary
+   could not start.** Fixed in effect rather than at the root: the message now
+   prints `Executable not found in $PATH: …` directly underneath, so no reader
+   is misled. Fixing the *wording* means giving `judgeConversion` a fourth fact
+   — a `startFailed` flag — which changes `ConversionAttempt`'s contract and
+   the verdict test that pins "a run killed without a code reads as killed".
+   You called the fix `failureOf`'s argument list and its last line and said
+   not to widen the round, so I left it. It is a one-field change whenever
+   someone wants it.
+2. **Your three smaller notes are all still true and none were taken.**
+   `seconds()` still rounds (note 1); `textThatMustSurvive` still shares
+   `safeDocxText` with the export (note 2 — and the finding above makes that
+   trade look better than it did); a red run still leaves its rooms behind
+   (note 3). None of them rides along, by your instruction.
+3. **No test asserts that the *spec* passes `diagnostics`.** It cannot — the
+   spec needs Playwright and an office suite. What stands in for it is the
+   required field: omitting it fails `bun run check`. That is a compile-time
+   guarantee rather than a test, and it is the same guarantee that would have
+   prevented the original defect.
+4. **Round 1's other gaps are unchanged**, except gaps 2 and 4, which your
+   round closed. macOS and Linux are still unit-tested rather than run; still
+   five fixtures; the LibreOffice version still is not recorded.
+
+### Out-of-scope notes for Jared
+
+1. **The metadata title is now free to assert, and nobody has asked for it.**
+   Jahmyr measured that LibreOffice preserves `docProps/core.xml` across a round
+   trip, which was my open question from round 1. Adding `docxTitle` to the
+   round trip is about two lines and would strengthen the check; no criterion
+   asks for it, so it is not here. Worth a line in a future cycle's scope.
+2. **`docx` refuses to serialise a raw control character** (the finding above).
+   D76's marking therefore has a second, independent guard underneath it, and
+   an export regression of *that particular* kind surfaces as a failed download
+   rather than as a LibreOffice refusal. Nothing to fix — but it does mean
+   `control-labels`'s value to this check is narrower than the fixture comment
+   claims, since the file it was chosen to reproduce can no longer be produced
+   by the export at all. The comment at `docxRoundTrip.spec.ts` lines 40-43 is
+   accurate about history and slightly generous about the present.
+3. **`e2e/exportWord.spec.ts` is still 731 lines** against the 800 ceiling.
+   Unchanged this round and still true.
+4. **Nothing in this round touched the Word question.** The `.docx` is still
+   unverified against Microsoft Word, and that item still belongs to the owner.
