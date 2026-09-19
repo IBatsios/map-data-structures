@@ -214,84 +214,84 @@ written to be falsifiable by comparison against `main`, not by assertion.**
 
 **Nothing changed — the proof:**
 
-- [ ] `toMarkdown(layoutDesign(d))` returns a **byte-identical** string, before
+- [x] `toMarkdown(layoutDesign(d))` returns a **byte-identical** string, before
       and after, for at least three designs including a design with no nodes and
       `e2e/fixtures/estate-sweep.json`.
-- [ ] `htmlPage(layout, drawing)` returns a **byte-identical** string, before and
+- [x] `htmlPage(layout, drawing)` returns a **byte-identical** string, before and
       after, for the same designs.
-- [ ] `JSON.stringify(pdfPlan(layout, measure))` and
+- [x] `JSON.stringify(pdfPlan(layout, measure))` and
       `JSON.stringify(docxPlan(layout))` are **byte-identical**, before and
       after, for the same designs. Both planners are pure and return plain
       objects, so this is a direct comparison; capture the "before" off `main`
       and record in your section how you captured it.
-- [ ] The six column shares are still `0.26 / 0.46 / 0.28` and
+- [x] The six column shares are still `0.26 / 0.46 / 0.28` and
       `0.26 / 0.26 / 0.48`, and the headings are still `Id | Label | Type` and
       `From | To | Label`, in that order.
-- [ ] `src/lib/pdfPlan.test.ts`, `src/lib/toHtml.test.ts`,
+- [x] `src/lib/pdfPlan.test.ts`, `src/lib/toHtml.test.ts`,
       `src/lib/toMarkdown.test.ts` and `src/lib/docxPlan.test.ts` are
       **unchanged** — zero lines, confirmed by `git diff --stat`.
-- [ ] `src/pages/index.astro`, `src/lib/toPdf.ts`, `src/lib/toDocx.ts` and
+- [x] `src/pages/index.astro`, `src/lib/toPdf.ts`, `src/lib/toDocx.ts` and
       `src/lib/exportStyles.ts` are **unchanged**, confirmed by
       `git diff --stat`.
 
 **Chore 1 — the sentence:**
 
-- [ ] `grep -rn "so there is nothing to draw" src/` finds the sentence declared
+- [x] `grep -rn "so there is nothing to draw" src/` finds the sentence declared
       **exactly once** outside test files.
-- [ ] `import { NOTHING_TO_DRAW } from './pdfPlan'` still resolves, to the same
+- [x] `import { NOTHING_TO_DRAW } from './pdfPlan'` still resolves, to the same
       string, as a re-export rather than a second declaration.
-- [ ] `toHtml.ts`, `toMarkdown.ts` and `docxPlan.ts` each import it rather than
+- [x] `toHtml.ts`, `toMarkdown.ts` and `docxPlan.ts` each import it rather than
       declaring it, and `docxPlan.ts`'s four-copies pointer comment is gone,
       because it now points at nothing.
 
 **Chore 2 — the headings and shares:**
 
-- [ ] The node columns and the edge columns are declared **exactly once** in
+- [x] The node columns and the edge columns are declared **exactly once** in
       `src/`, with heading and share together.
-- [ ] The private `Column` interface exists in one file, not two.
-- [ ] `toHtml.ts` and `toMarkdown.ts` derive their headings from that one
+- [x] The private `Column` interface exists in one file, not two.
+- [x] `toHtml.ts` and `toMarkdown.ts` derive their headings from that one
       declaration rather than re-typing the strings.
-- [ ] A Vitest test fails if a heading or a share is changed in one export and
+- [x] A Vitest test fails if a heading or a share is changed in one export and
       not the others — the role `exportStyles.test.ts` plays for the palette.
       One test covering the shared module is enough; it is now the only copy.
 
 **Chore 3 — the fixture name:**
 
-- [ ] `e2e/fixtures/empty.json` no longer exists. The 0-byte file has a name
+- [x] `e2e/fixtures/empty.json` no longer exists. The 0-byte file has a name
       that means *a file with no bytes*, and `wc -c` on it still reads **0**.
-- [ ] The rename is recorded as a rename, confirmed by
+- [x] The rename is recorded as a rename, confirmed by
       `git log --follow --oneline` on the new path or `git diff -M --stat`.
-- [ ] `e2e/validation.spec.ts`'s "says an empty file is empty" test points at the
+- [x] `e2e/validation.spec.ts`'s "says an empty file is empty" test points at the
       new name and still passes, with its assertions unchanged.
-- [ ] `src/lib/describeUpload.test.ts` no longer uses the old name to mean a
+- [x] `src/lib/describeUpload.test.ts` no longer uses the old name to mean a
       design with 0 nodes and 0 edges; the expected string changes with it and
       the assertion is otherwise unchanged.
-- [ ] `e2e/export.spec.ts`'s disambiguating comment at 182–184 is gone or
+- [x] `e2e/export.spec.ts`'s disambiguating comment at 182–184 is gone or
       reduced, and `upload.choose('empty-design.json')` at 185 and 507 is
       untouched.
-- [ ] No other file in `e2e/fixtures/` is renamed, added or removed.
+- [x] No other file in `e2e/fixtures/` is renamed, added or removed.
 
 **Comments:**
 
-- [ ] `src/lib/loadDesign.ts`'s module header no longer speaks of what "Task 04
+- [x] `src/lib/loadDesign.ts`'s module header no longer speaks of what "Task 04
       has to work with".
-- [ ] `readPlacedNodes`'s throw comment in `src/lib/layout.ts` accounts for
+- [x] `readPlacedNodes`'s throw comment in `src/lib/layout.ts` accounts for
       `placeWithDagre` and `isWhollyPlaced` gating ahead of it (D98).
-- [ ] Neither comment change alters a single line of executable code in those
+- [x] Neither comment change alters a single line of executable code in those
       two files, confirmed by reading the diff.
 
 **The suite:**
 
-- [ ] `bun run test` passes with at least the **441** tests that pass on `main`
+- [x] `bun run test` passes with at least the **441** tests that pass on `main`
       today, across 26 files. A lower count means something was deleted.
-- [ ] `bun run test:e2e` passes all **124**.
-- [ ] `bun run check` is clean.
+- [x] `bun run test:e2e` passes all **124**.
+- [x] `bun run check` is clean.
 - [ ] CI is green on the pull request, on both jobs.
-- [ ] `docs/DECISIONS.md` records this cycle, numbered from **D102** (D101 is the
+- [x] `docs/DECISIONS.md` records this cycle, numbered from **D102** (D101 is the
       highest today): one decision for where the shared export text and columns
       now live and what keeps them from drifting, one for the fixture naming
       rule that a name says *no bytes* or *no nodes* and never both.
-- [ ] No new dependency, no new environment variable; `.env.example` unchanged.
+- [x] No new dependency, no new environment variable; `.env.example` unchanged.
 
 ### Files expected to change
 
@@ -610,3 +610,174 @@ Four commits, one per chore plus one for the comments.
    arguments at each call site rather than declared as constants, so unifying
    them is a shape change and not a move, and this was the wrong cycle for one.
    Recording it so the module does not quietly become a junk drawer either.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass**, pending CI. 27 of 28 criteria verified and checked; the 28th, CI green,
+is recorded below once the pull request's runs report.
+
+This cycle's whole warrant is that nothing changed, so I did not take Amon's MD5
+on report. I wrote my own capture harness, ran it on `main` and on this branch,
+and compared. I then ran a second, adversarial capture over inputs no fixture
+covers, and a third over a 400-node design. All three came back byte-identical.
+The `as const` narrowing I verified with my own `Exact<A, B>` probe, and then
+falsified the probe to prove it was not vacuous.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| `toMarkdown` byte-identical for ≥3 designs incl. a no-node design and `estate-sweep.json` | **pass** | My own Vitest harness dumped `toMarkdown` for all 11 loadable fixtures — `empty-design` (0 nodes) and `estate-sweep` among them — on `main` and on this branch. `diff` silent; the whole dump, 425,344 bytes, MD5 `dd98cd85302b113890562b43f4529e07` on both sides. |
+| `htmlPage` byte-identical for the same designs | **pass** | Same harness, same dump, same MD5. `drawing` was held to a fixed string so only `htmlPage`'s own output varies. |
+| `pdfPlan` and `docxPlan` `JSON.stringify` byte-identical | **pass** | Same harness, same dump, same MD5. `measure` was `pdfPlan.test.ts`'s own stand-in, `(text, size) => text.length * size * 0.5`. "Before" is genuinely `main`: I confirmed `git diff --stat main 659ded5 -- src/ e2e/` is empty and that `659ded5` is docs-only on `d56efd8`, then ran the harness on a `git checkout main`. |
+| Six shares still `0.26/0.46/0.28` and `0.26/0.26/0.48`; headings still Id, Label, Type and From, To, Label, in order | **pass** | `src/lib/exportFurniture.ts:97–108` reads exactly those, in order. Grepping those six numbers anywhere in non-test `src/` returns only that file. Both heading rows appear verbatim in the identical dumps. |
+| Four export test files unchanged | **pass** | `git diff -M --stat main` on the four paths is empty, and none appears in `git diff -M --name-status main`. |
+| `index.astro`, `toPdf.ts`, `toDocx.ts`, `exportStyles.ts` unchanged | **pass** | Same explicit `git diff -M --stat`: empty. |
+| Sentence declared exactly once outside tests | **pass** | `grep -rn "so there is nothing to draw" src/` gives one non-test hit, `exportFurniture.ts:87`. The others are `pdfPlan.test.ts:175`, `toHtml.test.ts:162`, `toMarkdown.test.ts:290`, `docxPlan.test.ts` and `exportFurniture.test.ts:27` — all assertions, none declarations. |
+| `import { NOTHING_TO_DRAW } from './pdfPlan'` still resolves, to the same string, as a re-export | **pass** | `pdfPlan.ts:50` is `export { NOTHING_TO_DRAW };` — a re-export of the line 40 import, not a second `const`. It resolves at runtime too: `exportFurniture.test.ts` imports it under an alias and asserts identity, and that test is among the 449 passing. |
+| `toHtml`, `toMarkdown` and `docxPlan` import it; `docxPlan`'s four-copies pointer comment gone | **pass** | All three import, at `toHtml.ts:45`, `toMarkdown.ts:32` and `docxPlan.ts:35`; no `const NOTHING_TO_DRAW` survives anywhere. The pointer comment is deleted in the `docxPlan.ts` diff, the block at old 152–160. |
+| Node and edge columns declared exactly once in `src/`, heading and share together | **pass** | Grepping `NODE_COLUMNS` and `EDGE_COLUMNS` across `src/` shows one declaration each, `exportFurniture.ts:97` and `:104`; every other hit is an import or a use. |
+| `Column` interface in one file, not two | **pass** | `grep -rn "interface Column" src/` gives one hit, `exportFurniture.ts:44`. Both planners now `import type { Column }`. See note 1 below on the word "private". |
+| `toHtml` and `toMarkdown` derive their headings rather than re-typing | **pass** | Both import `NODE_HEADINGS` and `EDGE_HEADINGS`; the four `as const` literal declarations are gone from both, and no heading string literal survives outside `exportFurniture.ts`. **The tuples did not widen** — see below. |
+| A Vitest test fails if a heading or a share is changed | **pass — mutation-tested** | I did not take this one on the test's existence. Changing `Type` to `Kind` failed 1 of 8; changing the Label share `0.46` to `0.40` failed 2 of 8, the literal pin and the sums-to-a-whole-table invariant. Both mutations were reverted, with `git diff --quiet` confirming the restore each time. |
+| `empty.json` gone; the 0-byte file has a no-bytes name; `wc -c` still 0 | **pass** | `e2e/fixtures/empty-file.json`, `wc -c` = **0**. `empty.json` is absent from the tree. The name pairs with `empty-design.json` and speaks of bytes, not nodes. |
+| The rename is recorded as a rename | **pass** | `git diff -M --name-status main` gives `R100  e2e/fixtures/empty.json  e2e/fixtures/empty-file.json`, and `git log --follow --oneline` on the new path reaches `b0f8210`, the fixture's first commit. |
+| `validation.spec.ts`'s "says an empty file is empty" points at the new name, still passes, assertions unchanged | **pass** | The only changed line is `upload.choose('empty-file.json')`. The `toContain('That file is empty.')` and the `not.toMatch(/line \d/i)` are untouched context in the diff. The test ran green as Playwright test 109. |
+| `describeUpload.test.ts` no longer uses the old name for a 0-node design | **pass** | Two lines: the argument and the expected string both read `empty-design.json` now. The assertion is otherwise unchanged. |
+| `export.spec.ts`'s disambiguating comment gone or reduced; `choose('empty-design.json')` untouched | **pass** | Three lines cut to two, and the surviving two no longer explain a collision. Both `upload.choose('empty-design.json')` calls are untouched — now at lines 184 and 506, one line up from 185 and 507 because the comment shrank. |
+| No other file in `e2e/fixtures/` renamed, added or removed | **pass** | Diffing `git ls-tree --name-only` for that directory, `main` against `HEAD`, shows exactly one removal and one addition: the rename itself. Nothing else moved. |
+| `loadDesign.ts`'s module header no longer speaks of what "Task 04 has to work with" | **pass** | The header now says the error carries every piece of evidence `describeLoadError` needs to point at the fault. It names the consumer instead of dating a finished task. |
+| `readPlacedNodes`'s throw comment accounts for `placeWithDagre` and `isWhollyPlaced` (D98) | **pass** | Nine lines added at `layout.ts:349–357`. They name `isWhollyPlaced` as the stricter gate that runs first, and name the one case it cannot cover: it walks the graph's own node list, so an id the graph does not hold at all is one it never asks about. Accurate to the code, and still an assertion rather than a user-facing message. |
+| Neither comment change alters a line of executable code | **pass — mechanically** | I filtered `git diff -U0 main` for those two files down to added and removed lines that are not `*`, `/**`, `*/`, `//` or blank. **Empty result.** |
+| `bun run test` passes at least 441 across 26 files | **pass** | **449 passed across 27 files.** The baseline was observed rather than assumed: I checked out `main` and ran it — **441 across 26**. The delta is exactly the one new file and its eight tests, and no test file was deleted; `name-status` shows one `A` and one `M`. |
+| `bun run test:e2e` passes all 124 | **pass** | **124 passed, 21.6s.** Port 4321 was confirmed free before the run, so no stale server served a pre-change `dist/`. |
+| `bun run check` is clean | **pass** | `astro check`: **0 errors, 0 warnings, 0 hints across 82 files** — 80 on `main`, plus the two new ones. |
+| CI green on the pull request, on both jobs | see the CI section below | Branch pushed and the pull request opened as a draft; the result is recorded there. |
+| `docs/DECISIONS.md` records the cycle, numbered from D102 | **pass** | D102 on where the furniture lives and that D66's guarantee is now structural rather than asserted, D103 on a fixture name saying *no bytes* or *no nodes* and never both. D101 was the highest on `main`. |
+| No new dependency, no new environment variable, `.env.example` unchanged | **pass** | `package.json` and `bun.lock` are absent from the diff. `.env.example` is unchanged and still declares no variables. Grepping `process.env` and `import.meta.env` across `src/`, `scripts/` and `astro.config` finds **nothing**; the only reads are `playwright.config.ts`'s `CI` checks, which are test infrastructure and pre-date this branch. |
+
+### The `as const` trap, verified independently
+
+Amon's probe was deleted, so I wrote my own rather than take the result on
+report. An `Exact<A, B>` conditional-type assertion compiled against this
+branch: `typeof NODE_HEADINGS` is exactly `readonly ['Id', 'Label', 'Type']` and
+`typeof EDGE_HEADINGS` exactly `readonly ['From', 'To', 'Label']`; `['length']`
+is exactly `3` on both, and `NODE_HEADINGS[0]` is exactly `'Id'` rather than
+`string`. **0 errors.** I then flipped the expected type to `readonly string[]`
+and the same file failed with `TS2344: Type 'false' does not satisfy the
+constraint 'true'`, so the passing assertion was not vacuous. These are the
+exact types the hand-written `as const` literals carried on `main`. Probe
+deleted; not in the diff.
+
+### Preservation, verified independently
+
+Three separate captures, each run on `main` and on this branch and diffed.
+
+1. **All 11 loadable fixtures**, all four exports. 425,344 bytes, MD5
+   `dd98cd85302b113890562b43f4529e07` on both sides, `diff` silent. My MD5
+   differs from Amon's because my harness uses a different fixed `drawing`
+   string and its own JSON shape; what matters is that before and after agree
+   under one harness.
+2. **An adversarial set no fixture covers** — nodes but no edges, twelve
+   duplicate edges between one pair, a two-cycle plus a duplicate (the shape
+   that crashed dagre before D98), markup and control characters in labels and
+   in a `type`, and a title mixing Greek, Chinese and a U+202E right-to-left
+   override. Plus eleven inputs that must be refused: empty file, whitespace
+   only, truncated JSON, trailing comma, valid JSON that is not a design, a bare
+   array, `null`, a missing `type`, a dangling edge, duplicate ids, and an
+   all-spaces label. Every refusal came back the same error class and the same
+   message on both sides, and nothing loaded that should not have. `diff`
+   silent, MD5 `c6fe3548533dbc2ec27573b54fd5cd5d` on both sides.
+3. **A 400-node, 399-edge design** — 40 PDF pages and 70 KB of Markdown,
+   exercising pagination and drawing-sheet tiling well past anything in
+   `e2e/fixtures/`. 1,311,411 bytes, MD5 `24c0ad990774e32545dd77720f427c12` on
+   both sides, `diff` silent.
+
+All three harnesses were deleted, and `git status` was clean before the commit.
+
+### The judgement call you asked me to review
+
+**The `as unknown as` in `headingsOf` — I accept it.** Three reasons.
+
+Its blast radius is three lines and one module: `headingsOf` is not exported, so
+nothing outside `exportFurniture.ts` can reach it. It is sound rather than
+merely convenient — `HeadingsOf<C>` is a homomorphic mapped type over a tuple,
+so it preserves length and index, and every element of the returned array is
+read straight off the corresponding column, which makes the value structurally
+exactly the asserted type by construction. And `as unknown as` rather than a
+single `as` is not sloppiness: with `C` still generic, TypeScript refuses the
+direct conversion as possibly mistaken, so the double assertion is the only
+spelling available.
+
+The alternative is declaring the heading tuples by hand and asserting equality
+at compile time, but that is re-typing the strings, which is the thing the
+criterion forbids. The assertion is the price of deriving them, it is paid once,
+its doc comment says why it is safe, and I have verified that the type it claims
+to produce is the type it produces. Worth watching only if someone later gives
+`headingsOf` a second caller with a different shape.
+
+### One thing I checked that nobody asked for
+
+Deduplication creates a failure mode that per-file copies did not have: four
+modules now share one array **instance**, so a mutation in any one of them would
+be visible in the other three. I checked. Every consumer is read-only —
+`pdfPlan.ts:324`, `:403` and `:405`, `docxPlan.ts:522` and `:535`,
+`toHtml.ts:160`, `toMarkdown.ts:113` and `:116` use only `.map`, `.reduce`,
+`.join` and `.length` — and every parameter that receives these lists is typed
+`readonly Column[]` or `readonly string[]`, so the compiler refuses a mutation
+at the boundary as well. No `sort`, `reverse`, `push`, `splice` or index
+assignment anywhere. The risk is real in general and is not realised here.
+
+### Accessibility
+
+No delta to check. `src/pages/index.astro` and `src/lib/exportStyles.ts` are
+untouched by `git diff`, `/schema` is untouched, and the exported HTML is
+byte-identical to `main`'s for all 11 fixtures plus the adversarial and
+400-node cases — including its `<th scope="col">` headings, which come through
+the changed `NODE_HEADINGS` path and survive unchanged. There is no rendered
+surface this branch moves.
+
+### Command results
+
+- `bun run test`: **449 passed, 27 files**; baseline on `main` observed at 441/26
+- `bun run test:e2e`: **124 passed**, port 4321 confirmed free first
+- `bun run check`: **0 errors, 0 warnings, 0 hints, 82 files**
+- `bun run build`: **pass**, 2 pages in 747 ms
+- `bun run dev`: **pass** — Astro 7 daemonises the server; `GET /` and
+  `GET /schema` both returned 200 (27,194 and 26,530 bytes), and the dev log
+  shows no error and no overlay. Stopped afterwards.
+- Secret scan: **gitleaks — no leaks found**, 33 commits, 2.10 MB scanned
+
+### Defects for Amon
+
+**None.** Nothing in the diff changes behaviour, and I tried three independent
+ways to catch it if it had.
+
+### Fixed in place
+
+Nothing. There was nothing to correct.
+
+### Notes back to Jared
+
+1. **Your criterion reads "the *private* `Column` interface exists in one file,
+   not two."** It is now one interface in one file, which is what the criterion
+   is about, but it is `export interface Column` rather than private — it has to
+   be, since both planners import the type. Read as "one declaration, not two"
+   it passes cleanly; read with "private" taken literally it could not have
+   passed at all. Flagging the wording, not the code.
+
+2. **I concur with Amon's four notes**, including leaving `loadDesign.ts`'s two
+   remaining Task 04 references at lines 24 and 74 alone. I read both: they are
+   present-tense statements about code that exists, so neither carries the fault
+   the header had, and widening a nothing-changed cycle to reach them would have
+   been the wrong trade. A two-line follow-up if you want the file free of task
+   numbers entirely.
+
+3. **`exportFurniture.ts` as a future junk drawer** is a real risk, and his read
+   on `'en'` and the `Nodes` / `Edges` section names is right: the section names
+   are arguments at each call site, so unifying them is a shape change and not a
+   move. Worth a line in whichever cycle next opens those files.
