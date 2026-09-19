@@ -424,3 +424,189 @@ Not yours to solve — recorded here so it is not lost.
 
 Every acceptance criterion above is checked in this document, `bun run test`
 passes, and CI is green on the pull request.
+
+---
+
+## Work completed by Amon — round 1
+
+### What was built
+
+Nothing, deliberately. Every exported file comes out of this branch the same
+bytes it comes out of `main`. What changed is how many places those bytes are
+written down in.
+
+**Chore 1 — the sentence.** `'This design has no nodes, so there is nothing to
+draw.'` is now declared once, in a new `src/lib/exportFurniture.ts`. All four
+exports import it. `pdfPlan.ts` re-exports `NOTHING_TO_DRAW` under that name
+rather than declaring a second one, so `pdfPlan.test.ts` — the safety net this
+cycle is securing — is untouched, and `docxPlan.ts`'s comment pointing at the
+other three copies is gone, because it now points at nothing.
+
+**Chore 2 — the columns.** The node columns and the edge columns are declared
+once in the same module, heading and share together, and the private `Column`
+interface that was in both planners is now one exported interface. The two
+planners keep their own use of a share: points in the PDF, DXA in Word, with
+`docxPlan`'s last-column rounding untouched. `toHtml` and `toMarkdown` derive
+their headings from the same lists instead of re-typing the words.
+
+**Chore 3 — the fixture.** `e2e/fixtures/empty.json` is `empty-file.json`,
+which says *no bytes*, beside the `empty-design.json` that says *no nodes*. The
+unit test's string literal uses `empty-design.json`, the name that means what
+that test means. `export.spec.ts`'s three-line disambiguating comment is cut to
+the one fact it was there to state.
+
+**The two comments.** `loadDesign.ts`'s module header no longer dates Task 04 as
+pending, and `readPlacedNodes`'s throw comment in `layout.ts` accounts for
+`placeWithDagre` and `isWhollyPlaced` gating ahead of it.
+
+### The `as const` trap, and how I know it did not bite
+
+`toHtml.ts` and `toMarkdown.ts` typed their headings as fixed-length readonly
+tuples. Deriving them with a bare `.map()` would have widened that to `readonly
+string[]`, which is the one place in this cycle a mechanical move changes a
+type. `headingsOf` maps over `keyof C` instead, so the derived constants keep
+the exact type the hand-written ones had.
+
+I did not take `bun run check` being clean as proof of that, because a widening
+is not a type error. I compiled a throwaway probe asserting exact type identity
+with the usual conditional-type trick, `Exact<typeof NODE_HEADINGS, readonly
+['Id', 'Label', 'Type']>`, and it compiled with 0 errors. I then confirmed the
+probe was not vacuous by swapping the expected type to `readonly string[]`,
+which failed the check — so the passing assertion is real. The probe was
+deleted; it is not in the diff.
+
+### How I captured "before"
+
+`659ded5` is docs-only on top of `d56efd8`, so this branch's `src/` and `e2e/`
+were byte-identical to `main` when I started — `git diff --stat main -- src/ e2e/`
+was empty. I confirmed that first, then captured the baseline in place.
+
+The harness was a temporary Vitest file that walked every `.json` in
+`e2e/fixtures/`, ran each through `loadDesign` (skipping the ones meant to
+fail) and `layoutDesign`, and dumped `toMarkdown(layout)`,
+`htmlPage(layout, drawing)`, `pdfPlan(layout, measure)` and `docxPlan(layout)`
+to one JSON file. `measure` was `pdfPlan.test.ts`'s own stand-in,
+`(text, size) => text.length * size * 0.5`; `drawing` was a fixed string, so
+`htmlPage` is compared on its own output only. Eleven fixtures load:
+`billing-run`, `control-labels`, `empty-design`, `estate-sweep`,
+`markup-labels`, `order-intake`, `platform-overview`, `retry-loop`,
+`two-cycle-duplicate-edge`, `two-loops`, `undrawable-labels` — including a
+design with no nodes and `estate-sweep.json`, both of which the criteria name.
+
+I re-ran it after each chore and after the comment edits. **Every run came back
+byte-identical: `diff` silent, and both files MD5
+`c57bec594cf6b30d46c3fccfea501af8`.** The harness is deleted and was never
+committed; it is not in the diff.
+
+### Files added or changed
+
+- `src/lib/exportFurniture.ts` — **new.** The sentence, the `Column` interface,
+  both column lists, both derived heading tuples, and `headingsOf`.
+- `src/lib/exportFurniture.test.ts` — **new.** Eight tests pinning the one copy.
+- `src/lib/pdfPlan.ts` — re-exports `NOTHING_TO_DRAW`; drops the `Column`
+  interface and both column lists.
+- `src/lib/docxPlan.ts` — same, plus the four-copies pointer comment deleted.
+- `src/lib/toHtml.ts` — imports the sentence and both heading tuples; drops
+  three declarations.
+- `src/lib/toMarkdown.ts` — the same three.
+- `e2e/fixtures/empty.json` → `e2e/fixtures/empty-file.json` — `git mv`,
+  recorded as `rename ... (100%)`, still 0 bytes.
+- `e2e/validation.spec.ts` — one call site; assertions unchanged.
+- `e2e/export.spec.ts` — the disambiguating comment reduced to two lines.
+- `src/lib/describeUpload.test.ts` — the name and the expected string.
+- `src/lib/loadDesign.ts`, `src/lib/layout.ts` — comments only, confirmed by
+  filtering the diff down to non-comment lines and getting nothing back.
+- `docs/DECISIONS.md` — D102 and D103.
+
+### Tests written
+
+All eight are in `src/lib/exportFurniture.test.ts`.
+
+1. *is the wording D51 chose, to the character* — pins the sentence as a
+   literal, so a re-wording is a failing test rather than four quiet edits.
+2. *is the same string `pdfPlan` exports, because that is a re-export* — pins
+   that `pdfPlan`'s door still opens on this room. This is the structural
+   replacement for the assertion D66 relied on.
+3. *names and sizes the node table the way all four exports print it* — pins
+   `Id`/0.26, `Label`/0.46, `Type`/0.28, in order.
+4. *names and sizes the edge table …* — pins `From`/0.26, `To`/0.26,
+   `Label`/0.48, in order.
+5. and 6. *gives the whole node/edge table away, so no share is unaccounted
+   for* — pins each set summing to 1. This is a real invariant rather than
+   decoration: `pdfPlan` spends the content width on these and `docxPlan` hands
+   the last column whatever the rounding left over, so a set summing to less
+   than a whole table would print differently in the two planners.
+7. and 8. *derives the node/edge headings from those columns rather than
+   re-typing them* — pins the headings as exactly the columns' headings, in
+   order, which is what stops the two text formats naming one set while the two
+   planners size another.
+
+Red first, both times: run 1 failed with `Cannot find module './exportFurniture'`;
+run 2 failed 6 of 8 on the missing column exports, with the two sentence tests
+still passing. Each chore's tests were green before I moved to the next.
+
+### Local results
+
+- `bun run test`: **pass — 449 tests across 27 files.** Baseline was 441 across
+  26; the deltas are the eight new tests and the one new file, and no existing
+  test was deleted or edited except `describeUpload.test.ts`'s two renamed lines.
+- `bun run test:e2e`: **pass — 124/124**, run twice (after chore 3 and again at
+  the end). Port 4321 was confirmed free before both runs, so neither was served
+  a stale `dist/`.
+- `bun run check`: **clean — 0 errors, 0 warnings, 0 hints across 82 files** (80
+  on `main`, plus the two new ones).
+- `bun run build`: **pass**, 2 pages.
+- No new dependency; `package.json` and `.env.example` are unchanged.
+
+Every file the criteria require untouched is untouched, by `git diff --stat main`:
+`pdfPlan.test.ts`, `toHtml.test.ts`, `toMarkdown.test.ts`, `docxPlan.test.ts`,
+`index.astro`, `toPdf.ts`, `toDocx.ts`, `exportStyles.ts`, `.env.example`.
+
+Four commits, one per chore plus one for the comments.
+
+### Decisions recorded
+
+- **D102** — where the shared sentence and columns live, and what keeps them from
+  drifting. As asked, it does not let D66's reasoning pass: that decision's claim
+  that "a third literal copy cannot drift" rests on a test that compared three
+  copies and never the fourth, so the claim was thinner than it reads. D102 says
+  so, and says the guarantee is now structural rather than asserted.
+- **D103** — the fixture naming rule: a name says *no bytes* or *no nodes*, never
+  both.
+
+### Known gaps
+
+- **I did not check any acceptance-criteria box.** All 28 are as you left them.
+- **Microsoft Word is still unverified** against the `.docx` export. Unchanged by
+  this cycle and not mine to close, but the `.docx` bytes are among what moved
+  here, so it is worth saying plainly: `docxPlan`'s output is byte-identical to
+  `main`'s for all eleven fixtures, so nothing this cycle did can have changed
+  what Word sees.
+- **The `as unknown as` in `headingsOf`** is a deliberate escape hatch, not an
+  oversight: `.map` returns an array where the caller is owed a tuple, and
+  TypeScript cannot verify that narrowing through a generic. It is the only type
+  assertion in the new module and its doc comment says why it is safe. I would
+  rather you see it and judge it than not notice it.
+
+### Out-of-scope notes for Jared
+
+1. **`loadDesign.ts` has two more Task 04 references** that your criterion did
+   not scope — line 24, "Task 04 switches on `code` and reads the detail off the
+   subclass", and line 74, "it belongs to Task 04". Both are in class doc
+   comments rather than the module header, and both read as present-tense
+   statements about code that exists, so neither is wrong the way the header was.
+   I left them. If you want the file free of task numbers entirely it is a
+   two-line follow-up, but it was not what you asked for and this was not the
+   cycle to widen.
+2. **`describeLoadError.ts` importing `layout.ts`** — carried forward exactly as
+   you recorded it. Untouched, and this cycle gave me no new information about it.
+3. **`PARALLEL_ROUTE_SPREAD` / `PARALLEL_LABEL_GAP`** and the **upstream dagre
+   report** — carried forward, untouched.
+4. **`exportFurniture.ts` is the natural home for the next piece of shared
+   furniture, which is worth watching rather than acting on.** The document
+   language `'en'` in `docxPlan.ts` and the `Nodes` / `Edges` section names all
+   four exports print are both furniture by the module's own definition, and
+   neither is shared today. I did not move them: the section names are passed as
+   arguments at each call site rather than declared as constants, so unifying
+   them is a shape change and not a move, and this was the wrong cycle for one.
+   Recording it so the module does not quietly become a junk drawer either.
