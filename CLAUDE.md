@@ -17,7 +17,7 @@ TypeScript, Astro, no backend, no database and no data layer, CSS Modules, tests
 
 ## Status
 
-Tasks 01 to 08 are done. Choose a JSON file, with the picker or by dropping it
+Tasks 01 to 09 are done. Choose a JSON file, with the picker or by dropping it
 on the page, and it is validated against the Zod schema in
 `src/lib/design.schema.ts` before anything draws it — a duplicate node id or an
 edge naming an unknown node is refused, not silently drawn wrong, and no
@@ -76,6 +76,19 @@ carry every label at full size regardless. `src/lib/drawingSheets.ts` is the
 one shared module both planners read for the floor and the sheet arithmetic.
 Detail in `docs/handoff-items/handoff-fix-drawing-label-size.md`.
 
+**The format is published.** `/schema` lists every field with its type, whether
+it is required and what it is for, and shows `public/sample.json` with a copy
+button and a download link; the upload page's **Load the sample design** draws
+the same file through the same `loadDesign`. The field list is derived from a
+JSON Schema generated out of `design.schema.ts` by Zod's own `z.toJSONSchema`
+(no new dependency), written to `public/design.schema.json` by `bun run schema`
+and compared against a fresh generation by `publishedSchema.test.ts`. It is
+generated with `io: 'input'` so it omits `additionalProperties` and agrees with
+D19; the two cross-field rules do not survive generation at all, so the page
+carries them in prose beside the file (D90 to D92). Both pages now share
+`src/layouts/PageLayout.astro` and the tokens in `src/styles/page.module.css` —
+the page styling parked since Task 03 (D94).
+
 ## Run and test
 
 ```
@@ -85,6 +98,7 @@ bun run test      # Vitest suite
 bun run test:e2e  # Playwright walk, in a real browser
 bun run check     # astro check
 bun run build     # static site into dist/
+bun run schema    # regenerate public/design.schema.json from the Zod schema
 ```
 
 `bun run test` runs Vitest. Plain `bun test` would run Bun's own runner instead, so always include `run`.
