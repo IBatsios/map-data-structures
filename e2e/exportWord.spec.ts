@@ -3,13 +3,17 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 
 import type { DocxTable } from './docxText';
+import type { DocxPicture } from './docxText';
 import {
   docxDescription,
   docxImageAltText,
+  docxImageAltTexts,
   docxImages,
   docxLanguage,
+  docxPageBreaks,
   docxPageSize,
   docxParts,
+  docxPictures,
   docxTables,
   docxText,
   docxTitle,
@@ -52,6 +56,30 @@ const WORD_BUDGET_MS = 15_000;
  * rather than an echo of the module under test.
  */
 const MARK = '■';
+
+/**
+ * A chain of `count` nodes, as the JSON a user would have uploaded.
+ *
+ * Built here rather than checked in as a fixture: what it is for is the
+ * thousand-node case that produced a three-pixel picture, and a fixture that
+ * size is a quarter of a megabyte of generated JSON in the repository for one
+ * assertion.
+ */
+function chainDesign(count: number): string {
+  return JSON.stringify({
+    title: `Chain of ${count}`,
+    nodes: Array.from({ length: count }, (_, index) => ({
+      id: `n${index}`,
+      label: `Node ${index}`,
+      type: 'service',
+    })),
+    edges: Array.from({ length: count - 1 }, (_, index) => ({
+      from: `n${index}`,
+      to: `n${index + 1}`,
+      label: 'next',
+    })),
+  });
+}
 
 /** The bytes of a downloaded file. */
 async function bytesOf(file: SavedFile): Promise<Buffer> {
@@ -504,5 +532,200 @@ test.describe('Exporting the design as Word', () => {
     expect(written).toContain('Ingest stage 0');
     expect(written).toContain('Report stage 7');
     expect(took).toBeLessThan(WORD_BUDGET_MS);
+  });
+  test.describe('the size the drawing prints at', () => {
+    /**
+     * The smallest text the drawing draws, in its own pixels, and the floor
+     * under it in points.
+     *
+     * Both written out here rather than imported from `src/`, the way `MARK`
+     * is: this walk is a second opinion on the modules and not an echo of
+     * them. Eleven is the `type` line under every node; the label is drawn at
+     * 14 and an edge label at 12, so eleven is what a floor has to bind on.
+     */
+    const TYPE_SIZE_PX = 11;
+    const FLOOR_PT = 6;
+
+    /** How many points one image pixel is: a `.docx` places at 96 DPI. */
+    const POINTS_PER_PIXEL = 0.75;
+
+    /** The text column and a whole sheet under it, in image pixels. */
+    const SHEET_WIDTH_PX = 624;
+    const SHEET_HEIGHT_PX = 832;
+
+    /** The most sheets the drawing may take, and the raster's own short side. */
+    const SHEET_CAP = 16;
+    const MIN_RASTER_SIDE = 200;
+
+    /** One picture's placed size, in image pixels rather than inches. */
+    function placedPixels(picture: DocxPicture): { width: number; height: number } {
+      return {
+        width: picture.placedInches.width * 96,
+        height: picture.placedInches.height * 96,
+      };
+    }
+
+    /**
+     * How large the drawing's smallest text prints on this sheet, in points.
+     *
+     * **A raster carries no font size**, so unlike the PDF this cannot be read
+     * straight out. What the file does carry is where the picture is placed
+     * and how big the whole drawing is, and the ratio of the two is the scale
+     * *if* the picture holds the whole drawing along that axis. It holds the
+     * whole drawing along any axis it was not cut along, and a cut axis always
+     * fills the sheet exactly — every sheet of a tiled drawing is pulled back
+     * to a full sheet, including the last one — so an axis whose placed size
+     * is short of the sheet is an axis that was not cut.
+     *
+     * Taking the larger of the two ratios is therefore the true scale whenever
+     * either axis was left uncut, and a lower bound on it otherwise: a cut
+     * axis can only understate it. Understating is the safe direction for a
+     * floor, so the number below never passes a file that should have failed.
+     */
+    function smallestText(picture: DocxPicture, drawing: DrawingSize): number {
+      const placed = placedPixels(picture);
+      const scale = Math.max(
+        placed.width / drawing.width,
+        placed.height / drawing.height,
+      );
+
+      return TYPE_SIZE_PX * scale * POINTS_PER_PIXEL;
+    }
+
+    /** Whether that number is the size itself rather than a bound under it. */
+    function isExact(picture: DocxPicture): boolean {
+      const placed = placedPixels(picture);
+
+      return placed.width < SHEET_WIDTH_PX - 1 || placed.height < SHEET_HEIGHT_PX - 1;
+    }
+
+    /** The size of one fixture's drawing, which is what the preview laid out. */
+    interface DrawingSize {
+      readonly width: number;
+      readonly height: number;
+    }
+
+    for (const design of [
+      { file: 'markup-labels.json', drawing: { width: 423, height: 660 } },
+      { file: 'order-intake.json', drawing: { width: 570, height: 766 } },
+      { file: 'platform-overview.json', drawing: { width: 1541, height: 1082 } },
+      { file: 'estate-sweep.json', drawing: { width: 1060, height: 6480 } },
+    ]) {
+      test(`prints ${design.file} at a size the file itself can be asked`, async ({
+        page,
+      }, testInfo) => {
+        const upload = new UploadPage(page);
+        await upload.goto();
+        await upload.choose(design.file);
+        await expect(upload.svg).toBeVisible();
+
+        const bytes = await bytesOf(await upload.downloadWord());
+        const pictures = docxPictures(bytes);
+        const sizes = pictures.map((one) => smallestText(one, design.drawing));
+        const exact = pictures.every((one) => isExact(one));
+        const smallest = Math.min(...sizes);
+
+        testInfo.annotations.push({
+          type: 'drawing-size-word',
+          description: `${design.file}: smallest text ${exact ? '' : 'at least '}${smallest.toFixed(2)} pt over ${pictures.length} sheet(s); PNGs ${pictures
+            .map((one) => `${one.pixelWidth}x${one.pixelHeight}`)
+            .join(', ')}`,
+        });
+
+        expect(pictures.length).toBeGreaterThan(0);
+        expect(pictures.length).toBeLessThanOrEqual(SHEET_CAP);
+
+        // A drawing cut both ways fills its sheet both ways, and then the file
+        // no longer says how much of the drawing each sheet holds. That case
+        // is the PDF's to prove, which it does exactly, and the unit tests'.
+        if (exact) {
+          expect(smallest).toBeGreaterThanOrEqual(FLOOR_PT - 0.01);
+        }
+
+        // No hairline, on any sheet, at any node count. This one holds for
+        // every design either way, because it is a property of the picture
+        // rather than of the drawing inside it.
+        for (const picture of pictures) {
+          expect(
+            Math.min(picture.pixelWidth, picture.pixelHeight),
+          ).toBeGreaterThanOrEqual(MIN_RASTER_SIDE);
+        }
+      });
+    }
+
+    test('paints no hairline for the design that used to produce one', async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+
+      const upload = new UploadPage(page);
+      await upload.goto();
+      await upload.chooseMade('huge.json', chainDesign(1000));
+      await expect(upload.svg).toBeVisible({ timeout: 60_000 });
+
+      const bytes = await bytesOf(await upload.downloadWord());
+      const pictures = docxPictures(bytes);
+
+      testInfo.annotations.push({
+        type: 'drawing-size-word',
+        description: `1000-node chain: ${pictures.length} sheet(s); PNGs ${pictures
+          .map((one) => `${one.pixelWidth}x${one.pixelHeight}`)
+          .join(', ')}`,
+      });
+
+      // The defect, by name: a thousand-node chain produced a 3 x 2304 PNG
+      // placed at 0.01 x 8.00 inches, because the canvas was measured off the
+      // placed size and nothing else.
+      expect(pictures.length).toBeLessThanOrEqual(SHEET_CAP);
+      for (const picture of pictures) {
+        expect(Math.min(picture.pixelWidth, picture.pixelHeight)).toBeGreaterThanOrEqual(
+          MIN_RASTER_SIDE,
+        );
+      }
+      expect(docxText(bytes).join(' ')).toContain('too large to print at 6 pt');
+    });
+
+    test('names each sheet, and starts each on a page of its own', async ({ page }) => {
+      const upload = new UploadPage(page);
+      await upload.goto();
+      await upload.choose('platform-overview.json');
+      await expect(upload.svg).toBeVisible();
+
+      const bytes = await bytesOf(await upload.downloadWord());
+      const written = docxText(bytes);
+      const captions = written.filter((text) => text.startsWith('Drawing, sheet'));
+      const pictures = docxPictures(bytes);
+
+      expect(written.join(' ')).toContain('The drawing follows on');
+      expect(captions).toHaveLength(pictures.length);
+      expect(docxPageBreaks(bytes)).toBe(pictures.length);
+
+      // The first sheet reads the whole design out; the rest name themselves
+      // and stop, because hearing the same description on every sheet buries
+      // the one thing that differs between them.
+      const described = docxImageAltTexts(bytes).filter((text) => text !== '');
+
+      expect(described[0]).toContain('Edge router');
+      expect(described[0]).toContain('sheet 1 of');
+      expect(described[1]).toBe(captions[1]);
+      expect(described[1]).not.toContain('Edge router');
+    });
+
+    test('keeps every label in the tables whatever the drawing does', async ({
+      page,
+    }) => {
+      const upload = new UploadPage(page);
+      await upload.goto();
+      await upload.choose('estate-sweep.json');
+      await expect(upload.svg).toBeVisible();
+
+      const written = docxText(await bytesOf(await upload.downloadWord())).join('\n');
+
+      // This is what made the old behaviour survivable and has to stay true:
+      // the picture is a print-fidelity question, not a data-loss one.
+      for (const label of ['Ingest stage 0', 'Report stage 7']) {
+        expect(written, `"${label}" is missing from the export`).toContain(label);
+      }
+    });
   });
 });

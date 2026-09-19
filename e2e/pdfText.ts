@@ -298,3 +298,168 @@ function fromUtf16(hex: string): string {
 
   return String.fromCharCode(...units);
 }
+
+/**
+ * One run of text the PDF draws, and how large it really prints.
+ *
+ * `nominal` is what the `Tf` operator asked for and `points` is what the
+ * reader sees, and for the drawing they are not the same number: svg2pdf draws
+ * a label at the size the SVG says — 14, 12 or 11 — and puts the scale into the
+ * text matrix, so a 6 pt type line is written into the file as `/F15 11 Tf`
+ * with a matrix of 0.545. Reading only the operand would report the drawing as
+ * printing at its own pixel sizes whatever it had been shrunk to, which is the
+ * measurement this cycle exists to stop trusting.
+ */
+export interface PdfDrawnText {
+  /** Which page it is drawn on, counted from one. */
+  readonly page: number;
+  /** The size the `Tf` operator asked for, before any matrix. */
+  readonly nominal: number;
+  /** How large it actually prints on the page, in points. */
+  readonly points: number;
+}
+
+/** The content-stream operators this reads, and nothing else. */
+const CONTENT_TOKEN =
+  /<[0-9a-fA-F\s]*>|\((?:\.|[^\()])*\)|[-+]?[\d.]+|\/[^\s/[\]<>()]+|[A-Za-z'"*]+/gu;
+
+/** A page and the object its content stream lives in: `/Contents 4 0 R`. */
+const PAGE_CONTENTS = /\/Type\s*\/Page[^s][\s\S]{0,400}?\/Contents\s+(\d+)\s+0\s+R/gu;
+
+/** The two matrices that decide how large a piece of text prints. */
+type Matrix = readonly [number, number, number, number, number, number];
+
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
+
+/**
+ * Every piece of text the PDF draws, with the size it prints at.
+ *
+ * **This is the measurement the whole cycle turns on**, so it is taken off the
+ * bytes rather than off the plan (D68, D79): a plan that says 6 pt and a file
+ * that draws 3.5 pt is exactly the failure that went unnoticed for two tasks.
+ * The size a reader sees is the `Tf` operand scaled by the text matrix and the
+ * current transformation matrix together, so all three are tracked — `q` and
+ * `Q` for the graphics-state stack, `cm` for the transformation, `Tm` for the
+ * text matrix, which `BT` resets.
+ *
+ * @param bytes - the file exactly as it was downloaded
+ * @returns one entry per run of text drawn, in page order
+ *
+ * @example
+ * ```typescript
+ * const drawing = pdfDrawnText(bytes).filter((run) => run.nominal === 11);
+ * expect(Math.min(...drawing.map((run) => run.points))).toBeGreaterThanOrEqual(6);
+ * ```
+ */
+export function pdfDrawnText(bytes: Buffer): readonly PdfDrawnText[] {
+  const raw = bytes.toString('latin1');
+
+  return pageStreams(raw).flatMap((stream, index) => runsDrawnIn(stream, index + 1));
+}
+
+/**
+ * How many pages the file has.
+ *
+ * Counted from the page objects rather than from the plan, for D68's reason.
+ *
+ * @param bytes - the file exactly as it was downloaded
+ * @returns the number of pages
+ */
+export function pdfPageCount(bytes: Buffer): number {
+  return pageStreams(bytes.toString('latin1')).length;
+}
+
+/** Each page's content stream, in page order. */
+function pageStreams(raw: string): readonly string[] {
+  const streams = new Map<string, string>();
+
+  for (const [, id, body] of raw.matchAll(
+    /(\d+)\s+0\s+obj\s*<<[^>]*>>\s*stream\r?\n([\s\S]*?)endstream/gu,
+  )) {
+    streams.set(id ?? '', body ?? '');
+  }
+
+  return [...raw.matchAll(PAGE_CONTENTS)].map(
+    ([, contents]) => streams.get(contents ?? '') ?? '',
+  );
+}
+
+/**
+ * One content stream, walked operator by operator.
+ *
+ * Strings are matched before numbers so that a hex glyph run or a literal
+ * label cannot be read as an operand, and the operand list is kept whole
+ * rather than cleared, because a PDF operator takes the operands immediately
+ * before it and nothing further back.
+ */
+function runsDrawnIn(stream: string, page: number): readonly PdfDrawnText[] {
+  const drawn: PdfDrawnText[] = [];
+  const saved: Matrix[] = [];
+  const numbers: number[] = [];
+  let transform = IDENTITY;
+  let text = IDENTITY;
+  let nominal = 0;
+
+  for (const [token] of stream.matchAll(CONTENT_TOKEN)) {
+    if (/^[-+]?[\d.]+$/u.test(token)) {
+      numbers.push(Number.parseFloat(token));
+      continue;
+    }
+
+    if (token === 'q') {
+      saved.push(transform);
+    } else if (token === 'Q') {
+      transform = saved.pop() ?? IDENTITY;
+    } else if (token === 'cm') {
+      transform = times(lastSix(numbers), transform);
+    } else if (token === 'BT') {
+      text = IDENTITY;
+    } else if (token === 'Tm') {
+      text = lastSix(numbers);
+    } else if (token === 'Tf') {
+      nominal = numbers[numbers.length - 1] ?? 0;
+    } else if (token === 'Tj' || token === 'TJ' || token === "'" || token === '"') {
+      drawn.push({
+        page,
+        nominal,
+        points: nominal * scaleOf(text) * scaleOf(transform),
+      });
+    }
+
+    if (!token.startsWith('<') && !token.startsWith('(') && !token.startsWith('/')) {
+      numbers.length = 0;
+    }
+  }
+
+  return drawn;
+}
+
+/** The last six numbers seen, which is what a matrix operator takes. */
+function lastSix(numbers: readonly number[]): Matrix {
+  const six = numbers.slice(-6);
+
+  return six.length === 6 ? (six as unknown as Matrix) : IDENTITY;
+}
+
+/** One matrix concatenated into another, in PDF's own order. */
+function times(a: Matrix, b: Matrix): Matrix {
+  return [
+    a[0] * b[0] + a[1] * b[2],
+    a[0] * b[1] + a[1] * b[3],
+    a[2] * b[0] + a[3] * b[2],
+    a[2] * b[1] + a[3] * b[3],
+    a[4] * b[0] + a[5] * b[2] + b[4],
+    a[4] * b[1] + a[5] * b[3] + b[5],
+  ];
+}
+
+/**
+ * How much a matrix scales by, whatever it also rotates or flips.
+ *
+ * The square root of the determinant's magnitude, which is the factor a length
+ * is multiplied by when the matrix scales both axes alike — and svg2pdf's do,
+ * because a drawing is never stretched out of its own proportions.
+ */
+function scaleOf(matrix: Matrix): number {
+  return Math.sqrt(Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]));
+}

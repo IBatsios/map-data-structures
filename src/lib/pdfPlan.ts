@@ -27,9 +27,15 @@
  * **Everything is in points**, which is the unit a PDF is written in and the
  * unit `toPdf` opens jsPDF with. The drawing's own pixels are placed one to a
  * point — a laid-out drawing 516 pixels wide fills the text column exactly — and
- * scaled down from there when it is wider than the page.
+ * scaled down from there when it is wider than the page, but never so far that
+ * its own smallest text goes under the floor. How far that is, and how many
+ * sheets the drawing gets once it will not fit at that size, is
+ * `drawingSheets.ts`: the Word export reads the same answers, so the two
+ * formats cannot drift apart on the one decision that was wrong in both (D78).
  */
 
+import type { DrawingRegion, DrawingSheet } from './drawingSheets';
+import { planDrawingSheets } from './drawingSheets';
 import type { DesignLayout, LayoutEdge, LayoutNode } from './layout';
 
 /** US Letter, in points: the size the owner is most likely to print or attach. */
@@ -72,6 +78,15 @@ const COLUMN_GAP = 10;
  */
 const MIN_DRAWING_HEIGHT = 240;
 
+/**
+ * The room kept under each sheet of a tiled drawing for its caption.
+ *
+ * One line at body size and the gap that follows it. It is taken off the sheet
+ * before the drawing is measured rather than after, so a caption can never push
+ * the bottom of a picture off the page it belongs to.
+ */
+const CAPTION_BLOCK = BODY_SIZE * LINE_RATIO + ROW_GAP;
+
 /** How wide one string draws at one size, in points. */
 export type MeasureText = (text: string, size: number) => number;
 
@@ -82,6 +97,16 @@ export interface PdfTextItem {
   readonly x: number;
   readonly y: number;
   readonly size: number;
+  /**
+   * True for text that labels the document rather than saying what is in it.
+   *
+   * Only a sheet's caption, so far. It is set in the same grey as the rules
+   * under the headings rather than in the near-black everything else uses,
+   * because a line naming the picture above it is furniture: in the document's
+   * own ink it competes with the table rows further down the page for a
+   * reader's attention, and it should lose.
+   */
+  readonly quiet?: true;
 }
 
 /** One horizontal rule, drawn along `y`. */
@@ -99,6 +124,15 @@ export interface PdfDrawingItem {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /**
+   * Which piece of the drawing goes here, in the drawing's own pixels.
+   *
+   * A drawing small enough to print at a readable size on one page carries the
+   * whole canvas here and always has. A larger one is cut into sheets, and each
+   * item names its own piece so `toPdf` can point the SVG's `viewBox` at it —
+   * the picture stays vector either way (D62).
+   */
+  readonly region: DrawingRegion;
 }
 
 export type PdfItem = PdfTextItem | PdfRuleItem | PdfDrawingItem;
@@ -179,11 +213,25 @@ function addTitle(sheet: Sheet, title: string, measure: MeasureText): void {
 }
 
 /**
- * The drawing, centred, at the largest size that fits; or D51's sentence.
+ * The drawing, centred, at a size its own text can still be read at; or D51's
+ * sentence.
  *
  * A design with no nodes is valid (D19) and gets a sentence rather than an empty
  * canvas, exactly as the `.md` (D51) and the `.html` (D60) do. An empty page in
  * a document someone was sent reads as a file that failed.
+ *
+ * **What changed, and why it is not here.** This used to be one `Math.min` that
+ * shrank the drawing by whatever it took to fit the room left on the page, with
+ * nothing under it: a fifteen-node design printed its type line at 3.7 pt. The
+ * rule now lives in `drawingSheets.ts` and the Word export reads the same one
+ * (D78), so this function is left with where the ink goes and nothing about how
+ * small it may be.
+ *
+ * A drawing that already printed large enough is placed exactly where it always
+ * was, under the title, with nothing said about it. One that did not takes a
+ * page per sheet, because sharing the first page with the title costs a sheet
+ * of height on *every* sheet and measured out at twice the total for
+ * `platform-overview.json`.
  */
 function addDrawing(sheet: Sheet, layout: DesignLayout, measure: MeasureText): void {
   if (layout.nodes.length === 0) {
@@ -197,21 +245,77 @@ function addDrawing(sheet: Sheet, layout: DesignLayout, measure: MeasureText): v
 
   sheet.reserve(Math.min(MIN_DRAWING_HEIGHT, sheet.pageHeight));
 
-  const scale = Math.min(
-    1,
-    sheet.contentWidth / layout.width,
-    sheet.room / layout.height,
-  );
-  const width = layout.width * scale;
+  const plan = planDrawingSheets(layout, {
+    inline: { width: sheet.contentWidth, height: sheet.room },
+    sheet: { width: sheet.contentWidth, height: sheet.pageHeight - CAPTION_BLOCK },
+  });
+  const [only] = plan.sheets;
 
+  if (plan.inline && only !== undefined) {
+    placeDrawing(sheet, only);
+    sheet.skip(only.height + SECTION_GAP);
+    return;
+  }
+
+  for (const note of [plan.spread, plan.tooSmall]) {
+    if (note !== null) {
+      sheet.writeBlock(wrap(note, BODY_SIZE, sheet.contentWidth, measure), {
+        x: PAGE_MARGIN,
+        size: BODY_SIZE,
+      });
+      sheet.skip(ROW_GAP);
+    }
+  }
+
+  sheet.skip(SECTION_GAP);
+
+  for (const piece of plan.sheets) {
+    sheet.turn();
+    placeDrawing(sheet, piece);
+    sheet.skip(piece.height + ROW_GAP);
+    addCaption(sheet, piece.caption, measure);
+  }
+
+  // The tables start on a page of their own: the last sheet of the drawing has
+  // room under it for a heading and no rows, which is the one place a table can
+  // begin and look like it ended.
+  sheet.turn();
+}
+
+/** One sheet of the drawing, centred in the text column. */
+function placeDrawing(sheet: Sheet, piece: DrawingSheet): void {
   sheet.place({
     kind: 'drawing',
-    x: PAGE_MARGIN + (sheet.contentWidth - width) / 2,
+    x: PAGE_MARGIN + (sheet.contentWidth - piece.width) / 2,
     y: sheet.top,
-    width,
-    height: layout.height * scale,
+    width: piece.width,
+    height: piece.height,
+    region: piece.region,
   });
-  sheet.skip(layout.height * scale + SECTION_GAP);
+}
+
+/**
+ * What a sheet of a tiled drawing says about itself, centred under it.
+ *
+ * Centred rather than set to the left margin, because it belongs to the picture
+ * above it rather than to the page: a caption aligned with the document's body
+ * text reads as the next paragraph, and the reader has to work out that it is
+ * not.
+ */
+function addCaption(sheet: Sheet, caption: string | null, measure: MeasureText): void {
+  if (caption === null) {
+    return;
+  }
+
+  sheet.place({
+    kind: 'text',
+    text: caption,
+    x: PAGE_MARGIN + (sheet.contentWidth - measure(caption, BODY_SIZE)) / 2,
+    y: sheet.top + BODY_SIZE,
+    size: BODY_SIZE,
+    quiet: true,
+  });
+  sheet.skip(lineHeight(BODY_SIZE));
 }
 
 /**
@@ -457,14 +561,25 @@ class Sheet {
     this.cursor += height;
   }
 
+  /** Turns the page unless what comes next fits on this one. */
+  reserve(height: number): void {
+    if (height <= this.room) {
+      return;
+    }
+
+    this.turn();
+  }
+
   /**
-   * Turns the page unless what comes next fits on this one.
+   * Starts the next page, unless this one has nothing on it yet.
    *
    * The repeated heading is unset while it draws itself, so that a heading too
    * tall for a page cannot turn the page from inside the code that fills it.
+   * A page with nothing on it is never turned away from, so nothing this
+   * module does can put a blank sheet in the middle of the document.
    */
-  reserve(height: number): void {
-    if (height <= this.room || this.current().length === 0) {
+  turn(): void {
+    if (this.current().length === 0) {
       return;
     }
 

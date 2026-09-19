@@ -41,11 +41,12 @@ import type {
   DocxCell,
   DocxDocumentPlan,
   DocxDrawingPlan,
+  DocxDrawingSheet,
   DocxTablePlan,
 } from './docxPlan';
 import { CONTENT_WIDTH_DXA, docxPlan } from './docxPlan';
 import type { DesignLayout } from './layout';
-import { openDrawing } from './openDrawing';
+import { openDrawing, withDrawingRegion } from './openDrawing';
 import { rasteriseDrawing } from './rasteriseDrawing';
 
 /** What a `.docx` is, for the browser that is about to save one. */
@@ -95,7 +96,7 @@ type DocxRun = InstanceType<Docx['TextRun']>;
 export async function toDocx(layout: DesignLayout, doc: Document): Promise<DocxExport> {
   const docx = await import('docx');
   const plan = docxPlan(layout);
-  const picture = plan.drawing === null ? null : await paintDrawing(plan.drawing, doc);
+  const pictures = plan.drawing === null ? [] : await paintDrawing(plan.drawing, doc);
 
   const file = new docx.Document({
     title: plan.metadata.title,
@@ -125,7 +126,7 @@ export async function toDocx(layout: DesignLayout, doc: Document): Promise<DocxE
             },
           },
         },
-        children: bodyOf(docx, plan, picture),
+        children: bodyOf(docx, plan, pictures),
       },
     ],
   });
@@ -137,53 +138,100 @@ export async function toDocx(layout: DesignLayout, doc: Document): Promise<DocxE
 function bodyOf(
   docx: Docx,
   plan: DocxDocumentPlan,
-  picture: Uint8Array | null,
+  pictures: readonly Uint8Array[],
 ): readonly (DocxParagraph | DocxTable)[] {
   return [
     new docx.Paragraph({
       heading: docx.HeadingLevel.TITLE,
       children: runsOf(docx, plan.title),
     }),
-    ...drawingBlock(docx, plan, picture),
+    ...drawingBlock(docx, plan, pictures),
     ...plan.tables.flatMap((table) => tableBlock(docx, table)),
   ];
 }
 
 /**
- * The picture, or the sentence that stands in for it.
+ * The picture, sheet by sheet, or the sentence that stands in for it.
  *
  * A design with no nodes is valid (D19) and gets a sentence rather than an
  * empty frame, exactly as the `.md` (D51), the `.html` (D60) and the `.pdf`
  * (D66) do. An empty space in a document someone was sent reads as a file that
  * failed.
+ *
+ * A drawing too large to print at a readable size on one page says so first —
+ * how many sheets it runs to, and, if the sheet cap forced it under the floor
+ * anyway, that it did — and then takes a page per sheet.
  */
 function drawingBlock(
   docx: Docx,
   plan: DocxDocumentPlan,
-  picture: Uint8Array | null,
+  pictures: readonly Uint8Array[],
 ): readonly DocxParagraph[] {
-  if (plan.drawing === null || picture === null) {
+  if (plan.drawing === null || pictures.length === 0) {
     return runsOfEach(docx, plan.nothingToDraw ?? []);
   }
+
+  const notes = [plan.drawing.spread, plan.drawing.tooSmall].filter(
+    (note): note is string => note !== null,
+  );
+
+  return [
+    ...runsOfEach(docx, notes),
+    ...plan.drawing.sheets.flatMap((sheet, index) =>
+      sheetBlock(docx, plan, sheet, pictures[index]),
+    ),
+  ];
+}
+
+/** One sheet of the picture, and the line under it that names it. */
+function sheetBlock(
+  docx: Docx,
+  plan: DocxDocumentPlan,
+  sheet: DocxDrawingSheet,
+  picture: Uint8Array | undefined,
+): readonly DocxParagraph[] {
+  if (picture === undefined) {
+    // Every sheet of the plan is painted before this runs, so this cannot
+    // happen; a document with a sheet silently missing would be worse than one
+    // that failed, because the tables would still list what the gap held.
+    throw new Error('The Word plan asked for a sheet that was never painted.');
+  }
+
+  const caption =
+    sheet.caption === null
+      ? []
+      : [
+          new docx.Paragraph({
+            alignment: docx.AlignmentType.CENTER,
+            children: [new docx.TextRun({ text: sheet.caption, italics: true })],
+          }),
+        ];
 
   return [
     new docx.Paragraph({
       alignment: docx.AlignmentType.CENTER,
+      // A page break rather than a section: the drawing's sheets are pages of
+      // the same document with the same margins, and Word would otherwise flow
+      // two short sheets onto one page and leave a reader hunting for the
+      // boundary the caption claims is there.
+      pageBreakBefore: sheet.onItsOwnPage,
       children: [
         new docx.ImageRun({
           type: 'png',
           data: picture,
-          transformation: { width: plan.drawing.width, height: plan.drawing.height },
+          transformation: { width: sheet.width, height: sheet.height },
           // What the drawing says, for a reader who cannot see it — the same
-          // text the preview's own `<desc>` carries (D28).
+          // text the preview's own `<desc>` carries (D28). `docxPlan` decides
+          // what a *sheet* of it is called.
           altText: {
             name: plan.metadata.title,
             title: plan.metadata.title,
-            description: plan.drawing.altText,
+            description: sheet.altText,
           },
         }),
       ],
     }),
+    ...caption,
   ];
 }
 
@@ -276,7 +324,19 @@ function widthAt(table: DocxTablePlan, index: number): number {
 }
 
 /**
- * The drawing, rendered with the preview's own styles and painted to a PNG.
+ * The drawing, rendered with the preview's own styles and painted to PNGs.
+ *
+ * **One drawing, painted a sheet at a time.** The SVG is rendered and styled
+ * once and then shown a region at a time, so a sixteen-sheet drawing is
+ * sixteen rasterisations of one element rather than sixteen renders. Each
+ * sheet is painted, encoded and let go before the next is started — the canvas
+ * `rasteriseDrawing` builds is unreachable the moment it returns — so what is
+ * held at once is one canvas of at most `MAX_SHEET_RASTER_PIXELS`, not the
+ * whole `MAX_RASTER_PIXELS` budget. The encoded bytes are kept, because they
+ * are the file.
+ *
+ * Sequential rather than `Promise.all` for exactly that reason: sixteen
+ * canvases in flight is the memory this cycle set a budget to avoid.
  *
  * The holder `openDrawing` puts in the page is always taken out again, whether
  * the painting worked or not — an export that failed halfway must not leave
@@ -285,15 +345,24 @@ function widthAt(table: DocxTablePlan, index: number): number {
 async function paintDrawing(
   drawing: DocxDrawingPlan,
   doc: Document,
-): Promise<Uint8Array> {
+): Promise<readonly Uint8Array[]> {
   const opened = openDrawing(drawing.layout, doc);
+  const pictures: Uint8Array[] = [];
 
   try {
-    return await rasteriseDrawing(opened.svg, doc, {
-      width: drawing.rasterWidth,
-      height: drawing.rasterHeight,
-    });
+    for (const sheet of drawing.sheets) {
+      pictures.push(
+        await withDrawingRegion(opened.svg, sheet.region, () =>
+          rasteriseDrawing(opened.svg, doc, {
+            width: sheet.rasterWidth,
+            height: sheet.rasterHeight,
+          }),
+        ),
+      );
+    }
   } finally {
     opened.close();
   }
+
+  return pictures;
 }

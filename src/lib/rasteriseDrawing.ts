@@ -18,6 +18,16 @@
  * app's CSS Module never applies to it and every `var(--shape-*)` in it
  * resolves to nothing. `openDrawing` is the step that fixes that (D64), and
  * this takes the element it opened.
+ *
+ * **Which piece of the drawing is not this module's question.** A drawing too
+ * large to print at a readable size on one page is painted a sheet at a time,
+ * and the sheet is chosen by `openDrawing`'s `withDrawingRegion` around the
+ * call rather than by a source rectangle here. That is deliberate: a source
+ * rectangle would crop a picture of the *whole* drawing at its own intrinsic
+ * size, so a sheet of a 17,000-pixel-wide canvas would arrive already
+ * destroyed. Moving the `viewBox` makes the browser re-rasterise the vector at
+ * whatever size the canvas below asks for, which is the whole point of
+ * painting a sheet larger than the whole.
  */
 
 /** What an SVG is, for the browser about to parse one back. */

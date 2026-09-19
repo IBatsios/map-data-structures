@@ -78,6 +78,25 @@ export class UploadPage {
   }
 
   /**
+   * Chooses a file the test made up, rather than one on disk.
+   *
+   * A design large enough to reach the sheet cap is four hundred nodes and
+   * more, and a fixture that size would be a hundred kilobytes of JSON checked
+   * in to be read once. The browser is handed the same bytes either way, so
+   * the path under test is the same path.
+   *
+   * @param name - what the file is called, which the export's file name uses
+   * @param json - the whole file, as text
+   */
+  async chooseMade(name: string, json: string): Promise<void> {
+    await this.fileInput.setInputFiles({
+      name,
+      mimeType: 'application/json',
+      buffer: Buffer.from(json, 'utf8'),
+    });
+  }
+
+  /**
    * Drops a file on the page, the way a user drags one off their desktop.
    *
    * `setInputFiles` cannot reach this path at all: it drives the file input,

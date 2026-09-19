@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Design, DesignEdge, DesignNode } from './design.types';
+import { MAX_DRAWING_SHEETS, MIN_TEXT_POINTS, SMALLEST_TEXT_PX } from './drawingSheets';
 import { layoutDesign } from './layout';
 import type { MeasureText, PdfItem, PdfPage } from './pdfPlan';
 import { NOTHING_TO_DRAW, PAGE_MARGIN, pdfPlan } from './pdfPlan';
@@ -198,13 +199,155 @@ describe('pdfPlan', () => {
     expect(plan.pages).toHaveLength(1);
   });
 
+  describe('a drawing too large to print at a readable size on one page', () => {
+    /** Wide enough that fitting one page would put its text under the floor. */
+    const layout = layoutDesign(manyNodes(14));
+    const plan = pdfPlan(layout, measure);
+    const drawings = allItems(plan.pages).filter((item) => item.kind === 'drawing');
+
+    it('is tiled across sheets rather than shrunk under the floor', () => {
+      expect(drawings.length).toBeGreaterThan(1);
+    });
+
+    it('never prints the drawing’s smallest text below the floor', () => {
+      for (const drawing of drawings) {
+        expect(SMALLEST_TEXT_PX * (drawing.width / drawing.region.width)).toBeCloseTo(
+          MIN_TEXT_POINTS,
+          5,
+        );
+      }
+    });
+
+    it('shows a different piece of the drawing on each sheet', () => {
+      const regions = drawings.map((drawing) => JSON.stringify(drawing.region));
+
+      expect(new Set(regions).size).toBe(drawings.length);
+    });
+
+    it('leaves no part of the drawing off every sheet', () => {
+      const covered = (x: number, y: number): boolean =>
+        drawings.some(
+          (drawing) =>
+            drawing.region.x <= x &&
+            x <= drawing.region.x + drawing.region.width &&
+            drawing.region.y <= y &&
+            y <= drawing.region.y + drawing.region.height,
+        );
+
+      for (let step = 0; step <= 40; step += 1) {
+        expect(covered((layout.width * step) / 40, (layout.height * step) / 40)).toBe(
+          true,
+        );
+      }
+    });
+
+    it('gives every sheet of the drawing a page to itself', () => {
+      const pagesWithDrawings = plan.pages.filter((page) =>
+        page.items.some((item) => item.kind === 'drawing'),
+      );
+
+      expect(pagesWithDrawings).toHaveLength(drawings.length);
+      for (const page of pagesWithDrawings) {
+        expect(page.items.filter((item) => item.kind === 'drawing')).toHaveLength(1);
+      }
+    });
+
+    it('says on the title page how many sheets the drawing runs to', () => {
+      expect(textOn(plan.pages[0] as PdfPage).join(' ')).toContain(
+        `The drawing follows on ${drawings.length} sheets`,
+      );
+    });
+
+    it('sets each caption quieter than the document’s own words', () => {
+      const captions = allItems(plan.pages).filter(
+        (item) => item.kind === 'text' && item.text.startsWith('Drawing, sheet'),
+      );
+
+      expect(captions.length).toBe(drawings.length);
+      for (const caption of captions) {
+        expect(caption.kind === 'text' && caption.quiet).toBe(true);
+      }
+      // And nothing else is: a table row set in the same grey as its caption
+      // would read as furniture too.
+      expect(
+        allItems(plan.pages).filter(
+          (item) => item.kind === 'text' && item.quiet === true,
+        ),
+      ).toHaveLength(drawings.length);
+    });
+
+    it('captions each sheet with its place in the whole', () => {
+      const captions = allText(plan.pages).filter((text) =>
+        text.startsWith('Drawing, sheet'),
+      );
+
+      expect(captions).toHaveLength(drawings.length);
+      expect(captions[0]).toContain(`1 of ${drawings.length}`);
+    });
+
+    it('still prints both tables after the drawing, headings and all', () => {
+      const text = allText(plan.pages);
+
+      expect(text).toContain('Nodes');
+      expect(text).toContain('Edges');
+      expect(text.indexOf('Node 0')).toBeGreaterThan(
+        text.indexOf('Drawing, sheet 1 of ' + drawings.length),
+      );
+    });
+
+    it('keeps every tile inside the margins and in the shape it was cut', () => {
+      for (const drawing of drawings) {
+        expect(drawing.x).toBeGreaterThanOrEqual(PAGE_MARGIN);
+        expect(drawing.x + drawing.width).toBeLessThanOrEqual(
+          plan.width - PAGE_MARGIN + 0.001,
+        );
+        expect(drawing.width / drawing.height).toBeCloseTo(
+          drawing.region.width / drawing.region.height,
+          5,
+        );
+      }
+    });
+  });
+
+  it('never asks for more sheets of drawing than the cap allows', () => {
+    const plan = pdfPlan(layoutDesign(manyNodes(400)), measure);
+    const drawings = allItems(plan.pages).filter((item) => item.kind === 'drawing');
+
+    expect(drawings.length).toBeLessThanOrEqual(MAX_DRAWING_SHEETS);
+    // And when the cap is what stopped it, the document says so rather than
+    // printing a drawing nobody can read and leaving the reader to guess.
+    expect(allText(plan.pages).join(' ')).toContain('too large to print at');
+  });
+
+  it('leaves a drawing that already prints large enough exactly where it was', () => {
+    const plan = planOf(designOf('Small', [node('api', 'Public API')]));
+    const drawings = allItems(plan.pages).filter((item) => item.kind === 'drawing');
+
+    expect(drawings).toHaveLength(1);
+    expect(drawings[0]?.region).toEqual({
+      x: 0,
+      y: 0,
+      width: layoutDesign(designOf('Small', [node('api', 'Public API')])).width,
+      height: layoutDesign(designOf('Small', [node('api', 'Public API')])).height,
+    });
+    expect(allText(plan.pages).some((text) => text.startsWith('Drawing, sheet'))).toBe(
+      false,
+    );
+  });
+
   it('turns the page when the rows run past the bottom, and repeats the column headings', () => {
     const plan = planOf(manyNodes(80));
+    // The pages the node table runs onto, rather than every page after the
+    // first: a design this size now spends its middle pages on the sheets of
+    // the drawing, and a sheet of drawing carries a caption and no columns.
+    const tablePages = plan.pages.filter((page) =>
+      textOn(page).some((text) => text.startsWith('Node ')),
+    );
 
-    expect(plan.pages.length).toBeGreaterThan(1);
-    // A reader who turns to page three should still be able to tell which
-    // column is which.
-    for (const page of plan.pages.slice(1)) {
+    expect(tablePages.length).toBeGreaterThan(1);
+    // A reader who turns to the third page of the table should still be able
+    // to tell which column is which.
+    for (const page of tablePages) {
       expect(textOn(page)).toContain('Id');
     }
   });
