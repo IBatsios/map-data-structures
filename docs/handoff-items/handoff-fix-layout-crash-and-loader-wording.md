@@ -203,39 +203,39 @@ installed, better — but do not add a browser to the e2e matrix for it.
 
 These are the contract. Only Jahmyr's verification checks a box.
 
-- [ ] The repro design — nodes `n0, n2, n3, n4, n5, n6` all of type `service`,
+- [x] The repro design — nodes `n0, n2, n3, n4, n5, n6` all of type `service`,
       edges `n2→n5, n0→n6, n0→n4, n3→n4, n6→n3, n4→n0, n0→n4` — loads and lays
       out without throwing, and its drawing shows all 6 nodes and all 7 edges.
-- [ ] That design ships as a fixture and is covered by a Vitest regression test
+- [x] That design ships as a fixture and is covered by a Vitest regression test
       that fails against `main` as it stands today.
-- [ ] A fuzz run of at least 2000 random multigraphs — the scale at which
+- [x] A fuzz run of at least 2000 random multigraphs — the scale at which
       Jahmyr found it twice — produces zero layout failures of this class, and
       the run is reported with its seed or its generator so the number means
       something.
-- [ ] If any design still cannot be laid out, the panel says so in the app's own
+- [x] If any design still cannot be laid out, the panel says so in the app's own
       words rather than dagre's, and that wording is covered by a Vitest test.
       If no such design remains, say so explicitly in the handback instead.
-- [ ] `straightLine`'s doc comment and D58's reasoning in `src/lib/layout.ts`
+- [x] `straightLine`'s doc comment and D58's reasoning in `src/lib/layout.ts`
       are true as of the end of this cycle, and `docs/DECISIONS.md` carries a
       new row from D98 recording what was found and what changed.
-- [ ] A SpiderMonkey-shaped `JSON.parse` message produces a panel message that
+- [x] A SpiderMonkey-shaped `JSON.parse` message produces a panel message that
       names the line and the column the engine named, and never says the browser
       did not say where.
-- [ ] That message quotes the engine's line and column at most once: the
+- [x] That message quotes the engine's line and column at most once: the
       position clause is stripped from the detail for SpiderMonkey exactly as it
       already is for V8.
-- [ ] The V8 and JavaScriptCore messages are unchanged — every existing case in
+- [x] The V8 and JavaScriptCore messages are unchanged — every existing case in
       `describeLoadError.test.ts` still passes, including the one asserting that
       V8 and JavaScriptCore agree on wording, and the no-position wording still
       appears for an engine that genuinely names no position.
-- [ ] The SpiderMonkey message text used in tests is real, and its source is
+- [x] The SpiderMonkey message text used in tests is real, and its source is
       named in the handback.
-- [ ] `loadDesign.ts`'s `DesignSyntaxError` doc comment names all three engine
+- [x] `loadDesign.ts`'s `DesignSyntaxError` doc comment names all three engine
       shapes and no longer speaks of Task 04 as future work.
-- [ ] `loadDesign.test.ts:146`'s assertion runs unconditionally.
-- [ ] `bun run test` passes in full, and `bun run test:e2e` passes in full
+- [x] `loadDesign.test.ts:146`'s assertion runs unconditionally.
+- [x] `bun run test` passes in full, and `bun run test:e2e` passes in full
       against a freshly built `dist/`.
-- [ ] CI is green on the pull request, on both the push-event and the
+- [x] CI is green on the pull request, on both the push-event and the
       pull_request-event runs.
 
 ### Files expected to change
@@ -571,3 +571,114 @@ that was not this cycle's scope.
   that page already imports `layout`, so there is no bundle cost. If a page ever
   wants the messages without the drawing, `DesignLayoutError` should move to a
   module of its own that `layout.ts` re-exports.
+
+---
+
+## Test report from Jahmyr — round 1
+
+### Verdict
+
+**Pass.** All thirteen acceptance criteria verified by exercise, not by reading.
+Both faces of the dagre fault are closed, the Firefox sentence is right in a
+real Firefox, and no drawing this app could already make has moved by a pixel.
+One defect was found and fixed in place: the fuzz test's clock, not its claim.
+
+### Criterion by criterion
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| The repro design loads, lays out without throwing, and its drawing shows all 6 nodes and all 7 edges | pass | Vitest, plus my own browser walk over a freshly built `dist/`: 6 `[data-part="node"]`, 7 `[data-part="edge"]`, all nine labels present, status line "6 nodes, 7 edges", no `NaN` anywhere in the SVG. I looked at the screenshot: six boxes, seven arrows, and the two parallel edges are two lines 18px apart with their plates stacked, not one line drawn twice. It rendered the same in real Firefox 156.0 |
+| It ships as a fixture covered by a Vitest regression test that fails against `main` | pass | `e2e/fixtures/two-cycle-duplicate-edge.json`. I rebuilt `main` into a scratch tree, dropped this branch's `layout.test.ts` and the fixture into it, and ran it: **5 failed, 27 passed** — the fixture threw `Not possible to find intersection inside of the rectangle` out of `assignNodeIntersects`, and the fuzz reported `run 1050: Not possible to find intersection…` and `run 1749: a coordinate was not finite`. The same file is green on this branch |
+| A fuzz run of at least 2000 random multigraphs, zero layout failures of this class, reported with its seed or generator | pass | In-suite: 2500 graphs, seed `20260918`, generator `randomNumbers`/`randomDesign` in `layout.test.ts`, zero failures. Independently: **60,000** graphs at seeds **2, 99 and 123456** through a denser generator (2–10 nodes, up to 3n edges) — this branch failed **0** times where `main` failed **581**. A further 60,000 over four seeds during the `straightLine` probe: 0 throws, 0 non-finite |
+| If any design still cannot be laid out, the panel says so in the app's own words, covered by a Vitest test | pass | Two Vitest cases cover `DesignLayoutError`. I also forced it in a real browser — patched `isWhollyPlaced` to refuse every layout, rebuilt, uploaded a good file — and the panel read the app's own sentence with no dagre words in it, no drawing left behind and the export buttons still off. That also proves `instanceof DesignLayoutError` survives bundling. Amon's "no such design remains that I can find" holds against my fuzzing too |
+| `straightLine`'s doc comment and D58's reasoning are true, and `docs/DECISIONS.md` carries D98 | pass | The comment no longer claims `assignNodeIntersects` always completes; it claims the fallback is unreached because `placeWithDagre` never reads a graph where it did not. I instrumented `straightLine` and ran every fixture plus 60,000 fuzzed graphs: **0 calls**, and the fewest points on any route was **3**, exactly as the comment says. D98 is appended, append-only |
+| A SpiderMonkey-shaped message names the line and column the engine named, and never says the browser did not say where | pass | Vitest, and end to end in real Firefox 156.0 driving the built site: the panel read `That file is not valid JSON. Line 5, column 1: JSON.parse: expected double-quoted property name.` |
+| That message quotes the engine's line and column at most once | pass | Same panel string: one `Line 5`, one `column 1`, and `of the JSON data` stripped. The clause that is printed and the clause that is stripped are one entry in `ENGINE_POSITION_CLAUSES`, so they cannot diverge |
+| The V8 and JavaScriptCore messages are unchanged, and the no-position wording still appears for an engine that names none | pass | `describeLoadError.test.ts` is purely additive — not one deleted line — and all 441 tests pass. I fed **real** engine messages through the describer: V8 from Node 24 (`Expected double-quoted property name in JSON at position 59 (line 5 column 1)` becomes `Line 5, column 1: …`), V8's no-position forms (`Unexpected end of JSON input`, and the one that quotes the file back), and real JavaScriptCore messages out of Bun — all of which still reach "and this browser did not say where in it" |
+| The SpiderMonkey message text is real, and its source is named | pass | I did not take his word for it. Firefox 156.0 is installed here; I started it headless with `-marionette` against my own throwaway profile and ran `JSON.parse` on the three file texts myself. All three constants came back **verbatim**, including `JSON.parse: unexpected character at line 1 column 1 of the JSON data` for the YAML file whose own text reads `position 900` — so "SpiderMonkey never quotes the file" is measured, not assumed |
+| `loadDesign.ts`'s `DesignSyntaxError` comment names all three engine shapes and no longer speaks of Task 04 as future work | pass | Read: V8, SpiderMonkey and JavaScriptCore are each named, and Task 04 is spoken of as shipped. The diff touches nothing but the comment |
+| `loadDesign.test.ts:146`'s assertion runs unconditionally | pass | The `if (/position \d+/.test(...))` guard is gone and `expect(thrown?.message).toMatch(/position \d+/)` runs flatly; the caveat moved into the comment, and the assertion was kept |
+| `bun run test` passes in full, and `bun run test:e2e` passes in full against a freshly built `dist/` | pass | 441 tests in 26 files. 124/124 Playwright, with `netstat` showing nothing LISTENING on 4321 before the run and `[WebServer] $ astro build` in the log, so the `dist/` under test was built by that run |
+| CI is green on the pull request, on both the push-event and the pull_request-event runs | pass | Green on both for the head commit: push run 35416330593, pull_request run 35416332749. **It was not green on the first push** — see the defect below, which I fixed in place |
+
+### Command results
+
+`bun run test`: 441 passed in 26 files (baseline on `main`: 416 in 25).
+`bun run test:e2e`: 124 passed, 0 failed, against a `dist/` built by the run.
+`bun run check`: 0 errors, 0 warnings, 0 hints. `bun run build`: 2 pages.
+Secret scan: `gitleaks detect --source . --no-banner` — **no leaks found**, 37
+commits scanned. Nothing in the tree reads the environment except
+`process.env.CI` in `playwright.config.ts`, and `.env.example` still says the
+app reads nothing from the environment, which is still true.
+CI: **green on both events**.
+
+### What I went looking for beyond the checklist
+
+- **Has any existing drawing moved?** No. Every one of the twelve loadable
+  fixtures and `public/sample.json` lays out **byte-identically** to `main`
+  (`JSON.stringify` of the whole `DesignLayout`, one module against the other).
+  Across 60,000 fuzzed graphs, every graph `main` could already place came back
+  identical on this branch — **0 shifted**. "Per-edge keying changes nothing"
+  is not an argument here; it is a measurement.
+- **The silent half, measured on its own.** Of `main`'s 581 failures in those
+  60,000 graphs, **531 threw and 50 returned quietly holding `NaN`** — and not
+  only in routes: whole node boxes came back with `NaN` for `x` and `y`. On
+  this branch, 0 of either. This is the worse half and it is closed.
+- **Twelve duplicates at once.** A design with twelve parallel `a→b` edges, a
+  two-cycle and two self-loops draws 16 distinct routes, no two label plates
+  overlapping, labels in file order, everything inside the canvas.
+- **A large design.** 400 nodes and 800 edges with duplicates and two-cycles in
+  it: laid out in 323ms, every coordinate finite.
+- **The engine-clause trap, from the other side.** A file whose own bytes read
+  `at line 9 column 9 of the JSON data` is quoted back by V8 in its
+  `… is not valid JSON` form; the end anchor holds, and the panel says it does
+  not know where rather than inventing line 9. D32's rule survives the second
+  clause.
+- **Empty file, whitespace only, malformed JSON, `[1,2,3]`, `null`, duplicate
+  node ids, a design with no nodes.** Each produced the message it should, and
+  none reached the layout by accident.
+- **Accessibility, best effort, on the changed screen.** No markup changed this
+  cycle. The drawing is `role="img"` named by `drawing-title` and
+  `drawing-description`, and the description names all six nodes and all seven
+  edges — including *both* parallel edges, so a reader who cannot see two lines
+  is still told there are two. The panel is `role="status"`, every input is
+  labelled, every button named, `lang="en"`, and Tab reaches the file input,
+  the sample button and the export buttons in order.
+
+### Defects for Amon
+
+None outstanding. The one defect found is the one fixed in place below.
+
+### Fixed in place
+
+1. **`src/lib/layout.test.ts:631`** — `lays out 2500 random multigraphs without
+   one failure` carried no timeout of its own, so it ran against Vitest's
+   five-second default. It takes three to four seconds here and **5022ms** on a
+   GitHub runner, which failed the **push-event** CI run of this pull request
+   while the pull_request-event run of the very same commit passed. A test
+   whose verdict depends on which runner picked it up is a flaky wait, so I
+   gave it `FUZZ_TIMEOUT = 60_000` and a comment saying why. The count, the
+   seed, the generator and the assertion are untouched — the handoff asks for
+   at least 2000 graphs, and that is the part that must not move. Both CI runs
+   are green after it.
+
+### Pull request
+
+https://github.com/IBatsios/map-data-structures/pull/23 — opened as a draft, as
+the process asks. Sam marks it ready and merges; I did not.
+
+### Notes for whoever picks this up next
+
+Not defects, and not mine to act on:
+
+- `PARALLEL_ROUTE_SPREAD = 18` and `PARALLEL_LABEL_GAP = 4` are chosen rather
+  than designed, as Amon says. With twelve duplicates the fan is about 200px
+  wide end to end and still legible, so nothing is wrong today; it is a
+  design-pass question, not a fix-cycle one.
+- Amon's four out-of-scope notes stand and I add nothing to them: the
+  `loadDesign.ts` module header's lagging Task 04 reference, dagre's upstream
+  bug being reportable, `readPlacedNodes`'s throw comment drifting now that
+  `placeWithDagre` gates ahead of it, and `describeLoadError.ts` importing
+  `layout.ts`.
+- The 1280px column and `/schema`'s table are still as routed — deliberately
+  untouched, still v2 candidates.
