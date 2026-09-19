@@ -89,6 +89,18 @@ carries them in prose beside the file (D90 to D92). Both pages now share
 `src/layouts/PageLayout.astro` and the tokens in `src/styles/page.module.css` —
 the page styling parked since Task 03 (D94).
 
+**A valid design that carries both a two-cycle and a parallel duplicate now
+draws instead of crashing dagre, and Firefox's syntax-error message no longer
+contradicts itself.** `layoutDesign` asks dagre for a layout keyed one edge at
+a time, and only if that does not come back with every coordinate finite,
+asks again keyed one edge-pair at a time, with `parallelEdges.ts` fanning the
+duplicates back apart; no existing drawing moves under the first keying.
+`describeSyntaxFault` now reads a second engine clause so a SpiderMonkey
+`JSON.parse` message yields its own line and column, the same way V8's
+already did. Detail, including the diagnosis and both fuzz measurements, in
+`docs/handoff-items/handoff-fix-layout-crash-and-loader-wording.md` and
+D98–D99.
+
 ## Run and test
 
 ```

@@ -133,19 +133,21 @@ describe('loadDesign', () => {
       // Assert
       // The message is the contract: whatever the engine said, unedited, plus
       // the original error as `cause`. What is *in* that message is the
-      // engine's business and not the same everywhere — V8 names a position
-      // and JavaScriptCore names none at all — so the position is asserted
-      // below as a bonus this engine happens to give, not as a promise the
-      // loader makes. Vitest runs on Node, so this file can only ever see V8;
-      // a test here could never have caught Safari, which is exactly why the
-      // claim is not made. Task 04 owns the message for an engine that gives
-      // no position.
+      // engine's business and not the same everywhere — V8 names a character
+      // position, SpiderMonkey names a line and a column and no position, and
+      // JavaScriptCore names none of the three — so the position below is a
+      // bonus this one engine happens to give, not a promise the loader makes.
+      //
+      // It is asserted flatly all the same. Vitest runs on Node, so this file
+      // can only ever see V8, and V8's message for this file always names a
+      // position: a guard around the assertion would never once have skipped
+      // it, and a reader finding one would reasonably think it sometimes does.
+      // The caveat belongs in this comment, where it cannot be mistaken for a
+      // test that is not running. `describeLoadError` owns every engine that
+      // says where differently, and tests each of them as a string.
       expect(thrown?.message).toBe(original.message);
       expect(thrown?.cause).toBeInstanceOf(SyntaxError);
-
-      if (/position \d+/.test(original.message)) {
-        expect(thrown?.message).toMatch(/position \d+/);
-      }
+      expect(thrown?.message).toMatch(/position \d+/);
     });
 
     it('carries the code invalid-json', () => {

@@ -1,0 +1,20 @@
+{
+  "title": "Settlement mesh",
+  "nodes": [
+    { "id": "n0", "label": "Ledger service", "type": "service" },
+    { "id": "n2", "label": "Intake service", "type": "service" },
+    { "id": "n3", "label": "Pricing service", "type": "service" },
+    { "id": "n4", "label": "Settlement service", "type": "service" },
+    { "id": "n5", "label": "Audit service", "type": "service" },
+    { "id": "n6", "label": "Reconciliation service", "type": "service" }
+  ],
+  "edges": [
+    { "from": "n2", "to": "n5", "label": "records intake" },
+    { "from": "n0", "to": "n6", "label": "sends day book" },
+    { "from": "n0", "to": "n4", "label": "requests settlement" },
+    { "from": "n3", "to": "n4", "label": "sends prices" },
+    { "from": "n6", "to": "n3", "label": "asks for a reprice" },
+    { "from": "n4", "to": "n0", "label": "confirms settlement" },
+    { "from": "n0", "to": "n4", "label": "retries settlement" }
+  ]
+}

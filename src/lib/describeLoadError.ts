@@ -3,23 +3,29 @@
  *
  * `loadDesign` throws structured errors and flattens nothing (D22): a syntax
  * error carries the engine's own message, a schema error carries Zod's issues
- * with the path of every field at fault. This module is where that evidence
- * becomes sentences a person can act on, and it is pure — text in, text out —
- * so every message in the app is covered by `bun run test` rather than by
- * reading the page and hoping.
+ * with the path of every field at fault. A design that loads and then cannot be
+ * placed throws a `DesignLayoutError` instead, which carries no evidence for a
+ * user at all, because there is nothing in the file to point at. This module is
+ * where all three become sentences a person can act on, and it is pure — text
+ * in, text out — so every message in the app is covered by `bun run test`
+ * rather than by reading the page and hoping.
  *
  * Four rules hold it together:
  *
  * 1. **Never print a line number inferred from nothing.** `JSON.parse`'s
- *    message names a position on V8 for some faults, and never on
- *    JavaScriptCore or for a file that ends early (D32). Where there is a
- *    position, the line and the column are counted here from the file's own
- *    text rather than read out of the engine's phrasing, which buys one wording
- *    across every engine that gives one. Where there is none, the message says
- *    so. A wrong pointer into a file the user wrote themselves costs them more
- *    than no pointer at all. The position itself is read only from the engine's
- *    own clause and never from the quotation of the file beside it — see
- *    `ENGINE_POSITION_CLAUSE`, which is where this rule is actually enforced.
+ *    message says where the fault is in three different shapes, and sometimes
+ *    not at all. V8 names a character position for some faults and none for a
+ *    file that ends early; SpiderMonkey names a line and a column and never a
+ *    position; JavaScriptCore names none of the three (D32, D99). Where an
+ *    engine gives a position, the line and the column are counted here from the
+ *    file's own text rather than read out of the engine's phrasing. Where it
+ *    gives the line and the column instead, they are the engine's own statement
+ *    about its own parse and are taken as given. Where it gives nothing, the
+ *    message says so. A wrong pointer into a file the user wrote themselves
+ *    costs them more than no pointer at all. Either way the place is read only
+ *    from the engine's own clause at the end of its message and never from the
+ *    quotation of the file beside it — see `ENGINE_POSITION_CLAUSES`, which is
+ *    where this rule is actually enforced.
  * 2. **The engine is an argument, not an ambient fact.** `describeSyntaxFault`
  *    takes the message text and the file text, so a Safari-shaped message is a
  *    one-line test on Node.
@@ -39,6 +45,7 @@
 
 import type { z } from 'zod';
 
+import { DesignLayoutError } from './layout';
 import { DesignSchemaError, DesignSyntaxError } from './loadDesign';
 
 /** What the panel shows: one heading, a bounded list, and what it left out. */
@@ -82,6 +89,22 @@ const NOT_A_DESIGN_MESSAGE =
   'The file has to be a JSON object with a title, a list of nodes and a list of edges';
 
 /**
+ * The one failure here that is the app's own and not the file's.
+ *
+ * A design only reaches the layout once `loadDesign` has passed it, so there is
+ * nothing in the file to point at and nothing for the user to correct. Saying
+ * so first is the honest part; the two suggestions are the actionable part, and
+ * they are the two shapes D98 found the graph library struggling with. What
+ * this deliberately does not do is quote the library — a sentence about an
+ * intersection inside a rectangle is about a graph internal the user has never
+ * heard of, attached to a file that is correct.
+ */
+const LAYOUT_FAILED_MESSAGE =
+  'That file is a valid design, but this app could not work out where to put the boxes. ' +
+  'Nothing is wrong with the file itself. Try splitting it into smaller designs, ' +
+  'or removing an edge that repeats one already running between the same two boxes.';
+
+/**
  * Turns a failed load into what the panel shows.
  *
  * @param failure - the error, the file's name, and the text that was read
@@ -102,6 +125,10 @@ export function describeLoadError(failure: LoadFailure): LoadErrorReport {
 
   if (error instanceof DesignSchemaError) {
     return describeSchemaFaults(error.issues, fileName, fileText);
+  }
+
+  if (error instanceof DesignLayoutError) {
+    return oneProblem(fileName, LAYOUT_FAILED_MESSAGE);
   }
 
   // Not a failure this app knows about, which is exactly when saying nothing
@@ -134,11 +161,9 @@ export function describeSyntaxFault(engineMessage: string, fileText: string): st
   }
 
   const detail = engineDetail(engineMessage);
-  const position = positionIn(engineMessage);
+  const place = placeIn(engineMessage, fileText);
 
-  return position === undefined
-    ? withoutPosition(detail)
-    : atPosition(lineColumnOf(fileText, position), detail);
+  return place === undefined ? withoutPosition(detail) : atPosition(place, detail);
 }
 
 /**
@@ -344,25 +369,95 @@ function lineColumnOf(fileText: string, position: number): LineAndColumn {
 const ENGINE_POSITION_CLAUSE =
   /\s*\b(?:in|after) JSON at position (\d+)(?:\s*\(line \d+ column \d+\))?\s*$/u;
 
-/** The position an engine named, if it named one at all. */
-function positionIn(engineMessage: string): number | undefined {
-  const found = ENGINE_POSITION_CLAUSE.exec(engineMessage);
+/**
+ * SpiderMonkey's clause: a line and a column, and no position at all.
+ *
+ * Firefox names the place directly rather than a character index, which is why
+ * reading only `ENGINE_POSITION_CLAUSE` left it in the no-position branch — the
+ * panel denied a position and then quoted the engine naming one. It is anchored
+ * to the end of the message for exactly the reason the clause above is, and the
+ * anchor is cheap insurance rather than a measured need here: Firefox 156.0 was
+ * asked what it says about a file whose own text reads `position 900`, and it
+ * quotes no part of the file at all. The line it names is always its own.
+ */
+const ENGINE_LINE_AND_COLUMN_CLAUSE =
+  /\s*\bat line (\d+) column (\d+) of the JSON data\s*$/u;
 
-  return found === null ? undefined : Number(found[1]);
+/** Where in the file an engine put the fault, once a clause has been found. */
+type PlaceFromClause = (found: RegExpExecArray, fileText: string) => LineAndColumn;
+
+/** One way an engine ends a message to say where the fault is. */
+interface EnginePositionClause {
+  readonly pattern: RegExp;
+  readonly placeOf: PlaceFromClause;
+}
+
+/**
+ * Every clause an engine may end its message with, and what each yields.
+ *
+ * This list is the single place either half of the rule is written down, and
+ * that is deliberate: `placeIn` and `engineDetail` both walk it and both stop
+ * at the same clause, so they cannot disagree about whether a message carried
+ * one. They used to share a single pattern for the same reason. A message that
+ * named a column and then ended `… is not valid JSON` was how the round 1
+ * defect announced itself, and a message whose line was printed once by this
+ * app and again in the engine's own words is how the same disagreement would
+ * announce itself from the other side.
+ *
+ * V8's is first because it was here first and because an index is the more
+ * precise of the two: where the engine gives one, the line and the column are
+ * counted from the file's own text (rule 1), and only where it does not is the
+ * engine's own arithmetic taken on trust. That is not a guess — it is the
+ * engine's statement about its own parse, which is the only thing rule 1 ever
+ * allowed a line to be read from.
+ */
+const ENGINE_POSITION_CLAUSES: readonly EnginePositionClause[] = [
+  {
+    pattern: ENGINE_POSITION_CLAUSE,
+    placeOf: (found, fileText) => lineColumnOf(fileText, Number(found[1])),
+  },
+  {
+    pattern: ENGINE_LINE_AND_COLUMN_CLAUSE,
+    placeOf: (found) => ({ line: Number(found[1]), column: Number(found[2]) }),
+  },
+];
+
+/** The clause an engine ended its message with, and what it matched. */
+function clauseIn(
+  engineMessage: string,
+): { clause: EnginePositionClause; found: RegExpExecArray } | undefined {
+  for (const clause of ENGINE_POSITION_CLAUSES) {
+    const found = clause.pattern.exec(engineMessage);
+
+    if (found !== null) {
+      return { clause, found };
+    }
+  }
+
+  return undefined;
+}
+
+/** Where the engine said the fault is, if it said where at all. */
+function placeIn(engineMessage: string, fileText: string): LineAndColumn | undefined {
+  const matched = clauseIn(engineMessage);
+
+  return matched?.clause.placeOf(matched.found, fileText);
 }
 
 /**
  * The engine's own description, bounded and cleaned, without its position.
  *
- * The position clause is dropped because this app has already said the line and
- * the column in its own words; if the phrasing is one this does not recognise,
- * nothing is dropped and the whole message is shown. It is the same pattern
- * `positionIn` reads, so the two can never disagree about whether a message
- * carried a clause — a sentence that named a column and then ended
- * `… is not valid JSON` was how the round 1 defect announced itself.
+ * Whichever clause said where is dropped, because this app has already said the
+ * line and the column in its own words; if the phrasing is one no clause
+ * recognises, nothing is dropped and the whole message is shown. It reads the
+ * same list `placeIn` does, so the two can never disagree.
  */
 function engineDetail(engineMessage: string): string {
-  const described = engineMessage.replace(ENGINE_POSITION_CLAUSE, '');
+  const matched = clauseIn(engineMessage);
+  const described =
+    matched === undefined
+      ? engineMessage
+      : engineMessage.replace(matched.clause.pattern, '');
   const bounded = boundedText(described);
 
   return bounded === '' ? '' : sentence(bounded);

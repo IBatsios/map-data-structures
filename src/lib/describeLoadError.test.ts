@@ -8,6 +8,7 @@ import {
   describeSyntaxFault,
   describeUnsupportedFile,
 } from './describeLoadError';
+import { DesignLayoutError } from './layout';
 import { DesignSyntaxError, loadDesign } from './loadDesign';
 
 /**
@@ -28,6 +29,35 @@ const V8_POSITION_ONLY = 'Unexpected token } in JSON at position 59';
 
 /** JavaScriptCore — Safari — names no position, no line and no column. */
 const JAVASCRIPTCORE = "JSON Parse error: Expected '}'";
+
+/**
+ * SpiderMonkey — Firefox — is the third shape: a line and a column, and no
+ * position at all. This is the engine's own message for the same trailing comma
+ * `V8_WITH_LINE` above describes, so the two can be held against each other.
+ *
+ * Measured, not remembered, and not taken from documentation: every
+ * SpiderMonkey string in this file was read out of Firefox 156.0
+ * (`Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:156.0) Gecko/20100101
+ * Firefox/156.0`) by running `JSON.parse` on these exact file texts in a
+ * content page over Marionette, during the cycle that added this case.
+ */
+const SPIDERMONKEY_WITH_LINE =
+  'JSON.parse: expected double-quoted property name at line 5 column 1 of the JSON data';
+
+/** SpiderMonkey on the file with something after the design, measured the same way. */
+const SPIDERMONKEY_AFTER_THE_JSON =
+  'JSON.parse: unexpected non-whitespace character after JSON data at line 2 column 1 of the JSON data';
+
+/**
+ * SpiderMonkey on the YAML file whose own text says `position 900`.
+ *
+ * It is here to record something measured rather than to vary the wording:
+ * SpiderMonkey does not quote the file at all, so the trap V8's no-position
+ * form sets — the user's own bytes read back as an engine's clause — has no
+ * SpiderMonkey equivalent. Its line and column are its own.
+ */
+const SPIDERMONKEY_ON_A_FILE_NAMING_A_POSITION =
+  'JSON.parse: unexpected character at line 1 column 1 of the JSON data';
 
 /** What V8 says about a file that is not text at all: the bytes come with it. */
 const V8_ON_BYTES =
@@ -151,6 +181,76 @@ describe('describeSyntaxFault', () => {
         "It reported: JSON Parse error: Expected '}'. " +
         'Check the file for a missing comma, bracket or quote.',
     );
+  });
+
+  it('names the line and column an engine gives without giving a position', () => {
+    // The defect this case was added for: SpiderMonkey names a line and a
+    // column and no character index at all, so the panel used to deny a
+    // position in one sentence and quote the engine naming one in the next.
+    // Act
+    const message = describeSyntaxFault(SPIDERMONKEY_WITH_LINE, TRAILING_COMMA);
+
+    // Assert
+    expect(message).toBe(
+      'That file is not valid JSON. Line 5, column 1: ' +
+        'JSON.parse: expected double-quoted property name.',
+    );
+    expect(message).not.toContain('did not say where');
+  });
+
+  it('reads an engine’s line and column out at most once', () => {
+    // The standing invariant: whatever the position is read from has to be
+    // stripped from the detail as well, or Firefox users are told where the
+    // fault is twice — once in this app's words and once in the engine's.
+    // Act
+    const message = describeSyntaxFault(SPIDERMONKEY_WITH_LINE, TRAILING_COMMA);
+
+    // Assert
+    expect(message).not.toContain('of the JSON data');
+    expect(message.match(/line 5/gi)).toHaveLength(1);
+    expect(message.match(/column 1/gi)).toHaveLength(1);
+  });
+
+  it('puts two engines reading one broken file at the same line and column', () => {
+    // V8 counts a character index and this app turns it into a place;
+    // SpiderMonkey names the place itself. Both are describing the same comma,
+    // so both have to arrive at the same sentence about where it is.
+    // Act
+    const fromV8 = describeSyntaxFault(V8_WITH_LINE, TRAILING_COMMA);
+    const fromSpiderMonkey = describeSyntaxFault(SPIDERMONKEY_WITH_LINE, TRAILING_COMMA);
+
+    // Assert
+    expect(fromV8).toContain('Line 5, column 1:');
+    expect(fromSpiderMonkey).toContain('Line 5, column 1:');
+  });
+
+  it('still names the line when SpiderMonkey puts its fault after the JSON', () => {
+    // Act
+    const message = describeSyntaxFault(SPIDERMONKEY_AFTER_THE_JSON, JSON_THEN_JUNK);
+
+    // Assert
+    expect(message).toBe(
+      'That file is not valid JSON. Line 2, column 1: ' +
+        'JSON.parse: unexpected non-whitespace character after JSON data.',
+    );
+  });
+
+  it('trusts SpiderMonkey’s own line, which never quotes the file back', () => {
+    // The mirror of the V8 case below. V8's no-position form quotes the file's
+    // first bytes, which is why the clause has to be anchored to the end of the
+    // message; SpiderMonkey quotes nothing, so the line it names is always its
+    // own. Measured on Firefox 156.0 rather than assumed.
+    // Act
+    const message = describeSyntaxFault(
+      SPIDERMONKEY_ON_A_FILE_NAMING_A_POSITION,
+      YAML_NAMING_A_POSITION,
+    );
+
+    // Assert
+    expect(message).toBe(
+      'That file is not valid JSON. Line 1, column 1: JSON.parse: unexpected character.',
+    );
+    expect(message).not.toContain('900');
   });
 
   it('never prints a line number it inferred from nothing', () => {
@@ -495,6 +595,48 @@ describe('describeLoadError, for JSON that is not a design', () => {
 
     // Assert
     expect(holdsControlCharacters(problems.join(' '))).toBe(false);
+  });
+});
+
+describe('describeLoadError, for a design that could not be laid out', () => {
+  /** What dagre says when its own layout fails; a user has never heard of it. */
+  const DAGRE_MESSAGE = 'Not possible to find intersection inside of the rectangle';
+
+  it('says it in the app’s own words rather than the graph library’s', () => {
+    // No design is known to reach this any more (D98), which is exactly why it
+    // is tested here rather than provoked: a floor nobody can stand on is still
+    // a floor, and this is the wording under it.
+    // Act
+    const report = describeLoadError({
+      error: new DesignLayoutError(new Error(DAGRE_MESSAGE)),
+      fileName: 'settlement-mesh.json',
+      fileText: '{ "title": "Settlement mesh", "nodes": [], "edges": [] }',
+    });
+
+    // Assert
+    expect(report.summary).toBe('settlement-mesh.json was not drawn:');
+    expect(report.problems).toEqual([
+      'That file is a valid design, but this app could not work out where to put the boxes. ' +
+        'Nothing is wrong with the file itself. Try splitting it into smaller designs, ' +
+        'or removing an edge that repeats one already running between the same two boxes.',
+    ]);
+  });
+
+  it('never repeats the graph library’s own words back to the user', () => {
+    // D43's rule, and the reason this branch exists at all: before it, this
+    // error fell through to the last branch and the panel printed dagre's
+    // sentence about a rectangle, attached to a file that was correct.
+    // Act
+    const report = describeLoadError({
+      error: new DesignLayoutError(new Error(DAGRE_MESSAGE)),
+      fileName: 'settlement-mesh.json',
+      fileText: '{}',
+    });
+
+    // Assert
+    expect(report.problems[0]).not.toContain('intersection');
+    expect(report.problems[0]).not.toContain('rectangle');
+    expect(report.problems[0]).not.toContain('Something went wrong');
   });
 });
 

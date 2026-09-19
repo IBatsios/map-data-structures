@@ -217,6 +217,50 @@ test.describe('Previewing the generated drawing', () => {
     ).toBe(false);
   });
 
+  test('draws a two-cycle with a duplicate edge that dagre alone cannot place', async ({
+    page,
+  }) => {
+    // The design in `two-cycle-duplicate-edge.json` is valid — unique ids,
+    // every edge naming a node that exists, no blank field — and it used to
+    // reach the panel rather than the canvas, because dagre threw out of its
+    // own layout on it (D98). What a reader has to get back is a drawing: six
+    // boxes, seven arrows, and both of the parallel edges visible.
+    const upload = new UploadPage(page);
+    await upload.goto();
+
+    await upload.choose('two-cycle-duplicate-edge.json');
+    await expect(upload.svg).toBeVisible();
+
+    const drawn = await upload.drawnText();
+
+    for (const label of [
+      'Ledger service',
+      'Intake service',
+      'Pricing service',
+      'Settlement service',
+      'Audit service',
+      'Reconciliation service',
+      'requests settlement',
+      'retries settlement',
+      'confirms settlement',
+    ]) {
+      expect(drawn, `"${label}" is missing from the drawing`).toContain(label);
+    }
+
+    await expect(upload.nodes()).toHaveCount(6);
+    await expect(upload.edges()).toHaveCount(7);
+
+    // Edges 2 and 6 in the file are the parallel pair. Byte-identical `d`
+    // attributes would be one arrow drawn twice, and overlapping plates would
+    // be one label hiding the other: seven edges in the file, six on screen.
+    expect(await upload.routePath(6)).not.toBe(await upload.routePath(2));
+
+    expect(
+      overlaps(await upload.plateBox(2), await upload.plateBox(6)),
+      'one parallel edge’s label plate is drawn over the other’s',
+    ).toBe(false);
+  });
+
   test('says what loaded in the status region', async ({ page }) => {
     const upload = new UploadPage(page);
     await upload.goto();

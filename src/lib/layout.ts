@@ -33,6 +33,8 @@
  *   `LayoutBox`, `LayoutNode`, `LayoutEdge`, `DesignLayout`.
  * - `selfLoops.ts` — a node's n-th loop: the route a self-edge takes, which is
  *   drawn here rather than read from dagre (D34, D37).
+ * - `parallelEdges.ts` — what to do when dagre cannot lay a multigraph out:
+ *   which edges share one dagre edge, and how they are fanned back apart (D98).
  * - `normaliseDrawing.ts` — the last three steps: how far everything moves to
  *   sit one margin from the corner, moving it, and sizing the canvas.
  *
@@ -56,6 +58,14 @@ import type {
   PreparedEdge,
 } from './layout.types';
 import { canvasFor, offsetToMargin, shiftBox, shiftEdge } from './normaliseDrawing';
+import type { EdgeShare, SharedRoutes } from './parallelEdges';
+import {
+  EDGE_KEYINGS,
+  fanOutRoute,
+  labelRoomFor,
+  shareRoutes,
+  stackedLabelCentre,
+} from './parallelEdges';
 import { selfLoop, selfLoopSlots } from './selfLoops';
 import { shapeForType } from './shapes';
 import { estimateTextWidth, wrapText } from './text';
@@ -114,6 +124,30 @@ type LayoutGraph = Graph<GraphLabel, NodeLabel, EdgeLabel>;
 type SizedNode = Omit<LayoutNode, 'x' | 'y'>;
 
 /**
+ * A design the app could not find a place for every box in.
+ *
+ * It is not a bad file — a design only reaches this module once `loadDesign`
+ * has passed it — so it is a failure of this app's own, and the panel says so
+ * in this app's own words rather than in the graph library's. Nothing about
+ * dagre reaches the screen: the library's error is kept as `cause` for whoever
+ * is reading a stack trace, and `describeLoadError` writes the sentence.
+ *
+ * No design is known to reach this today. Every graph the probing in D98 could
+ * produce is laid out by one keying or the other, and the fallback exists
+ * because "no design we could produce" is a smaller claim than "no design".
+ */
+export class DesignLayoutError extends Error {
+  constructor(cause: unknown) {
+    super('The design could not be laid out.', { cause });
+    // Without this, `instanceof` fails whenever the class is transpiled down to
+    // ES5, which is exactly where a caught error is hardest to debug. The same
+    // reasoning, and the same two lines, as `DesignLoadError`.
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = new.target.name;
+  }
+}
+
+/**
  * Lays a design out.
  *
  * Pure: it reads the design and builds new objects, so the caller's design is
@@ -123,6 +157,8 @@ type SizedNode = Omit<LayoutNode, 'x' | 'y'>;
  *   node ids are unique and every edge names a node that exists (D20)
  * @returns the canvas size, a box for every node in file order, and a route for
  *   every edge in file order
+ * @throws {DesignLayoutError} if no keying dagre was offered placed the whole
+ *   graph; see `placeWithDagre` for what that means and D98 for why it exists
  *
  * @example
  * ```typescript
@@ -133,18 +169,87 @@ type SizedNode = Omit<LayoutNode, 'x' | 'y'>;
  */
 export function layoutDesign(design: Design): DesignLayout {
   const sized = design.nodes.map(sizeNode);
-  const graph = buildGraph(sized, design);
-
-  dagre.layout(graph);
+  const prepared: readonly PreparedEdge[] = design.edges.map((edge, index) => ({
+    edge,
+    index,
+    plate: edgeLabelPlate(edge.label),
+  }));
+  const { graph, shared } = placeWithDagre(sized, prepared);
 
   const placed = readPlacedNodes(sized, graph);
-  const routed = readRoutedEdges(design, graph, placed);
+  const routed = readRoutedEdges(prepared, graph, placed, shared);
   const offset = offsetToMargin(placed, routed);
 
   const nodes = placed.map((node) => shiftBox(node, offset));
   const edges = routed.map((edge) => shiftEdge(edge, offset));
 
   return { title: design.title, ...canvasFor(nodes, edges), nodes, edges };
+}
+
+/**
+ * Dagre's placement, from the first keying that produced a whole one.
+ *
+ * Dagre is asked for `'per-edge'` first, which is what it has always been
+ * asked for and what it answers for all but a handful of graphs in thousands.
+ * `'per-pair'` is the retry, and it exists because dagre 3.1.1 loses a dummy
+ * node out of its own ordering when a pair of nodes carries both a two-cycle
+ * and a parallel duplicate (D98).
+ *
+ * "Produced a whole one" is deliberately stricter than "did not throw", because
+ * the lost dummy surfaces both ways. Where its coordinates are an edge's first
+ * or last point, `assignNodeIntersects` throws on them; where they are not, the
+ * `NaN` is simply handed back, and a `NaN` in a path's `d` voids the whole
+ * path — an edge nobody can see, which is a dropped edge. So a layout only
+ * counts if every number in it is one a renderer can draw.
+ */
+function placeWithDagre(
+  sized: readonly SizedNode[],
+  prepared: readonly PreparedEdge[],
+): { graph: LayoutGraph; shared: SharedRoutes } {
+  let lastFailure: unknown;
+
+  for (const keying of EDGE_KEYINGS) {
+    const shared = shareRoutes(prepared, keying);
+    const graph = buildGraph(sized, shared);
+
+    try {
+      dagre.layout(graph);
+    } catch (error) {
+      lastFailure = error;
+      continue;
+    }
+
+    if (isWhollyPlaced(graph)) {
+      return { graph, shared };
+    }
+
+    lastFailure = new Error(`Dagre placed part of the graph under ${keying} keying.`);
+  }
+
+  throw new DesignLayoutError(lastFailure);
+}
+
+/** Whether every number dagre put on the graph is one a renderer can draw. */
+function isWhollyPlaced(graph: LayoutGraph): boolean {
+  const placed = graph
+    .nodes()
+    .every((id) => isDrawable(graph.node(id)?.x) && isDrawable(graph.node(id)?.y));
+
+  return (
+    placed &&
+    graph
+      .edges()
+      .every((edge) =>
+        (graph.edge(edge)?.points ?? []).every(
+          (point) => isDrawable(point.x) && isDrawable(point.y),
+        ),
+      )
+  );
+}
+
+/** A coordinate that can be drawn: a real number, not `NaN` and not infinite. */
+function isDrawable(value: number | undefined): boolean {
+  return value !== undefined && Number.isFinite(value);
 }
 
 /**
@@ -202,10 +307,13 @@ function edgeLabelPlate(label: string): EdgeLabelPlate {
  *
  * `multigraph` is not optional here: the schema allows two edges between the
  * same pair of nodes, and a plain graph would keep only the last of them —
- * a dropped edge, which intake 5.2 forbids. Each edge is keyed by its index in
- * the file, which is unique by definition and keeps file order readable back.
+ * a dropped edge, which intake 5.2 forbids. Which edges get an edge of their
+ * own and which share one is `parallelEdges.ts`'s answer, already made; under
+ * the keying dagre is asked for first every edge gets its own, keyed by its
+ * index in the file, which is unique by definition and keeps file order
+ * readable back.
  */
-function buildGraph(sized: readonly SizedNode[], design: Design): LayoutGraph {
+function buildGraph(sized: readonly SizedNode[], shared: SharedRoutes): LayoutGraph {
   const graph = new Graph<GraphLabel, NodeLabel, EdgeLabel>({ multigraph: true });
 
   graph.setGraph({
@@ -221,18 +329,11 @@ function buildGraph(sized: readonly SizedNode[], design: Design): LayoutGraph {
     graph.setNode(node.id, { width: node.width, height: node.height });
   }
 
-  for (const [index, edge] of design.edges.entries()) {
-    graph.setEdge(edge.from, edge.to, labelPlateSize(edge.label), String(index));
+  for (const group of shared.groups) {
+    graph.setEdge(group.from, group.to, labelRoomFor(group.members), group.name);
   }
 
   return graph;
-}
-
-/** The size dagre needs to reserve room for a label, without the lines. */
-function labelPlateSize(label: string): { width: number; height: number } {
-  const { width, height } = edgeLabelPlate(label);
-
-  return { width, height };
 }
 
 /**
@@ -271,19 +372,20 @@ function readPlacedNodes(
  * Dagre gives an edge whose ends it could not route no points at all, which
  * would draw nothing; falling back to a straight line keeps the edge visible.
  * An edge that is not drawn is a dropped edge. See `straightLine` below for
- * why that fallback has never once been taken.
+ * what is known about when that fallback is taken.
+ *
+ * Where several edges shared one dagre edge, they come back here on one route
+ * and one plate, and `parallelEdges.ts` moves them apart again. Where none did
+ * — which is every design dagre lays out on the first ask — it hands back the
+ * route and the centre it was given, so nothing moves.
  */
 function readRoutedEdges(
-  design: Design,
+  prepared: readonly PreparedEdge[],
   graph: LayoutGraph,
   placed: readonly LayoutNode[],
+  shared: SharedRoutes,
 ): readonly LayoutEdge[] {
   const boxes = new Map(placed.map((node) => [node.id, node] as const));
-  const prepared: readonly PreparedEdge[] = design.edges.map((edge, index) => ({
-    edge,
-    index,
-    plate: edgeLabelPlate(edge.label),
-  }));
   const slots = selfLoopSlots(prepared);
 
   return prepared.map(({ edge, index, plate }) => {
@@ -294,16 +396,18 @@ function readRoutedEdges(
       return selfLoop(edge, loopsOn, plate, slot);
     }
 
-    const routed = graph.edge({ v: edge.from, w: edge.to, name: String(index) });
+    const share = shareFor(shared, index);
+    const routed = graph.edge({ v: edge.from, w: edge.to, name: share.name });
     const points = routed?.points ?? [];
-    const centre = labelCentre(routed, points);
+    const whole = points.length >= 2 ? points.map(toPoint) : straightLine(edge, graph);
+    const centre = stackedLabelCentre(labelCentre(routed, points), share);
 
     return {
       from: edge.from,
       to: edge.to,
       label: edge.label,
       labelLines: plate.lines,
-      points: points.length >= 2 ? points.map(toPoint) : straightLine(edge, graph),
+      points: fanOutRoute(whole, share),
       labelBox: {
         x: centre.x - plate.width / 2,
         y: centre.y - plate.height / 2,
@@ -312,6 +416,24 @@ function readRoutedEdges(
       },
     };
   });
+}
+
+/**
+ * Which route an edge was given, and who else is on it.
+ *
+ * The throw is an assertion about this app's own invariant, not a message for
+ * a user: `shareRoutes` is handed the same list this function walks, so it has
+ * an answer for every index in it. A miss would mean the two disagreed about
+ * what the file's edges are.
+ */
+function shareFor(shared: SharedRoutes, index: number): EdgeShare {
+  const share = shared.shares.get(index);
+
+  if (!share) {
+    throw new Error(`No route was keyed for the edge at ${index}.`);
+  }
+
+  return share;
 }
 
 /** Where dagre put the label, or the middle of the route if it put it nowhere. */
@@ -331,25 +453,37 @@ function labelCentre(
 /**
  * The fallback route: centre to centre, so the edge is at least drawn.
  *
- * **Unreachable, and measured rather than assumed (D58).** Dagre ends its own
- * layout with `assignNodeIntersects`, which unconditionally puts the source
- * border's intersection at the front of every edge's points and the target
- * border's at the back — so no edge in the graph comes back with fewer than
- * two, and both ends are already on a border. `buildGraph` puts every edge in
- * the graph keyed by its index in the file, so the lookup above never misses,
- * and `selfLoopSlots` gives every self-edge a slot, so a loop is drawn by
- * `selfLoops.ts` and never read from here. Probing agreed: ten shaped graphs —
- * parallel edges, two-cycles, self-loops, a complete graph, a fifty-node chain
- * — and four hundred fuzzed ones came back with three points at the fewest.
+ * **Not reached by any graph yet found, and measured rather than assumed
+ * (D58, corrected by D98).** D58 called this unreachable on the strength of one
+ * claim: that dagre ends its own layout with `assignNodeIntersects`, which
+ * unconditionally puts the source border's intersection at the front of every
+ * edge's points and the target border's at the back. That claim was wrong, and
+ * the shaped graphs it was measured on — parallel edges, two-cycles, self-loops
+ * among them — missed why. `assignNodeIntersects` is the step that calls
+ * `intersectRect`, and on a graph that carries a two-cycle *and* a parallel
+ * duplicate between the same pair of nodes, dagre 3.1.1 reaches it holding a
+ * dummy node it never gave coordinates to, and the step does not complete.
+ * D58's evidence was ten shaped graphs, each carrying one of those shapes;
+ * this one needs two at once.
+ *
+ * What makes the fallback unreached today is therefore not that
+ * `assignNodeIntersects` always finishes, but that `placeWithDagre` never reads
+ * a graph where it did not: a layout that threw, or that came back holding a
+ * coordinate no renderer can draw, is discarded and asked for again under
+ * another keying rather than handed on to this function. On every layout that
+ * does get read — the repro above, and the 2500 fuzzed multigraphs in
+ * `layout.test.ts` — dagre returned three points at the fewest.
  *
  * It is kept rather than deleted because it guards against a change in a
- * library this module does not own. If dagre ever did hand back nothing, the
- * alternative is a path with an empty `d`, which is an edge the reader cannot
- * see at all; a line between two centres is visibly wrong instead, and visibly
- * wrong is the failure worth having. Being unreachable is also why it is still
- * centre to centre while every other route in this file runs border to border:
- * a correction here could not be tested, and an untested correction to code
- * nothing can reach is worth less than the note explaining it.
+ * library this module does not own, and D98 is the second time that library has
+ * done something its documentation did not say it would. If dagre ever did hand
+ * back nothing, the alternative is a path with an empty `d`, which is an edge
+ * the reader cannot see at all; a line between two centres is visibly wrong
+ * instead, and visibly wrong is the failure worth having. Being unreached is
+ * also why it is still centre to centre while every other route in this file
+ * runs border to border: a correction here could not be tested, and an untested
+ * correction to code nothing can reach is worth less than the note explaining
+ * it.
  */
 function straightLine(
   edge: { readonly from: string; readonly to: string },
