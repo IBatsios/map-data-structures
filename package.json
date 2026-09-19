@@ -13,6 +13,7 @@
     "astro": "astro",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "schema": "bun scripts/publishSchema.ts",
     "check": "astro check",
     "prepare": "husky"
   },

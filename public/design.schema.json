@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "required": ["id", "label", "type"]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "required": ["from", "to", "label"]
+      }
+    }
+  },
+  "required": ["title", "nodes", "edges"]
+}

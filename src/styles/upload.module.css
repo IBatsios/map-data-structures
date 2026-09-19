@@ -1,31 +1,37 @@
 /*
- * The upload area: the file input, the border that tells a user the page will
- * take a dropped file, and the panel that says why a file did not draw.
+ * The upload area: the three ways a design gets onto this page, and the panel
+ * that says why one did not draw.
  *
- * Deliberately plain. Task 03 styles the drawing and Task 09 the schema page;
- * all this needs to do is make a drop target look like one. A dashed edge is
- * the convention for "you may drop here", and the dragging state changes the
- * border's *style* as well as its colour, so the cue does not depend on being
- * able to tell the two colours apart.
+ * It was deliberately plain until now, waiting on the page-level decision Task
+ * 09 takes once for both screens. That decision has landed in
+ * `page.module.css`, so this file stops declaring its own greys and borrows the
+ * page's — `--page-rule`, `--page-quiet` and the rest inherit down to here.
+ * What it still owns is the drop target and the panel, which are this screen's
+ * and nothing else's.
+ *
+ * A dashed edge is the convention for "you may drop here", and the dragging
+ * state changes the border's *style* as well as its colour, so the cue does not
+ * depend on being able to tell two colours apart.
  *
  * The panel follows the drawing's direction (see `drawing.module.css`): a
  * technical page, quiet, where colour means something rather than decorates.
  * It is one red, used for one thing — this file did not draw — carried by a
  * rule down its left edge that ties the list back to the control above it.
  * `upload.module.test.ts` measures its text against both its own surface and
- * the bare page, because a message nobody can read is not a message.
+ * the page behind it, because a message nobody can read is not a message.
  */
 
 .dropZone {
   max-width: 44rem;
   padding: 1rem 1.25rem;
-  border: 2px dashed;
-  border-radius: 8px;
+  border: 2px dashed var(--page-rule);
+  border-radius: 10px;
 }
 
 .dropZone[data-dragging='true'] {
   border-style: solid;
-  background-color: rgb(0 0 0 / 6%);
+  border-color: var(--page-quiet);
+  background-color: rgb(0 0 0 / 4%);
 }
 
 .field {
@@ -38,7 +44,77 @@
 
 .hint {
   margin: 0.5rem 0 0;
+  color: var(--page-quiet);
   font-size: 0.9375rem;
+}
+
+/*
+ * The third way in, under a hairline: the design the site itself ships. It is
+ * separated from the two ways a user brings their own file because it is a
+ * different kind of offer — nothing of theirs is involved — and it is inside
+ * the drop zone rather than beside it because every way to get a design on
+ * screen belongs in one place.
+ */
+.sample {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--page-rule);
+}
+
+/*
+ * Quieter than the export row on purpose: it is a convenience, not the thing
+ * the page is for. Still a real button with a real hit area — 2.25rem plus the
+ * page's line height clears 40px — and still answering a pointer and a
+ * keyboard, because a control that does nothing when touched reads as broken.
+ */
+.sampleAction {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.875rem;
+  border: 1px solid var(--page-rule);
+  border-radius: 7px;
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition-property: background-color, border-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.sampleAction:hover {
+  border-color: var(--page-quiet);
+  background-color: rgb(0 0 0 / 4%);
+}
+
+.sampleAction:active {
+  background-color: rgb(0 0 0 / 8%);
+  transform: translateY(1px);
+}
+
+.sampleNote {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: var(--page-quiet);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sampleAction {
+    transition-duration: 0ms;
+  }
+
+  .sampleAction:active {
+    transform: none;
+  }
 }
 
 /*

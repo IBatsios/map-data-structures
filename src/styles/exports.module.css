@@ -9,13 +9,15 @@
  * is a heading for everybody now, and `aria-labelledby` points at the same
  * words rather than a second copy of them hidden in an attribute.
  *
- * It still declares no colour of its own, on purpose. The page around it is
- * unstyled — Task 09 adds the second page and makes that decision once, for
- * both — so the button borrows the page's own text colour through
- * `currentColor` and its type through `font: inherit`. Whatever contrast the
- * page has, the button has; there is no new colour here for a test to measure
- * or for Task 09 to have to undo. The two tints below are alpha over whatever
- * is behind them rather than a hue of their own, for the same reason.
+ * It still declares no colour of its own, on purpose. It borrows the page's
+ * text colour through `currentColor`, the page's hairline through
+ * `--page-rule`, and its type through `font: inherit`; whatever contrast the
+ * page has, the button has, and there is no new colour here for a test to
+ * measure. That was written when the page around it was unstyled and Task 09
+ * had still to decide; the page has colours now, in `page.module.css`, and
+ * nothing here had to be undone to meet them. The two tints below are alpha
+ * over whatever is behind them rather than a hue of their own, for the same
+ * reason.
  *
  * What it does spend room on is the parts a keyboard and a mouse notice: a
  * focus ring visible against any background, a hover that answers the pointer,
@@ -34,11 +36,11 @@
  */
 .label {
   margin: 0 0 0.5rem;
+  color: var(--page-quiet);
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.7;
 }
 
 /*
@@ -67,7 +69,7 @@
   min-height: 2.5rem;
   padding: 0.55rem 1rem;
   border: 1px solid currentColor;
-  border-radius: 6px;
+  border-radius: 7px;
   background-color: transparent;
   font: inherit;
   font-weight: 600;

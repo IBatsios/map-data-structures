@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 02, 04.
 
-**Status:** ready
+**Status:** done
 
 ## Steps, a vertical slice in this order
 
@@ -18,12 +18,12 @@
 
 ## Acceptance criteria
 
-- [ ] As a user, I can read the JSON schema and a sample file: demonstrated end to end.
-- [ ] The sample uploads without errors and renders a drawing with every node and edge visible (14.1).
-- [ ] Tests cover the behavior, as a user would observe it, and pass.
-- [ ] Every earlier test still passes; CI is green.
-- [ ] Best-effort accessibility: the schema page reads in order with headings, and the copy button is labeled.
-- [ ] Any new environment variable is in `.env.example` with a placeholder.
+- [x] As a user, I can read the JSON schema and a sample file: demonstrated end to end.
+- [x] The sample uploads without errors and renders a drawing with every node and edge visible (14.1).
+- [x] Tests cover the behavior, as a user would observe it, and pass.
+- [x] Every earlier test still passes; CI is green.
+- [x] Best-effort accessibility: the schema page reads in order with headings, and the copy button is labeled.
+- [x] Any new environment variable is in `.env.example` with a placeholder.
 
 ## Suggested skills
 

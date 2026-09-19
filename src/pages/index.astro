@@ -1,490 +1,557 @@
 ---
+import PageLayout from '../layouts/PageLayout.astro';
+import { SAMPLE_FILE_NAME } from '../lib/sampleDesign';
 import drawingStyles from '../styles/drawing.module.css';
 import exportStyles from '../styles/exports.module.css';
 import styles from '../styles/upload.module.css';
-
-const pageTitle = 'MapDataStructures';
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>{pageTitle}</title>
-  </head>
-  <body>
-    <main>
-      <h1>{pageTitle}</h1>
-      <p>
-        Choose a JSON file that describes a system and its drawing appears below. The file
-        is read in your browser and is never sent anywhere.
+<PageLayout
+  title="MapDataStructures"
+  description="Choose a JSON file that describes a system and get an architectural drawing back, in your browser. Export it as Markdown, HTML, PDF or Word."
+  current="upload"
+>
+  <h1>Draw a design from JSON</h1>
+  <p>
+    Choose a JSON file that describes a system and its drawing appears below. Your file is
+    read in your browser and is never sent anywhere.
+  </p>
+
+  <div id="drop-zone" class={styles.dropZone} data-dragging="false">
+    <p class={styles.field}>
+      <label for="design-file">Design JSON file</label>
+      <input
+        id="design-file"
+        type="file"
+        accept="application/json,.json"
+        aria-describedby="drop-hint"
+      />
+    </p>
+    <p id="drop-hint" class={styles.hint}>
+      Or drag a JSON file onto this page from anywhere on your desktop.
+    </p>
+
+    {/*
+     * A button rather than a link, because it does not go anywhere: it loads
+     * a design into this page. A link that does not navigate is a promise
+     * broken for anyone who is told it is a link, and the sample's own URL is
+     * offered honestly as a link on the schema page instead.
+     */}
+    <div class={styles.sample}>
+      <button
+        id="load-sample"
+        class={styles.sampleAction}
+        type="button"
+        aria-describedby="load-sample-note"
+      >
+        Load the sample design
+      </button>
+      <p class={styles.sampleNote} id="load-sample-note">
+        <code>{SAMPLE_FILE_NAME}</code> ships with the site and uses every kind of node.{' '}
+        <a href="/schema">The design format</a> explains every field of it.
       </p>
+    </div>
+  </div>
 
-      <div id="drop-zone" class={styles.dropZone} data-dragging="false">
-        <p class={styles.field}>
-          <label for="design-file">Design JSON file</label>
-          <input
-            id="design-file"
-            type="file"
-            accept="application/json,.json"
-            aria-describedby="drop-hint"
-          />
-        </p>
-        <p id="drop-hint" class={styles.hint}>
-          Or drag a JSON file onto this page from anywhere on your desktop.
-        </p>
-      </div>
+  {/*
+   * Both regions are in the page from the first paint and both start
+   * empty, because a live region announces changes to itself and not its
+   * own arrival: a panel created on failure may say nothing at all.
+   *
+   * They take turns rather than talk over each other. A good file fills
+   * the status line and empties the panel; a bad one fills the panel and
+   * empties the status line, so a success sentence is never left sitting
+   * above a list of errors. Both are polite `role="status"`, not
+   * `role="alert"`: the user asked for this by choosing a file, and the
+   * answer is worth waiting a beat for rather than interrupting whatever
+   * they were being told.
+   */}
+  <div
+    id="upload-problems"
+    class={styles.problems}
+    role="status"
+    data-state="empty"
+  ></div>
 
-      {/*
-       * Both regions are in the page from the first paint and both start
-       * empty, because a live region announces changes to itself and not its
-       * own arrival: a panel created on failure may say nothing at all.
-       *
-       * They take turns rather than talk over each other. A good file fills
-       * the status line and empties the panel; a bad one fills the panel and
-       * empties the status line, so a success sentence is never left sitting
-       * above a list of errors. Both are polite `role="status"`, not
-       * `role="alert"`: the user asked for this by choosing a file, and the
-       * answer is worth waiting a beat for rather than interrupting whatever
-       * they were being told.
-       */}
-      <div
-        id="upload-problems"
-        class={styles.problems}
-        role="status"
-        data-state="empty"
-      ></div>
+  <p id="upload-status" role="status"></p>
 
-      <p id="upload-status" role="status"></p>
+  {/*
+   * Disabled until a design is drawn, and disabled again the moment one
+   * fails, because there is nothing to export in either case and a button
+   * that downloads the file before last is worse than one that waits. It
+   * is in the page from the first paint rather than appearing with the
+   * drawing, so the page does not rearrange itself under a reader who is
+   * part-way down it.
+   *
+   * The row is a named group because controls that do the same thing in
+   * different formats read as a set, and a screen reader says the name as
+   * focus enters it, so "Export Markdown" is heard as one of the export
+   * controls rather than as a loose button somewhere on the page.
+   * `role="group"` with a label rather than a `<fieldset>`/`<legend>`:
+   * these are actions, not fields of a form, and a fieldset brings default
+   * borders and padding that Task 09 would have to undo.
+   *
+   * The name is visible now rather than only in an attribute, which is
+   * what a fourth button bought: three buttons read as three buttons, four
+   * of different widths read as a pile. `aria-labelledby` points at the
+   * words on the page so there is one name rather than two copies of it
+   * that can disagree.
+   */}
+  <div class={exportStyles.exports} role="group" aria-labelledby="export-heading">
+    <p id="export-heading" class={exportStyles.label}>
+      Export the design
+    </p>
+    <div class={exportStyles.actions}>
+      <button id="export-markdown" class={exportStyles.action} type="button" disabled>
+        Export Markdown
+      </button>
+      <button id="export-html" class={exportStyles.action} type="button" disabled>
+        Export HTML
+      </button>
+      <button id="export-pdf" class={exportStyles.action} type="button" disabled>
+        Export PDF
+      </button>
+      <button id="export-word" class={exportStyles.action} type="button" disabled>
+        Export Word
+      </button>
+    </div>
+  </div>
 
-      {/*
-       * Disabled until a design is drawn, and disabled again the moment one
-       * fails, because there is nothing to export in either case and a button
-       * that downloads the file before last is worse than one that waits. It
-       * is in the page from the first paint rather than appearing with the
-       * drawing, so the page does not rearrange itself under a reader who is
-       * part-way down it.
-       *
-       * The row is a named group because controls that do the same thing in
-       * different formats read as a set, and a screen reader says the name as
-       * focus enters it, so "Export Markdown" is heard as one of the export
-       * controls rather than as a loose button somewhere on the page.
-       * `role="group"` with a label rather than a `<fieldset>`/`<legend>`:
-       * these are actions, not fields of a form, and a fieldset brings default
-       * borders and padding that Task 09 would have to undo.
-       *
-       * The name is visible now rather than only in an attribute, which is
-       * what a fourth button bought: three buttons read as three buttons, four
-       * of different widths read as a pile. `aria-labelledby` points at the
-       * words on the page so there is one name rather than two copies of it
-       * that can disagree.
-       */}
-      <div class={exportStyles.exports} role="group" aria-labelledby="export-heading">
-        <p id="export-heading" class={exportStyles.label}>
-          Export the design
-        </p>
-        <div class={exportStyles.actions}>
-          <button id="export-markdown" class={exportStyles.action} type="button" disabled>
-            Export Markdown
-          </button>
-          <button id="export-html" class={exportStyles.action} type="button" disabled>
-            Export HTML
-          </button>
-          <button id="export-pdf" class={exportStyles.action} type="button" disabled>
-            Export PDF
-          </button>
-          <button id="export-word" class={exportStyles.action} type="button" disabled>
-            Export Word
-          </button>
-        </div>
-      </div>
+  <div id="drawing" class={drawingStyles.drawing}></div>
 
-      <div id="drawing" class={drawingStyles.drawing}></div>
-    </main>
+  <script>
+    import type { LoadErrorReport } from '../lib/describeLoadError';
+    import { describeLoadError, describeUnsupportedFile } from '../lib/describeLoadError';
+    import { describeUpload } from '../lib/describeUpload';
+    import { downloadBlob, fileNameFor } from '../lib/download';
+    import { describeMarkedControls } from '../lib/docxPlan';
+    import { describeUndrawable } from '../lib/drawableText';
+    import { looksLikeJsonFile } from '../lib/jsonFile';
+    import type { DesignLayout } from '../lib/layout';
+    import { layoutDesign } from '../lib/layout';
+    import { loadDesign } from '../lib/loadDesign';
+    import { renderDrawing } from '../lib/renderDrawing';
+    import { renderProblems } from '../lib/renderProblems';
+    import { SAMPLE_FILE_NAME, SAMPLE_URL } from '../lib/sampleDesign';
+    import { toHtml } from '../lib/toHtml';
+    import { toMarkdown } from '../lib/toMarkdown';
+    import { toDocx } from '../lib/toDocx';
+    import { toPdf } from '../lib/toPdf';
 
-    <script>
-      import type { LoadErrorReport } from '../lib/describeLoadError';
-      import {
-        describeLoadError,
-        describeUnsupportedFile,
-      } from '../lib/describeLoadError';
-      import { describeUpload } from '../lib/describeUpload';
-      import { downloadBlob, fileNameFor } from '../lib/download';
-      import { describeMarkedControls } from '../lib/docxPlan';
-      import { describeUndrawable } from '../lib/drawableText';
-      import { looksLikeJsonFile } from '../lib/jsonFile';
-      import type { DesignLayout } from '../lib/layout';
-      import { layoutDesign } from '../lib/layout';
-      import { loadDesign } from '../lib/loadDesign';
-      import { renderDrawing } from '../lib/renderDrawing';
-      import { renderProblems } from '../lib/renderProblems';
-      import { toHtml } from '../lib/toHtml';
-      import { toMarkdown } from '../lib/toMarkdown';
-      import { toDocx } from '../lib/toDocx';
-      import { toPdf } from '../lib/toPdf';
+    /** What a `.md` file is, for the browser that is about to save one. */
+    const MARKDOWN_MEDIA_TYPE = 'text/markdown;charset=utf-8';
 
-      /** What a `.md` file is, for the browser that is about to save one. */
-      const MARKDOWN_MEDIA_TYPE = 'text/markdown;charset=utf-8';
+    /** The same, for the standalone page the HTML export downloads. */
+    const HTML_MEDIA_TYPE = 'text/html;charset=utf-8';
 
-      /** The same, for the standalone page the HTML export downloads. */
-      const HTML_MEDIA_TYPE = 'text/html;charset=utf-8';
+    /** Said in the status region if an export ever fails to build. */
+    const EXPORT_FAILED =
+      'Sorry — that design could not be exported. Choose the file again, and if it keeps happening the design is one this app cannot write out.';
 
-      /** Said in the status region if an export ever fails to build. */
-      const EXPORT_FAILED =
-        'Sorry — that design could not be exported. Choose the file again, and if it keeps happening the design is one this app cannot write out.';
+    /**
+     * One built export, and anything the page should say about it.
+     *
+     * Two of the four have something to say, for different reasons. The
+     * PDF's font cannot draw every script, so a character it has no glyph
+     * for is marked in the file. The Word file names a font rather than
+     * carrying one, so glyphs are not its problem — but a `.docx` is XML,
+     * and a control character in a label is one Word refuses to open the
+     * file over, so those are marked instead. Either way the person who
+     * exported it is told how many and which formats still carry them. The
+     * two text formats hand back `null` and the page stays quiet, because
+     * announcing a finished download is a separate live-region question
+     * parked for all four exports at once (D41).
+     */
+    interface ExportedFile {
+      readonly blob: Blob;
+      readonly note: string | null;
+    }
 
-      /**
-       * One built export, and anything the page should say about it.
-       *
-       * Two of the four have something to say, for different reasons. The
-       * PDF's font cannot draw every script, so a character it has no glyph
-       * for is marked in the file. The Word file names a font rather than
-       * carrying one, so glyphs are not its problem — but a `.docx` is XML,
-       * and a control character in a label is one Word refuses to open the
-       * file over, so those are marked instead. Either way the person who
-       * exported it is told how many and which formats still carry them. The
-       * two text formats hand back `null` and the page stays quiet, because
-       * announcing a finished download is a separate live-region question
-       * parked for all four exports at once (D41).
-       */
-      interface ExportedFile {
-        readonly blob: Blob;
-        readonly note: string | null;
+    interface PageElements {
+      readonly fileInput: HTMLInputElement;
+      readonly loadSample: HTMLButtonElement;
+      readonly dropZone: HTMLElement;
+      readonly status: HTMLElement;
+      readonly problems: HTMLElement;
+      readonly drawing: HTMLElement;
+      readonly exportMarkdown: HTMLButtonElement;
+      readonly exportHtml: HTMLButtonElement;
+      readonly exportPdf: HTMLButtonElement;
+      readonly exportWord: HTMLButtonElement;
+    }
+
+    /**
+     * The drawing currently on screen, or `null` when there is none.
+     *
+     * The page held nothing before this: it computed design → layout → SVG
+     * and let both go. The export needs the design that is on screen, and it
+     * needs it to be *that* one — so this is set when a drawing appears and
+     * cleared when a file fails, which is what stops the button quietly
+     * exporting the previous design while an error panel is showing.
+     *
+     * It holds the layout rather than the design because the layout is what
+     * the preview was drawn from and what `toMarkdown` reads, so the file and
+     * the picture cannot come from two different places.
+     */
+    let drawn: DesignLayout | null = null;
+
+    /**
+     * Choose a file or drop one on the page, read it here in the browser, say
+     * what it holds, draw it, and export it.
+     *
+     * Nothing with logic in it lives in this script. Validating is
+     * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
+     * `renderDrawing`'s, counting is `describeUpload`'s, writing the `.md` is
+     * `toMarkdown`'s, writing the `.html` is `toHtml`'s, writing the `.pdf`
+     * is `toPdf`'s, writing the `.docx` is `toDocx`'s, naming and saving any
+     * of them is `download`'s, and every
+     * sentence about a file that failed is `describeLoadError`'s — all in
+     * `src/lib`, all tested. What is
+     * left here is wiring: find the elements, listen, and put the result in
+     * the right place. The one piece of state it keeps is `drawn`, above.
+     */
+    function startUploadPage(): void {
+      const elements = findPageElements();
+
+      elements.fileInput.addEventListener('change', () => {
+        void showFile(elements.fileInput.files?.[0], elements);
+      });
+
+      elements.loadSample.addEventListener('click', () => {
+        void showSample(elements);
+      });
+
+      elements.exportMarkdown.addEventListener('click', () => {
+        void exportDesign(elements, 'md', (layout) => ({
+          blob: new Blob([toMarkdown(layout)], { type: MARKDOWN_MEDIA_TYPE }),
+          note: null,
+        }));
+      });
+
+      elements.exportHtml.addEventListener('click', () => {
+        void exportDesign(elements, 'html', (layout) => ({
+          blob: new Blob([toHtml(layout, document)], { type: HTML_MEDIA_TYPE }),
+          note: null,
+        }));
+      });
+
+      elements.exportPdf.addEventListener('click', () => {
+        void exportDesign(elements, 'pdf', async (layout) => {
+          const exported = await toPdf(layout, document);
+
+          return { blob: exported.blob, note: describeUndrawable(exported.undrawable) };
+        });
+      });
+
+      elements.exportWord.addEventListener('click', () => {
+        void exportDesign(elements, 'docx', async (layout) => {
+          const exported = await toDocx(layout, document);
+
+          return { blob: exported.blob, note: describeMarkedControls(exported.marked) };
+        });
+      });
+
+      watchForDroppedFiles(elements);
+    }
+
+    function findPageElements(): PageElements {
+      const fileInput = document.querySelector('#design-file');
+      const loadSample = document.querySelector('#load-sample');
+      const dropZone = document.querySelector('#drop-zone');
+      const status = document.querySelector('#upload-status');
+      const problems = document.querySelector('#upload-problems');
+      const drawing = document.querySelector('#drawing');
+      const exportMarkdown = document.querySelector('#export-markdown');
+      const exportHtml = document.querySelector('#export-html');
+      const exportPdf = document.querySelector('#export-pdf');
+      const exportWord = document.querySelector('#export-word');
+
+      if (
+        !(fileInput instanceof HTMLInputElement) ||
+        !(loadSample instanceof HTMLButtonElement) ||
+        !(dropZone instanceof HTMLElement) ||
+        !(status instanceof HTMLElement) ||
+        !(problems instanceof HTMLElement) ||
+        !(drawing instanceof HTMLElement) ||
+        !(exportMarkdown instanceof HTMLButtonElement) ||
+        !(exportHtml instanceof HTMLButtonElement) ||
+        !(exportPdf instanceof HTMLButtonElement) ||
+        !(exportWord instanceof HTMLButtonElement)
+      ) {
+        throw new Error('The upload page is missing one of its elements.');
       }
 
-      interface PageElements {
-        readonly fileInput: HTMLInputElement;
-        readonly dropZone: HTMLElement;
-        readonly status: HTMLElement;
-        readonly problems: HTMLElement;
-        readonly drawing: HTMLElement;
-        readonly exportMarkdown: HTMLButtonElement;
-        readonly exportHtml: HTMLButtonElement;
-        readonly exportPdf: HTMLButtonElement;
-        readonly exportWord: HTMLButtonElement;
-      }
+      return {
+        fileInput,
+        loadSample,
+        dropZone,
+        status,
+        problems,
+        drawing,
+        exportMarkdown,
+        exportHtml,
+        exportPdf,
+        exportWord,
+      };
+    }
 
-      /**
-       * The drawing currently on screen, or `null` when there is none.
-       *
-       * The page held nothing before this: it computed design → layout → SVG
-       * and let both go. The export needs the design that is on screen, and it
-       * needs it to be *that* one — so this is set when a drawing appears and
-       * cleared when a file fails, which is what stops the button quietly
-       * exporting the previous design while an error panel is showing.
-       *
-       * It holds the layout rather than the design because the layout is what
-       * the preview was drawn from and what `toMarkdown` reads, so the file and
-       * the picture cannot come from two different places.
-       */
-      let drawn: DesignLayout | null = null;
-
-      /**
-       * Choose a file or drop one on the page, read it here in the browser, say
-       * what it holds, draw it, and export it.
-       *
-       * Nothing with logic in it lives in this script. Validating is
-       * `loadDesign`'s, placing is `layoutDesign`'s, drawing is
-       * `renderDrawing`'s, counting is `describeUpload`'s, writing the `.md` is
-       * `toMarkdown`'s, writing the `.html` is `toHtml`'s, writing the `.pdf`
-       * is `toPdf`'s, writing the `.docx` is `toDocx`'s, naming and saving any
-       * of them is `download`'s, and every
-       * sentence about a file that failed is `describeLoadError`'s — all in
-       * `src/lib`, all tested. What is
-       * left here is wiring: find the elements, listen, and put the result in
-       * the right place. The one piece of state it keeps is `drawn`, above.
-       */
-      function startUploadPage(): void {
-        const elements = findPageElements();
-
-        elements.fileInput.addEventListener('change', () => {
-          void showFile(elements.fileInput.files?.[0], elements);
-        });
-
-        elements.exportMarkdown.addEventListener('click', () => {
-          void exportDesign(elements, 'md', (layout) => ({
-            blob: new Blob([toMarkdown(layout)], { type: MARKDOWN_MEDIA_TYPE }),
-            note: null,
-          }));
-        });
-
-        elements.exportHtml.addEventListener('click', () => {
-          void exportDesign(elements, 'html', (layout) => ({
-            blob: new Blob([toHtml(layout, document)], { type: HTML_MEDIA_TYPE }),
-            note: null,
-          }));
-        });
-
-        elements.exportPdf.addEventListener('click', () => {
-          void exportDesign(elements, 'pdf', async (layout) => {
-            const exported = await toPdf(layout, document);
-
-            return { blob: exported.blob, note: describeUndrawable(exported.undrawable) };
-          });
-        });
-
-        elements.exportWord.addEventListener('click', () => {
-          void exportDesign(elements, 'docx', async (layout) => {
-            const exported = await toDocx(layout, document);
-
-            return { blob: exported.blob, note: describeMarkedControls(exported.marked) };
-          });
-        });
-
-        watchForDroppedFiles(elements);
-      }
-
-      function findPageElements(): PageElements {
-        const fileInput = document.querySelector('#design-file');
-        const dropZone = document.querySelector('#drop-zone');
-        const status = document.querySelector('#upload-status');
-        const problems = document.querySelector('#upload-problems');
-        const drawing = document.querySelector('#drawing');
-        const exportMarkdown = document.querySelector('#export-markdown');
-        const exportHtml = document.querySelector('#export-html');
-        const exportPdf = document.querySelector('#export-pdf');
-        const exportWord = document.querySelector('#export-word');
-
-        if (
-          !(fileInput instanceof HTMLInputElement) ||
-          !(dropZone instanceof HTMLElement) ||
-          !(status instanceof HTMLElement) ||
-          !(problems instanceof HTMLElement) ||
-          !(drawing instanceof HTMLElement) ||
-          !(exportMarkdown instanceof HTMLButtonElement) ||
-          !(exportHtml instanceof HTMLButtonElement) ||
-          !(exportPdf instanceof HTMLButtonElement) ||
-          !(exportWord instanceof HTMLButtonElement)
-        ) {
-          throw new Error('The upload page is missing one of its elements.');
+    /**
+     * Drag-and-drop, as an addition to the file input and never as a
+     * replacement for it: the input stays the keyboard's way in.
+     *
+     * Both `dragover` and `drop` must have their default prevented. A browser
+     * whose default runs navigates away to the dropped file, which throws the
+     * page away and, with it, the promise that the file never leaves here.
+     */
+    function watchForDroppedFiles(elements: PageElements): void {
+      document.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'copy';
         }
+        setDragging(elements, true);
+      });
 
-        return {
-          fileInput,
-          dropZone,
-          status,
-          problems,
-          drawing,
-          exportMarkdown,
-          exportHtml,
-          exportPdf,
-          exportWord,
-        };
-      }
-
-      /**
-       * Drag-and-drop, as an addition to the file input and never as a
-       * replacement for it: the input stays the keyboard's way in.
-       *
-       * Both `dragover` and `drop` must have their default prevented. A browser
-       * whose default runs navigates away to the dropped file, which throws the
-       * page away and, with it, the promise that the file never leaves here.
-       */
-      function watchForDroppedFiles(elements: PageElements): void {
-        document.addEventListener('dragover', (event) => {
-          event.preventDefault();
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = 'copy';
-          }
-          setDragging(elements, true);
-        });
-
-        // A `dragleave` with nothing behind it is the pointer leaving the
-        // window; every other one is it crossing between elements inside it.
-        document.addEventListener('dragleave', (event) => {
-          if (event.relatedTarget === null) {
-            setDragging(elements, false);
-          }
-        });
-
-        document.addEventListener('drop', (event) => {
-          event.preventDefault();
+      // A `dragleave` with nothing behind it is the pointer leaving the
+      // window; every other one is it crossing between elements inside it.
+      document.addEventListener('dragleave', (event) => {
+        if (event.relatedTarget === null) {
           setDragging(elements, false);
-          void showFile(event.dataTransfer?.files?.[0], elements);
-        });
+        }
+      });
+
+      document.addEventListener('drop', (event) => {
+        event.preventDefault();
+        setDragging(elements, false);
+        void showFile(event.dataTransfer?.files?.[0], elements);
+      });
+    }
+
+    /** Marks the drop zone, and only when the state actually changed. */
+    function setDragging(elements: PageElements, isDragging: boolean): void {
+      const value = String(isDragging);
+
+      if (elements.dropZone.dataset.dragging !== value) {
+        elements.dropZone.dataset.dragging = value;
+      }
+    }
+
+    async function showFile(
+      file: File | undefined,
+      elements: PageElements,
+    ): Promise<void> {
+      if (!file) {
+        return;
       }
 
-      /** Marks the drop zone, and only when the state actually changed. */
-      function setDragging(elements: PageElements, isDragging: boolean): void {
-        const value = String(isDragging);
-
-        if (elements.dropZone.dataset.dragging !== value) {
-          elements.dropZone.dataset.dragging = value;
-        }
+      try {
+        await drawOrExplain(file, elements);
+      } finally {
+        forgetChosenFile(elements);
       }
+    }
 
-      async function showFile(
-        file: File | undefined,
-        elements: PageElements,
-      ): Promise<void> {
-        if (!file) {
-          return;
-        }
+    /**
+     * The sample design the site ships, drawn as though it had been chosen.
+     *
+     * It is the first design this page reads from anywhere but a `File`, and
+     * three things about it are deliberate.
+     *
+     * It goes through `loadDesign` like everything else. A sample that
+     * skipped validation could ship broken and still draw, and a sample that
+     * fails validation is a bug this page should say out loud rather than
+     * route around — so it takes the same path, and an unexpected failure
+     * ends up in the same panel with the same sentences.
+     *
+     * It does not go through `looksLikeJsonFile`. That check exists because
+     * a file *dropped* on the page never met the input's `accept` (D40); an
+     * asset this site itself ships is not that case, and running it through
+     * for symmetry's sake would be checking the app's own file name against
+     * the app's own rule.
+     *
+     * It is an ordinary success. The status line names `sample.json` exactly
+     * as it names a chosen file, the panel is emptied, and nothing new is
+     * announced — whether a finished download should speak is a separate
+     * question parked for all four exports at once (D41).
+     */
+    async function showSample(elements: PageElements): Promise<void> {
+      let fileText = '';
 
-        try {
-          await drawOrExplain(file, elements);
-        } finally {
-          forgetChosenFile(elements);
-        }
-      }
+      try {
+        const response = await fetch(SAMPLE_URL);
 
-      /**
-       * One file, one outcome: the drawing, or the reason there isn't one.
-       *
-       * The kind check comes before the read so a file that is plainly not JSON
-       * — a picture dropped on the page, which the input's `accept` never sees
-       * — is answered without its bytes ever going near `JSON.parse`. The text
-       * is kept because a syntax error's position points into it, and it is
-       * read inside the `try` so that a file that vanished between the pick and
-       * the read is explained rather than swallowed.
-       */
-      async function drawOrExplain(file: File, elements: PageElements): Promise<void> {
-        if (!looksLikeJsonFile(file.name, file.type)) {
-          showProblems(elements, describeUnsupportedFile(file.name));
-          return;
-        }
-
-        let fileText = '';
-
-        try {
-          fileText = await file.text();
-          showDrawing(elements, file.name, fileText);
-        } catch (error) {
-          showProblems(
-            elements,
-            describeLoadError({ error, fileName: file.name, fileText }),
+        // A same-origin asset that 404s means the site was built wrong, and
+        // `fetch` would hand back the 404 page's text rather than throwing —
+        // which would reach `JSON.parse` and be reported as a syntax error in
+        // a file the user never wrote. Checked here so the message is true.
+        if (!response.ok) {
+          throw new Error(
+            `This site answered ${response.status} for its own sample file.`,
           );
         }
+
+        fileText = await response.text();
+        showDrawing(elements, SAMPLE_FILE_NAME, fileText);
+      } catch (error) {
+        showProblems(
+          elements,
+          describeLoadError({ error, fileName: SAMPLE_FILE_NAME, fileText }),
+        );
+      }
+    }
+
+    /**
+     * One file, one outcome: the drawing, or the reason there isn't one.
+     *
+     * The kind check comes before the read so a file that is plainly not JSON
+     * — a picture dropped on the page, which the input's `accept` never sees
+     * — is answered without its bytes ever going near `JSON.parse`. The text
+     * is kept because a syntax error's position points into it, and it is
+     * read inside the `try` so that a file that vanished between the pick and
+     * the read is explained rather than swallowed.
+     */
+    async function drawOrExplain(file: File, elements: PageElements): Promise<void> {
+      if (!looksLikeJsonFile(file.name, file.type)) {
+        showProblems(elements, describeUnsupportedFile(file.name));
+        return;
       }
 
-      /**
-       * A good file: the drawing, the count, and the panel emptied.
-       *
-       * Everything that can throw is done before anything on the page changes,
-       * so a file that fails halfway never leaves the page half-updated — the
-       * caller catches it and the panel explains it instead.
-       */
-      function showDrawing(
-        elements: PageElements,
-        fileName: string,
-        fileText: string,
-      ): void {
-        const design = loadDesign(fileText);
-        const layout = layoutDesign(design);
-        const drawing = renderDrawing(layout, document);
-        const description = describeUpload(fileName, design);
+      let fileText = '';
 
-        elements.problems.dataset.state = 'empty';
-        elements.problems.replaceChildren();
-        elements.drawing.replaceChildren(drawing);
-        elements.status.textContent = description;
-        holdDrawing(elements, layout);
+      try {
+        fileText = await file.text();
+        showDrawing(elements, file.name, fileText);
+      } catch (error) {
+        showProblems(
+          elements,
+          describeLoadError({ error, fileName: file.name, fileText }),
+        );
+      }
+    }
+
+    /**
+     * A good file: the drawing, the count, and the panel emptied.
+     *
+     * Everything that can throw is done before anything on the page changes,
+     * so a file that fails halfway never leaves the page half-updated — the
+     * caller catches it and the panel explains it instead.
+     */
+    function showDrawing(
+      elements: PageElements,
+      fileName: string,
+      fileText: string,
+    ): void {
+      const design = loadDesign(fileText);
+      const layout = layoutDesign(design);
+      const drawing = renderDrawing(layout, document);
+      const description = describeUpload(fileName, design);
+
+      elements.problems.dataset.state = 'empty';
+      elements.problems.replaceChildren();
+      elements.drawing.replaceChildren(drawing);
+      elements.status.textContent = description;
+      holdDrawing(elements, layout);
+    }
+
+    /**
+     * A bad file: the messages, and nothing left behind that described the
+     * last one. The status line is cleared rather than left saying a drawing
+     * is below, because there is no longer a drawing and because two live
+     * regions changing at once talk over each other.
+     */
+    function showProblems(elements: PageElements, report: LoadErrorReport): void {
+      elements.status.textContent = '';
+      elements.drawing.replaceChildren();
+      elements.problems.dataset.state = 'problems';
+      elements.problems.replaceChildren(...renderProblems(report, document));
+      holdDrawing(elements, null);
+    }
+
+    /**
+     * Remembers the drawing on screen, and points the export buttons at it.
+     *
+     * One function for both halves on purpose: the drawing, the held layout
+     * and what the buttons offer are one state, and a page that set them in
+     * two places would eventually set only one of them.
+     */
+    function holdDrawing(elements: PageElements, layout: DesignLayout | null): void {
+      drawn = layout;
+
+      for (const button of [
+        elements.exportMarkdown,
+        elements.exportHtml,
+        elements.exportPdf,
+        elements.exportWord,
+      ]) {
+        button.disabled = layout === null;
+      }
+    }
+
+    /**
+     * Builds one export for the drawing on screen and hands it to the browser.
+     *
+     * One function for every format, because the parts that are not the
+     * format — the guard, the naming, the failure sentence — are the same
+     * four lines each time and four copies of them is four places for one of
+     * them to be forgotten. `build` is the only difference: it hands back the
+     * bytes, because two of the four formats are not text, and a sentence to
+     * say afterwards when the format has one.
+     *
+     * It is awaited because the PDF cannot be built in one tick: it fetches
+     * its library and its font, and converts the drawing. The design is taken
+     * into a local first, so a file chosen while a PDF is still being written
+     * cannot leave the last design's picture under this design's name — which
+     * is the same quiet wrongness D53 keeps the buttons disabled to prevent.
+     *
+     * The guard is not decoration: the buttons are disabled with nothing
+     * drawn, and this says what happens if one is ever reached anyway.
+     * Nothing that could throw touches the page, and if the export cannot be
+     * built the status region says so in the app's own words rather than the
+     * engine's (D43) — an unexplained button that does nothing is worse than
+     * a sentence.
+     */
+    async function exportDesign(
+      elements: PageElements,
+      extension: string,
+      build: (layout: DesignLayout) => ExportedFile | Promise<ExportedFile>,
+    ): Promise<void> {
+      const design = drawn;
+
+      if (design === null) {
+        return;
       }
 
-      /**
-       * A bad file: the messages, and nothing left behind that described the
-       * last one. The status line is cleared rather than left saying a drawing
-       * is below, because there is no longer a drawing and because two live
-       * regions changing at once talk over each other.
-       */
-      function showProblems(elements: PageElements, report: LoadErrorReport): void {
-        elements.status.textContent = '';
-        elements.drawing.replaceChildren();
-        elements.problems.dataset.state = 'problems';
-        elements.problems.replaceChildren(...renderProblems(report, document));
-        holdDrawing(elements, null);
-      }
+      try {
+        const file = await build(design);
 
-      /**
-       * Remembers the drawing on screen, and points the export buttons at it.
-       *
-       * One function for both halves on purpose: the drawing, the held layout
-       * and what the buttons offer are one state, and a page that set them in
-       * two places would eventually set only one of them.
-       */
-      function holdDrawing(elements: PageElements, layout: DesignLayout | null): void {
-        drawn = layout;
+        downloadBlob(file.blob, fileNameFor(design.title, extension), document);
 
-        for (const button of [
-          elements.exportMarkdown,
-          elements.exportHtml,
-          elements.exportPdf,
-          elements.exportWord,
-        ]) {
-          button.disabled = layout === null;
+        // After the file is in the user's hands, not before: the sentence is
+        // about a download that happened, and an export that throws on its
+        // way there says so instead.
+        if (file.note !== null) {
+          elements.status.textContent = file.note;
         }
+      } catch {
+        elements.status.textContent = EXPORT_FAILED;
       }
+    }
 
-      /**
-       * Builds one export for the drawing on screen and hands it to the browser.
-       *
-       * One function for every format, because the parts that are not the
-       * format — the guard, the naming, the failure sentence — are the same
-       * four lines each time and four copies of them is four places for one of
-       * them to be forgotten. `build` is the only difference: it hands back the
-       * bytes, because two of the four formats are not text, and a sentence to
-       * say afterwards when the format has one.
-       *
-       * It is awaited because the PDF cannot be built in one tick: it fetches
-       * its library and its font, and converts the drawing. The design is taken
-       * into a local first, so a file chosen while a PDF is still being written
-       * cannot leave the last design's picture under this design's name — which
-       * is the same quiet wrongness D53 keeps the buttons disabled to prevent.
-       *
-       * The guard is not decoration: the buttons are disabled with nothing
-       * drawn, and this says what happens if one is ever reached anyway.
-       * Nothing that could throw touches the page, and if the export cannot be
-       * built the status region says so in the app's own words rather than the
-       * engine's (D43) — an unexplained button that does nothing is worse than
-       * a sentence.
-       */
-      async function exportDesign(
-        elements: PageElements,
-        extension: string,
-        build: (layout: DesignLayout) => ExportedFile | Promise<ExportedFile>,
-      ): Promise<void> {
-        const design = drawn;
+    /**
+     * Clears the input's value after every read.
+     *
+     * Without this, choosing the same file twice fires no `change` event at
+     * all — the value has not changed — so a user who edits their JSON and
+     * re-picks it sees the old drawing and the old status line, both still
+     * claiming to describe the file they just chose. Clearing it makes every
+     * pick a change. The file itself is already read by this point, so
+     * nothing is lost, and the input still shows no file rather than a stale
+     * name.
+     */
+    function forgetChosenFile(elements: PageElements): void {
+      elements.fileInput.value = '';
+    }
 
-        if (design === null) {
-          return;
-        }
-
-        try {
-          const file = await build(design);
-
-          downloadBlob(file.blob, fileNameFor(design.title, extension), document);
-
-          // After the file is in the user's hands, not before: the sentence is
-          // about a download that happened, and an export that throws on its
-          // way there says so instead.
-          if (file.note !== null) {
-            elements.status.textContent = file.note;
-          }
-        } catch {
-          elements.status.textContent = EXPORT_FAILED;
-        }
-      }
-
-      /**
-       * Clears the input's value after every read.
-       *
-       * Without this, choosing the same file twice fires no `change` event at
-       * all — the value has not changed — so a user who edits their JSON and
-       * re-picks it sees the old drawing and the old status line, both still
-       * claiming to describe the file they just chose. Clearing it makes every
-       * pick a change. The file itself is already read by this point, so
-       * nothing is lost, and the input still shows no file rather than a stale
-       * name.
-       */
-      function forgetChosenFile(elements: PageElements): void {
-        elements.fileInput.value = '';
-      }
-
-      startUploadPage();
-    </script>
-  </body>
-</html>
+    startUploadPage();
+  </script>
+</PageLayout>

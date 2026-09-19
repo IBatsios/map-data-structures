@@ -1,0 +1,22 @@
+{
+  "title": "Checkout",
+  "nodes": [
+    { "id": "shopper", "label": "Shopper", "type": "user" },
+    { "id": "storefront", "label": "Storefront API", "type": "service" },
+    { "id": "catalogue", "label": "Catalogue", "type": "database" },
+    { "id": "in-stock", "label": "In stock?", "type": "decision" },
+    { "id": "payments", "label": "Payments provider", "type": "external" },
+    { "id": "orders", "label": "Order queue", "type": "queue" },
+    { "id": "fulfilment", "label": "Fulfilment service", "type": "service" }
+  ],
+  "edges": [
+    { "from": "shopper", "to": "storefront", "label": "submits basket" },
+    { "from": "storefront", "to": "catalogue", "label": "reads stock levels" },
+    { "from": "storefront", "to": "in-stock", "label": "checks availability" },
+    { "from": "in-stock", "to": "shopper", "label": "no: offers a backorder" },
+    { "from": "in-stock", "to": "payments", "label": "yes: takes payment" },
+    { "from": "payments", "to": "orders", "label": "publishes paid order" },
+    { "from": "orders", "to": "fulfilment", "label": "delivers order" },
+    { "from": "fulfilment", "to": "catalogue", "label": "adjusts stock levels" }
+  ]
+}

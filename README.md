@@ -21,6 +21,7 @@ bun run test      # run the Vitest suite once
 bun run test:e2e  # run the Playwright walk in a real browser
 bun run check     # type-check with astro check
 bun run build     # build the static site into dist/
+bun run schema    # regenerate public/design.schema.json from the Zod schema
 ```
 
 `bun run test` runs Vitest. Plain `bun test` runs bun's own test runner instead
@@ -31,6 +32,9 @@ test`, and a hook that starts a browser on every commit is a hook nobody runs.
 It needs a browser once — `bunx playwright install chromium` — and then builds
 the site and serves `dist/` itself, so it tests what Netlify would serve.
 
+`bun run schema` writes `public/design.schema.json` from `src/lib/design.schema.ts`.
+Run it whenever the schema changes; `bun run test` fails until you do.
+
 Astro 7 runs `bun run dev` and `bun run preview` as background servers, whether
 or not `--background` is passed. `bunx astro dev status`, `bunx astro dev logs`
 and `bunx astro dev stop` control the dev one; `astro preview` has the same
@@ -38,10 +42,11 @@ three.
 
 ## What works today
 
-One page. Choose a JSON design with the file input or drag one onto the page,
-and it is validated, its name and its node and edge counts appear, and a
-laid-out drawing appears below: a shape per node, an arrow per edge, and every
-label on it.
+Two pages. On the first, choose a JSON design with the file input or drag one
+onto the page, and it is validated, its name and its node and edge counts
+appear, and a laid-out drawing appears below: a shape per node, an arrow per
+edge, and every label on it. **Load the sample design** draws the design the
+site ships without you having to find a file first.
 
 Six kinds of node have a silhouette of their own — `service`, `database`,
 `queue`, `external`, `user` and `decision`, each with a handful of aliases
@@ -123,8 +128,17 @@ design larger than that prints smaller than 6 pt and the document says so. The
 two tables under the drawing carry every label at full size whatever it does,
 and the Markdown and HTML exports do not shrink anything.
 
-Still to come: a page that publishes the JSON schema with a sample file, and
-deployment. The task list in `docs/RUNBOOK.md` says what comes next.
+The second page, **/schema**, publishes the format: every field with its type,
+whether it is required and what it is for, the two rules the schema file has no
+way to state, and the sample itself with a copy button and a download link. The
+field list is derived from the JSON Schema the app generates from its own Zod
+schema, so the page cannot describe a rule the app does not keep. The schema
+file is served as [`/design.schema.json`](public/design.schema.json), draft
+2020-12; point a validator at it and it will accept exactly what this app
+accepts.
+
+Still to come: deployment. The task list in `docs/RUNBOOK.md` says what comes
+next.
 
 The JSON it reads looks like this:
 
@@ -144,20 +158,25 @@ refused, because it draws the same empty box a missing one would, though a label
 with spaces around it keeps them. Node ids have to be unique,
 and an edge's `from` and `to` have to name nodes the file defines. A key the
 schema does not name is ignored, and a design with no nodes and no edges is
-valid. `src/lib/design.schema.ts` is the definition; Task 09 publishes it as a
-page with a sample file.
+valid. `src/lib/design.schema.ts` is the definition, and `/schema` is where it
+is published, with `public/sample.json` beside it.
 
 ## Layout
 
 ```
 src/lib/      the design core: types, the schema, the loader, the layout,
               the shape vocabulary, the SVG renderer, the exporters and the
-              download helper they share, and the modules that turn a failed
-              load into messages
+              download helper they share, the modules that turn a failed
+              load into messages, and the published schema the /schema page
+              renders
 src/lib/fonts/ the font the PDF export embeds, generated from its source,
               with its licence beside it
+src/layouts/  the `<head>`, masthead and frame both pages share
 src/pages/    the Astro pages
 src/styles/   CSS Modules, and the tests that measure their contrast
+scripts/      one-off generators run by hand; today, the published schema
+public/       what the site serves as-is: the sample design, the generated
+              JSON Schema, and the icons
 e2e/          the Playwright walk, its fixtures, the server it runs against,
               and the readers that open an exported PDF or `.docx` back up
 docs/         PRD, architecture, decisions, runbook, and one file per task

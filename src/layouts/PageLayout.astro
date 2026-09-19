@@ -1,0 +1,84 @@
+---
+/**
+ * The page around both pages: the `<head>`, the masthead, and the frame the
+ * content sits in.
+ *
+ * It exists because Task 09 adds the second screen, and two screens is where
+ * one `<head>` written twice starts to cost. Everything here is the same on
+ * both, and the two things that differ — the title and the description — come
+ * in as props. The navigation is two links because the site has two pages; a
+ * menu would be furniture.
+ *
+ * The current page is marked with `aria-current="page"` as well as with weight
+ * and a rule, so it is said to a screen reader and shown to everybody else.
+ */
+import styles from '../styles/page.module.css';
+
+interface Props {
+  /** What the browser tab says, and what a search result would show. */
+  readonly title: string;
+  /** One sentence about this page, for a link preview or a search result. */
+  readonly description: string;
+  /** Which nav link is the page being looked at. */
+  readonly current: 'upload' | 'schema';
+}
+
+const { title, description, current } = Astro.props;
+
+/** The whole of the site's navigation, in the order the two are used in. */
+const pages = [
+  { key: 'upload', href: '/', label: 'Draw a design' },
+  { key: 'schema', href: '/schema', label: 'The design format' },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body class={styles.page}>
+    {/*
+     * The first focusable thing on the page, and invisible until it is
+     * focused: a keyboard user should not have to tab the masthead on every
+     * page to reach what they came for.
+     */}
+    <a class={styles.skipLink} href="#content">
+      Skip to the content
+    </a>
+
+    <header class={styles.masthead}>
+      <a class={styles.wordmark} href="/">
+        MapDataStructures
+      </a>
+      <nav class={styles.nav} aria-label="Pages">
+        {pages.map((page) => (
+          <a
+            class={styles.navLink}
+            href={page.href}
+            aria-current={page.key === current ? 'page' : undefined}
+          >
+            {page.label}
+          </a>
+        ))}
+      </nav>
+    </header>
+
+    <main class={styles.main} id="content">
+      <slot />
+    </main>
+
+    <footer class={styles.footer}>
+      <p>
+        Everything happens in your browser. Nothing you choose is uploaded, and the site
+        stores nothing.
+      </p>
+    </footer>
+  </body>
+</html>
