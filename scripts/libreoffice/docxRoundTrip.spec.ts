@@ -9,6 +9,7 @@ import { expect, test } from '@playwright/test';
 import { docxText } from '../../e2e/docxText';
 import { UploadPage } from '../../e2e/pages/uploadPage';
 import { convertToDocx } from './convert';
+import { describeFailure } from './failureMessage';
 import { describeMissingSoffice, findSoffice } from './soffice';
 import { missingFrom, textThatMustSurvive } from './survivingText';
 
@@ -88,9 +89,20 @@ for (const fixture of FIXTURES) {
         timeoutMs: CONVERSION_TIMEOUT_MS,
       });
 
-      expect(verdict.kind, failureOf(fixture, room, verdict.reason, stdout)).toBe(
-        'converted',
-      );
+      // Both streams travel with every message from here on. LibreOffice
+      // explains a refusal on stderr and is silent on stdout while it does it,
+      // so a message that carried only stdout would report the one failure
+      // this check exists to catch as "LibreOffice printed nothing".
+      const failed = (reason: string): string =>
+        describeFailure({
+          fixture,
+          room,
+          reason,
+          stdout,
+          diagnostics: verdict.diagnostics,
+        });
+
+      expect(verdict.kind, failed(verdict.reason)).toBe('converted');
 
       // Read back rather than trusted: `docxText` throws on a zip it does not
       // understand rather than returning nothing, and that property is kept
@@ -102,11 +114,8 @@ for (const fixture of FIXTURES) {
 
       expect(
         lost,
-        failureOf(
-          fixture,
-          room,
+        failed(
           `LibreOffice converted the file and ${lost.length} of the design's ${wanted.length} pieces of text did not come back`,
-          stdout,
         ),
       ).toEqual([]);
 
@@ -117,22 +126,6 @@ for (const fixture of FIXTURES) {
       }
     }
   });
-}
-
-/** One failure message: what went wrong, and where the files still are. */
-function failureOf(
-  fixture: string,
-  room: string,
-  reason: string,
-  stdout: string,
-): string {
-  const said = stdout.trim();
-
-  return [
-    `${fixture}: ${reason}`,
-    `The exported and converted files are still in ${room}.`,
-    said === '' ? 'LibreOffice printed nothing on stdout.' : `LibreOffice said: ${said}`,
-  ].join('\n');
 }
 
 /** One fixture, in the one place the fixtures live. */
