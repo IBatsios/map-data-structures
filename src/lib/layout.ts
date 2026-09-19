@@ -346,6 +346,15 @@ function buildGraph(sized: readonly SizedNode[], shared: SharedRoutes): LayoutGr
  * guard that used to live in the page's `renderEdge`, where a dangling edge
  * could reach it; D20 moved that case into the schema, so this one is
  * unreachable by any file a user can write.
+ *
+ * It is not the only thing standing between dagre and a bad placement, and has
+ * not been since D98. `placeWithDagre` runs `isWhollyPlaced` over this graph
+ * first, under each keying in turn, and that test is the stricter one: every
+ * node's `x` and `y` and every point of every route has to be a finite number,
+ * or the placement is refused and the next keying is tried. What it cannot see
+ * is the case this one keeps — it walks the graph's own node list, so an id
+ * the graph does not hold at all is an id it never asks about, while this walks
+ * the app's list and would find the gap.
  */
 function readPlacedNodes(
   sized: readonly SizedNode[],
