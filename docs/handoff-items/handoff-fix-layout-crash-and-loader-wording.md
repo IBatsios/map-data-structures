@@ -682,3 +682,38 @@ Not defects, and not mine to act on:
   `layout.ts`.
 - The 1280px column and `/schema`'s table are still as routed — deliberately
   untouched, still v2 candidates.
+
+---
+
+## Verification and merge by Sam
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| This handoff doc | All 13 acceptance-criteria boxes checked; Jared's assignment, Amon's round-1 work and Jahmyr's round-1 report all present and legible | None — complete as handed off |
+| `docs/tasks/` | No file for this cycle, correctly — `docs/` is generated from `docs/intake.md` and a hand-written numbered file would be lost on regenerate, as the handoff doc's "Why this has no task file" explains. Task 10's `**Status:**` correctly stayed `ready` | None |
+| `README.md` | Run/test/build commands unchanged by this cycle and already correct (`bun run test`, not `bun test`); `.env.example` section already says the app reads nothing from the environment, which is still true | None |
+| `CLAUDE.md` | Status section did not yet mention the dagre two-keying fix or the Firefox wording fix | Appended a short paragraph after the `/schema` paragraph, pointing at the handoff doc and D98–D99 for detail |
+| `docs/DECISIONS.md` | D98 and D99 present and matched Amon's and Jahmyr's reports. Two things from the round-1 report were choices made during the task that had no row: the 36-vs-581 fuzz-count difference across two generators, and Jahmyr's in-place fix for the fuzz test's flaky clock | Appended D100 (reconciles the two fuzz counts with their generators, append-only, D98 untouched) and D101 (records `FUZZ_TIMEOUT = 60_000` and why) |
+| `.env.example` | Code still reads no environment variables | None |
+| `docs/ARCHITECTURE.md` | Does not describe dagre or `layout.ts` internals, so nothing in it went stale this cycle | None — not mine to edit regardless |
+
+### Gates
+
+`bun run test`: 441 passed, 26 files (independently re-run, matches Jahmyr's report; confirmed once before my doc commit and once after, both clean).
+CI: green on both push-event and pull_request-event runs, for both the head commit Jahmyr handed off (`3099922`) and the doc-fix commit I added (`ce4248c`, runs 35416817483 and 35416820941).
+Secret scan: `gitleaks detect --source . --no-banner` — no leaks found. Run twice: 39 commits before my doc commit, 40 after. Clean both times.
+
+### Merge
+
+Squashed as `a153962` into `main`. Branch `fix/layout-crash-and-loader-wording` deleted (confirmed via `git ls-remote --heads origin` returning nothing, and `git fetch --prune`). PR https://github.com/IBatsios/map-data-structures/pull/23.
+
+My own doc-fix commit (`ce4248c`, reconciling the fuzz counts and recording the flaky-clock decision) went onto this same branch before merge, per the assignment's routing, and CI was re-confirmed green on it before merging — not merged on the strength of the prior green run alone.
+
+### Left for a person
+
+- **Task 10's step 1** needs the Netlify and GitHub accounts (`netlify login` + `netlify init`, or the console import), build command `bun run build`, publish directory `dist`, and confirmation on the first build log that Netlify installs bun from the lockfile. Not attempted; no hosting account created.
+- **Microsoft Word is still unverified** against the `.docx` export — no machine that has touched this project has Word installed.
+- **The 1280px cosmetic column width** stays routed to Task 11's v2 handoff doc as a v2 candidate, per Jared. Untouched.
+- **Dagre's upstream ordering bug** (merges two parallel dummy chains when one is a reversed edge) is reportable against `@dagrejs/dagre` 3.1.1, with a minimal repro known. Optional; the app no longer needs it fixed.
