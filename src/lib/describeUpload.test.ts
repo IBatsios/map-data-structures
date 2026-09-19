@@ -47,10 +47,10 @@ describe('describeUpload', () => {
     const design = designOf(0, 0);
 
     // Act
-    const description = describeUpload('empty.json', design);
+    const description = describeUpload('empty-design.json', design);
 
     // Assert
-    expect(description).toBe('empty.json is drawn below: 0 nodes, 0 edges.');
+    expect(description).toBe('empty-design.json is drawn below: 0 nodes, 0 edges.');
   });
 
   it('counts every node and every edge the design holds', () => {

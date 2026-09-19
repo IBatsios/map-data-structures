@@ -81,7 +81,7 @@ test.describe('Validation errors', () => {
     const upload = new UploadPage(page);
     await upload.goto();
 
-    await upload.choose('empty.json');
+    await upload.choose('empty-file.json');
 
     const [message] = await upload.problemMessages();
 
