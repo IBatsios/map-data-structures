@@ -1114,3 +1114,48 @@ processes on the machine are pid 9224 and 35576, both started 2026-09-18 at
 
 https://github.com/IBatsios/map-data-structures/pull/27 — draft, `3b06e51`
 pushed, CI green. Left as a draft for Sam to mark ready and merge.
+
+## Verification and merge by Sam
+
+Re-earned rather than taken on report: branch confirmed
+`chore/libreoffice-docx-check`, `bun run test` run independently (491 passed,
+32 files, matching Jahmyr's count), `gh pr checks` read directly from GitHub
+(both `test` jobs `pass` on `92263f0`), and `gitleaks detect --source .
+--no-banner` run for real — it is installed on this machine, at the WinGet
+package path Jahmyr found — reporting **no leaks found** over 39 commits
+before any change of mine, and again over 40 after.
+
+### Document audit
+
+| Document | State | Action taken |
+|---|---|---|
+| This handoff doc | Complete. Jared's assignment, both of Amon's rounds, both of Jahmyr's rounds all present and legible. The round-1 defect, its round-2 close (verified three ways), the gitleaks correction, and the `control-labels` withdrawal are all recorded in Jahmyr's own round-2 section, directly under the claims they correct — a later reader hits the correction before the original note | None needed |
+| `README.md` | Run/test/build commands present, correct, and matched `CLAUDE.md` — except `CLAUDE.md` had not caught up. `bun run docx:libreoffice` documented in the run block and its own section, with what it buys and does not, the search order, and the override name | None needed |
+| `CLAUDE.md` | Out of sync: its run block and status snapshot predated this cycle, so it disagreed with `README.md` about what commands exist | Added `bun run docx:libreoffice` to the run block and a short status paragraph pointing at this handoff doc and D104–D111, on the branch, committed and pushed before merge |
+| `docs/DECISIONS.md` | D104–D111 present, in the existing table's shape and voice, each dated and attributed to its round | None needed |
+| `.env.example` | Still declares no variables. Correct: `MAPDS_SOFFICE` is read by a local developer command, not by any code the browser ships, and D110 records the reasoning for leaving it out. Agree with the call | None needed |
+| `docs/tasks/10-deploy.md`, `docs/tasks/11-definition-of-done.md` | Both still `**Status:** ready`, unmoved by this chore, as the assignment said they should be | None needed |
+| No task file for this chore | Correct by design — `docs/` is generated from `docs/intake.md`, which never described this cycle. This handoff doc is the whole contract, and all fourteen acceptance criteria in it are checked | None needed |
+| `docs/RUNBOOK.md` | Not edited (generated doc). Its section 0.2 gitleaks/grep guidance was never wrong — it already documents gitleaks as primary and the grep as a weaker fallback. The "no gitleaks here" claim that needed correcting lived only in this handoff doc's prose, not in RUNBOOK | None needed; flagging only for completeness |
+
+### Gates
+
+`bun run test`: pass — 491 passed, 32 files (re-run twice, before and after the CLAUDE.md commit; identical both times).
+
+CI: green — `gh pr checks 27` showed both `test` jobs `pass` on `92263f0` before my change, and both `pass` again on `a7c8058` after it (1m43s, 1m51s).
+
+Secret scan: clean — `gitleaks detect --source . --no-banner` (the real gate; it is installed via WinGet on this machine), "no leaks found" over 39 commits before my commit and 40 after.
+
+### Merge
+
+Squashed as `60c4de2` into `main`. Branch `chore/libreoffice-docx-check` deleted (local and remote). PR https://github.com/IBatsios/map-data-structures/pull/27.
+
+One doc-fix commit (`a7c8058`, CLAUDE.md sync) went in on the branch first, CI re-ran and stayed green, then the PR was marked ready and merged.
+
+### Left for a person
+
+Microsoft Word verification: opening `order-intake.docx` in real Microsoft Word remains open and belongs to the user — no machine that has touched this project has Word. This cycle strengthens the signal (a real, independent OOXML implementation now checks every export) but does not close the item.
+
+Task 10 (Netlify/GitHub account linkage) is still a human step, documented in the refreshed `docs/handoff-items/handoff-next-phase.md`.
+
+The CI follow-on for `docx:libreoffice` (its own job, `MAPDS_SOFFICE` set explicitly so a missing install fails loudly rather than silently passing) is named but not started — a person or a future cycle picks a decision on it.
