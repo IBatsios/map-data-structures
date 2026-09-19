@@ -38,7 +38,12 @@ import styles from '../styles/upload.module.css';
      * offered honestly as a link on the schema page instead.
      */}
     <div class={styles.sample}>
-      <button id="load-sample" class={styles.sampleAction} type="button">
+      <button
+        id="load-sample"
+        class={styles.sampleAction}
+        type="button"
+        aria-describedby="load-sample-note"
+      >
         Load the sample design
       </button>
       <p class={styles.sampleNote} id="load-sample-note">

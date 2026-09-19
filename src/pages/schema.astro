@@ -5,7 +5,7 @@
  * Everything on it is derived rather than written twice. The field table comes
  * from `designFields()`, which reads the generated JSON Schema, so a field
  * added to `design.schema.ts` turns up here without anyone remembering. The
- * sample is the bytes of `public/sample.json`, read at build time, so what a
+ * sample is the bytes of `public/sample.json`, inlined at build time, so what a
  * reader copies off the screen is exactly what the site serves and exactly what
  * the Playwright walk uploads.
  *
@@ -22,6 +22,7 @@ import {
 } from '../lib/publishedSchema';
 import { SAMPLE_FILE_NAME, SAMPLE_URL } from '../lib/sampleDesign';
 import styles from '../styles/schema.module.css';
+
 /**
  * The sample's own bytes, inlined at build time.
  *
@@ -128,8 +129,14 @@ const SCHEMA_URL = '/design.schema.json';
     at all.
   </p>
 
-  <figure class={styles.file}>
-    <figcaption class={styles.fileBar}>
+  {/*
+   * A plain container rather than a `<figure>`: a figure takes its accessible
+   * name from its caption, and a caption holding two controls would name this
+   * block "sample.json Copy the sample Download sample.json". The file name is
+   * a label on a bar, which is what it looks like and what it is.
+   */}
+  <div class={styles.file}>
+    <div class={styles.fileBar}>
       <span class={styles.fileName}>{SAMPLE_FILE_NAME}</span>
       <span class={styles.fileActions}>
         <button id="copy-sample" class={styles.fileAction} type="button">
@@ -144,9 +151,9 @@ const SCHEMA_URL = '/design.schema.json';
           Download {SAMPLE_FILE_NAME}
         </a>
       </span>
-    </figcaption>
+    </div>
     <pre class={styles.code}><code id="sample-json">{sample}</code></pre>
-  </figure>
+  </div>
 
   {/*
    * The copy control's own live region, in the page from the first paint and
@@ -185,12 +192,19 @@ const SCHEMA_URL = '/design.schema.json';
      * a reader would select by hand, so the two cannot differ.
      */
 
+    import { SAMPLE_FILE_NAME } from '../lib/sampleDesign';
+
     /** What the region says once the sample is on the clipboard. */
     const COPIED = 'Copied. The sample is on your clipboard.';
 
-    /** And when it is not, with the two ways through that still work. */
+    /**
+     * And when it is not, with the two ways through that still work. The file
+     * name comes from the same constant the download control is labelled from,
+     * so the sentence cannot end up naming a file the page does not offer.
+     */
     const COPY_REFUSED =
-      'This browser would not let the page copy it. Select the sample and copy it yourself, or use Download sample.json.';
+      'This browser would not let the page copy it. Select the sample and copy it yourself, ' +
+      `or use Download ${SAMPLE_FILE_NAME}.`;
 
     interface CopyControls {
       readonly button: HTMLButtonElement;
