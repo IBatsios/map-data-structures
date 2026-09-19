@@ -628,30 +628,47 @@ describe('layoutDesign, on a graph dagre cannot lay out on its own', () => {
     expect(edgeAt(layout.edges, 6).label).toBe('retries settlement');
   });
 
-  it('lays out 2500 random multigraphs without one failure', () => {
-    // 2500 is the scale at which this fault was caught twice by hand, so a
-    // clean run at it is the number that means something. The seed is fixed:
-    // `randomNumbers(FUZZ_SEED)` above regenerates exactly these graphs.
-    // Arrange
-    const FUZZ_SEED = 20260918;
-    const FUZZ_RUNS = 2500;
-    const next = randomNumbers(FUZZ_SEED);
-    const failures: string[] = [];
+  /**
+   * Long enough that the slowest machine finishes, short enough to still fail.
+   *
+   * 2500 layouts take between three and four seconds on a developer machine
+   * and just over five on a CI runner, which is how this test failed the
+   * push-event run of its own pull request at 5022ms against Vitest's
+   * five-second default. The number of graphs is the contract — the handoff
+   * asks for at least 2000 — so the clock moves rather than the count.
+   */
+  const FUZZ_TIMEOUT = 60_000;
 
-    // Act
-    for (let run = 0; run < FUZZ_RUNS; run += 1) {
-      const design = randomDesign(next);
+  it(
+    'lays out 2500 random multigraphs without one failure',
+    () => {
+      // 2500 is the scale at which this fault was caught twice by hand, so a
+      // clean run at it is the number that means something. The seed is fixed:
+      // `randomNumbers(FUZZ_SEED)` above regenerates exactly these graphs.
+      // Arrange
+      const FUZZ_SEED = 20260918;
+      const FUZZ_RUNS = 2500;
+      const next = randomNumbers(FUZZ_SEED);
+      const failures: string[] = [];
 
-      try {
-        if (!allCoordinatesAreFinite(layoutDesign(design))) {
-          failures.push(`run ${run}: a coordinate was not finite`);
+      // Act
+      for (let run = 0; run < FUZZ_RUNS; run += 1) {
+        const design = randomDesign(next);
+
+        try {
+          if (!allCoordinatesAreFinite(layoutDesign(design))) {
+            failures.push(`run ${run}: a coordinate was not finite`);
+          }
+        } catch (error) {
+          failures.push(
+            `run ${run}: ${error instanceof Error ? error.message : 'threw'}`,
+          );
         }
-      } catch (error) {
-        failures.push(`run ${run}: ${error instanceof Error ? error.message : 'threw'}`);
       }
-    }
 
-    // Assert
-    expect(failures).toEqual([]);
-  });
+      // Assert
+      expect(failures).toEqual([]);
+    },
+    FUZZ_TIMEOUT,
+  );
 });
