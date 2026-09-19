@@ -45,6 +45,14 @@ on your machine, and reads the converted file back to confirm the design's
 title and every node and edge label are still in it. A conversion that exits
 cleanly and loses the document is a failure, not a pass.
 
+When a fixture fails it names the fixture, keeps the exported and converted
+files and tells you where they are, and prints everything LibreOffice said on
+**both** stdout and stderr, each under the name of the stream it came from.
+That matters more than it sounds: LibreOffice explains why it refused a file on
+stderr and says nothing at all on stdout while it does it, so a message built
+from stdout alone reports the one failure worth catching as "LibreOffice
+printed nothing".
+
 Nothing else runs it. `bun run test` does not, `bun run test:e2e` does not, and
 CI does not — it has its own Playwright config, `playwright.libreoffice.config.ts`,
 with its own `testDir`, so `playwright test` cannot reach it. Its pure half —
