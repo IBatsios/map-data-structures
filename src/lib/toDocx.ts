@@ -49,10 +49,6 @@ import type { DesignLayout } from './layout';
 import { openDrawing, withDrawingRegion } from './openDrawing';
 import { rasteriseDrawing } from './rasteriseDrawing';
 
-/** What a `.docx` is, for the browser that is about to save one. */
-export const DOCX_MEDIA_TYPE =
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
 /** One exported file, and what had to be marked while writing it. */
 export interface DocxExport {
   readonly blob: Blob;
